@@ -365,6 +365,7 @@ export class BattleScene extends Phaser.Scene {
     }
 
     executeEnemyAction(enemy) {
+        
         if (enemy && enemy.hp > 0) {
             enemy.executeAction(
                 enemy, 
@@ -452,7 +453,7 @@ export class BattleScene extends Phaser.Scene {
 
             enemyInfoString += 
                 `[ 😈 ${enemy.name} #${idx + 1} ] (${status})\n` +
-                `  格擋: ${enemy.block || 0} | 攻: ${enemy.atk} | 護甲: ${enemy.armorHits || 0}/${enemy.armorMax || 0}${extraStatusLine}\n` +
+                `  格擋: ${enemy.block || 0} | 攻: ${enemy.atk} | ${extraStatusLine}\n` +
                 `  速度: [ ${enemy.speedDice || 0} ] | 預告意圖: ${enemy.currentIntent ? enemy.currentIntent.desc : '無'}\n\n`;
         });
 

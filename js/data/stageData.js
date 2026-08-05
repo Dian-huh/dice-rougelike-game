@@ -5,7 +5,7 @@ import { createEnemyInstance } from './enemyData.js';
  */
 export function getStageData(stageId = 1, nodeType = 'BATTLE') {
     // 🐉 強制將敵人設為黑龍 (black_dragon)
-    const enemyIds = ['black_dragon'];
+    const enemyIds = ['goblin'];
     const stageName = `🐉 第 ${stageId} 層 - 黑龍機制測試關卡`;
 
     // 實例化黑龍怪物物件
