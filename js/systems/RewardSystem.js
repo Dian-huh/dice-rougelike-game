@@ -62,7 +62,7 @@ export class RewardSystem {
     }
 
     static generateRewards(party = []) {
-        const rewardTypes = ['CARD', 'TEAM_STAT', 'TARGET_STAT', 'RANDOM_STAT', 'PASSIVE_BUFF'];
+        const rewardTypes = ['CARD', 'TEAM_STAT', 'TARGET_STAT', 'RANDOM_STAT', 'PASSIVE_BUFF', 'STIGMA_PASSIVE'];
         const shuffledTypes = rewardTypes.sort(() => 0.5 - Math.random()).slice(0, 3);
 
         return shuffledTypes.map(type => this.createRewardItem(type, party));
@@ -121,6 +121,16 @@ export class RewardSystem {
                     apply: (scene) => {
                         scene.hero.startBlock = (scene.hero.startBlock || 0) + 3;
                         scene.appendLog(`✨ 獲得被動：每場戰鬥開局自動獲得 ${scene.hero.startBlock} 點格擋！`, 'system');
+                    }
+                };
+            }
+            case 'STIGMA_PASSIVE': {
+                return {
+                    title: `🔱 [隊伍被動] 聖痕君臨`,
+                    desc: `每回合開始時，自動對敵方施加 1 層聖痕 (可無限疊加，隨戰鬥回合數持續增強)`,
+                    apply: (scene) => {
+                        scene.hero.stigmaPerTurn = (scene.hero.stigmaPerTurn || 0) + 1;
+                        scene.appendLog(`✨ 獲得被動：每回合自動施加 ${scene.hero.stigmaPerTurn} 層聖痕！`, 'system');
                     }
                 };
             }

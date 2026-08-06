@@ -23,6 +23,8 @@ export const ENEMY_TEMPLATE = {
     isOD: false,    // 是否處於 OD 狂暴狀態 (攻擊 100% 暴擊)
     isBreak: false, // 是否處於 Break 癱瘓狀態 (僅能使用一般行動)
     isFlying: false,
+    chargeTurns: 0,   // 🟢 新增：衝鋒效果剩餘回合數（0 = 未生效）
+    heroicTurns: 0,   // 🟢 新增：英勇效果剩餘回合數（0 = 未生效）
 
     // === 4. 機制邏輯：受擊觸發 (On Take Damage) ===
     onTakeHit(log) {
@@ -60,6 +62,25 @@ export const ENEMY_TEMPLATE = {
             this.isBreak = false;
             safeLog(`✨ ${this.name} 消耗了滿額 CT，成功【解除 Break 狀態】！`);
         }
+
+        // 🟢 衝鋒效果倒數：到期時歸還 OD 上限與爆擊增益的加值
+        if (this.chargeTurns > 0) {
+            this.chargeTurns -= 1;
+            if (this.chargeTurns <= 0) {
+                this.maxOd = Math.max(1, this.maxOd - 1);
+                this.critBonus = Math.max(0, (this.critBonus || 0) - 1);
+                this.od = Math.min(this.od, this.maxOd); // 🟢 新增：避免 od 超過新的上限，造成顯示與判定不一致
+                safeLog(`⚡ ${this.name} 的【衝鋒】效果已結束`);
+            }
+        }
+
+        // 🟢 英勇效果：回合結束時持續回復HP與格擋，並倒數
+        if (this.heroicTurns > 0) {
+            this.hp = Math.min(this.maxHp, this.hp + 3);
+            this.block = (this.block || 0) + 2;
+            safeLog(`🔥 ${this.name} 的【英勇】效果發動：回復 3 點HP、獲得 2 點格擋`);
+            this.heroicTurns -= 1;
+        }
     },
 
     // === 6. 通用 UI 狀態資訊列 ===
@@ -72,6 +93,8 @@ export const ENEMY_TEMPLATE = {
         if (this.isOD) tags.push('🔥[OD狂暴]');
         if (this.isBreak) tags.push('💫[Break癱瘓]');
         if (this.isFlying) tags.push('🦅[飛行]');
+        if (this.chargeTurns > 0) tags.push(`⚡[衝鋒x${this.chargeTurns}]`);   // 🟢 新增
+        if (this.heroicTurns > 0) tags.push(`🌟[英勇x${this.heroicTurns}]`); // 🟢 新增
         if (tags.length > 0) parts.push(`狀態: ${tags.join(' ')}`);
 
         return parts.length > 0 ? `\n  ${parts.join(' | ')}` : '';

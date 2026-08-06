@@ -163,7 +163,55 @@ export const ENEMY_DATABASE = {
             ];
             return Phaser.Utils.Array.GetRandom(generalPool);
         }
+    }),
+
+    // 🟢 新增：哥布林薩滿
+    'goblin_shaman': Object.assign(Object.create(BASE_ENEMY), {
+        id: 'goblin_shaman',
+        name: '🔮 哥布林薩滿',
+        maxHp: 15,
+        hp: 15,
+        atk: 1,
+        critBonus: 1,
+        critChance: 0.15,
+        ct: 0,
+        maxCt: 3,
+        od: 0,
+        maxOd: 2,
+        speedDiceSides: 4,
+        chargeTurns: 0,
+        heroicTurns: 0,
+
+        rollCrit() {
+            if (this.isOD) return true;
+            return Math.random() < (this.critChance || 0.15);
+        },
+
+        getIntent(turnCount, speedDice, self) {
+            // Break 狀態：僅能一般攻擊
+            if (this.isBreak) {
+                return { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
+            }
+
+            // 部落英雄：CT 達 2 時，50% 機率優先發動
+            if (this.ct >= 2 && Math.random() < 0.5) {
+                return {
+                    id: 'TRIBAL_HERO', type: 'ALLY_BUFF', effect: 'HEROIC_BUFF', turns: 2, consumeCt: 2,
+                    desc: '部落英雄 (自己與1名友軍獲得英勇效果2回合)'
+                };
+            }
+
+            // 一般行動池：普攻 + 3 種薩滿加護，隨機抽取
+            const pool = [
+                { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
+                { id: 'SHAMAN_GUARD', type: 'ALLY_BUFF', effect: 'BLOCK', value: 4, desc: '薩滿加護-守護 (其他友軍獲得4點格擋)' },
+                { id: 'SHAMAN_CHARGE', type: 'ALLY_BUFF', effect: 'CHARGE_BUFF', turns: 2, desc: '薩滿加護-衝鋒 (其他友軍獲得衝鋒效果2回合)' },
+                { id: 'SHAMAN_HOLY', type: 'ALLY_BUFF', effect: 'HEAL_ALL', value: 3, desc: '薩滿加護-聖光 (友軍全體回復3點HP)' }
+            ];
+            return Phaser.Utils.Array.GetRandom(pool);
+        }
     })
+
 };
 
 // 🟢 4. 乾淨工廠函式 (保留防呆契約檢查)

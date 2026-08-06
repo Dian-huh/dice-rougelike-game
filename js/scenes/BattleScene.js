@@ -12,43 +12,37 @@ export class BattleScene extends Phaser.Scene {
     }
 
     create(data) {
-        // 🟢 1. 取得當前關卡 ID (優先讀取全域 gameState 或預設 '1-1')
-        const currentStageId = (window.gameState && window.gameState.currentFloor) 
-            ? `1-${window.gameState.currentFloor}` 
-            : '1-1';
+    // 🟢 1. 取得目前樓層（直接用模組單例 gameState，不要用 window.gameState）
+        const currentFloor = (gameState && gameState.currentFloor) 
+            ? gameState.currentFloor 
+            : 1;
+        const currentStageId = `1-${currentFloor}`;
 
-        // 🟢 2. 獲取關卡資料並加上保底，確保 currentStage 絕不是 undefined
-        const stageInfo = getStageData ? getStageData(currentStageId) : null;
+        // 🟢 2. 從 MapScene 傳入的 node 資料判斷節點類型（BATTLE / BOSS）
+        const nodeType = (data && data.node && data.node.type) ? data.node.type : 'BATTLE';
+
+        // 🟢 3. 依樓層 + 節點類型動態取得關卡資料
+        const stageInfo = getStageData ? getStageData(currentStageId, nodeType) : null;
         this.currentStage = stageInfo || { name: '冒險關卡', enemies: [] };
-
-        // 🟢 3. 獲取敵人陣列，防止敵人陣列為 undefined
         this.enemies = (this.currentStage && this.currentStage.enemies) ? this.currentStage.enemies : [];
 
-        // 🟢 4. 角色與牌組（優先使用 gameState）
-        if (window.gameState && window.gameState.hero) {
-            this.hero = window.gameState.hero;
-            this.deckSys = window.gameState.deckSys;
-        } else {
-            this.hero = JSON.parse(JSON.stringify(HERO_DATA));
-            this.hero.diceSkills = HERO_DATA.diceSkills;
-            this.deckSys = new DeckSystem(HERO_DECK);
-        }
-
-    window.currentScene = this;
-
-        // 🟢 3. 角色與牌組初始化 (結合全域 gameState)
+        // 🟢 4. 角色與牌組初始化（優先序：外部直接傳入 > 全域 gameState 單例 > 全新預設值）
+        //     🔑 關鍵修正：這裡改用 gameState（模組單例），確保拿到的是「同一個」持續累積 buff 的 hero 物件
         if (data && data.hero) {
             this.hero = data.hero;
             this.deckSys = data.deckSys;
-        } else if (window.gameState && window.gameState.hero) {
-            this.hero = window.gameState.hero;
-            this.deckSys = window.gameState.deckSys;
+        } else if (gameState && gameState.hero) {
+            this.hero = gameState.hero;
+            this.deckSys = gameState.deckSys;
         } else {
             this.hero = JSON.parse(JSON.stringify(HERO_DATA));
             this.hero.diceSkills = HERO_DATA.diceSkills;
             this.deckSys = new DeckSystem(HERO_DECK);
         }
 
+        // 🟢 每場戰鬥開始前重置本場牌堆狀態（手牌/抽牌堆/棄牌堆），
+        // 但 originalDeck（永久收藏，含戰利品新卡）維持不變
+        this.deckSys.resetForNewBattle();
         this.turnCount = 0;
         this.playerSpeedDice = 0;
         this.lastActionDice = null;
@@ -210,12 +204,18 @@ export class BattleScene extends Phaser.Scene {
             this.appendLog(`🛡️ [開局被動發動] 獲得 ${this.hero.startBlock} 點格擋！`, 'system');
         }
 
+                // 🟢 新增：每回合開始發動被動 Buff（聖痕君臨：每回合施加聖痕，可跨回合疊加）
+        if (this.hero.stigmaPerTurn && this.hero.stigmaPerTurn > 0) {
+            this.hero.stigma += this.hero.stigmaPerTurn;
+            this.appendLog(`🔱 [回合被動發動] 對敵方施加 ${this.hero.stigmaPerTurn} 層聖痕 (現為 ${this.hero.stigma} 層)`, 'system');
+        }
+
         this.enemies.forEach(enemy => {
             if (enemy.hp > 0) {
                 if (enemy.isVulnerable) { enemy.isVulnerable = false; enemy.armorHits = 0; }
                 // 每回合結束自動+1CT等機制（黑龍設計文件要求），只有第一回合前不觸發
                 if (this.turnCount > 1 && typeof enemy.onTurnEnd === 'function') {
-                    enemy.onTurnEnd();
+                    enemy.onTurnEnd((m) => this.appendLog(m, 'system'));
                 }
                 enemy.speedDice = Phaser.Math.Between(1, enemy.speedDiceSides || 6) + (enemy.speedBonus || 0);
                 enemy.currentIntent = enemy.getIntent(this.turnCount, enemy.speedDice, enemy);
@@ -383,6 +383,11 @@ export class BattleScene extends Phaser.Scene {
         if (allDead) {
             this.appendLog(`🎉 區域內所有敵人已被全數擊敗！戰鬥獲勝！`, 'system');
             
+            // 🟢 新增：戰鬥結束重置「戰鬥限定」數值，避免跨戰鬥不合理累積
+            // stigmaPerTurn（被動疊加速率）屬於永久成長，不受影響，只重置 stigma 本身的層數
+            this.hero.block = 0;
+            this.hero.stigma = 0;
+
             if (this.handContainer) this.handContainer.destroy();
             if (this.actionBtn) this.actionBtn.destroy();
             if (this.skillBtn) this.skillBtn.destroy();
@@ -404,15 +409,8 @@ export class BattleScene extends Phaser.Scene {
     nextStage() {
         this.appendLog(`🗺️ 戰鬥勝利！返回地圖...`, 'system');
         
-        // 延遲 0.5 秒後，更新樓層並切換回地圖場景
         this.time.delayedCall(500, () => {
-            if (window.gameState) {
-                window.gameState.nextFloor();
-            } else if (gameState) {
-                gameState.nextFloor();
-            }
-
-            // 停止戰鬥畫面，切換回地圖
+            gameState.nextFloor();   // 🔑 統一只用模組單例，不再判斷 window.gameState
             this.scene.start('MapScene');
             this.scene.stop('BattleScene');
         });
@@ -432,6 +430,7 @@ export class BattleScene extends Phaser.Scene {
         let statusText = '';
         if (this.hero.poisonTurns > 0) statusText += ` 🤢[劇毒x${this.hero.poisonTurns}]`;
         if (this.hero.isPressured) statusText += ` 😱[威壓中]`;
+        if (this.hero.stigma > 0) statusText += ` 🔱[聖痕x${this.hero.stigma}]`; // 🟢 新增
 
         this.heroText.setText(
             `[ 🛡️ ${this.hero.name} ]  💰 金幣: ${this.hero.gold || 0}${passivesText}${statusText}\n` +

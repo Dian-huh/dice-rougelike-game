@@ -16,7 +16,8 @@ export const HERO_DATA = {
     doubleNextAction: false, // ⚡ 新增：下一次攻擊骰行動是否執行 2 次
     poisonTurns: 0,    // 🐉 黑龍【吐息】劇毒：每執行一個動作扣1點HP，持續回合數歸零後解除
     isPressured: false, // 🐉 黑龍【威壓】：下次攻擊骰鎖定為1，且本回合無法使用主動技
-    stigma: 0,   
+    stigma: 0, 
+    stigmaPerTurn: 0,   // 🟢 新增：聖痕君臨被動 - 每回合開始施加的聖痕層數（可疊加）  
     gold: 0,      
     cdActiveSkill: 0,  
     overrideDice: null,

@@ -7,6 +7,13 @@ export class CombatSystem {
         const safeLog = typeof logCallback === 'function' ? logCallback : console.log;
         if (!intent) return;
 
+            // 🟢 新增：友軍增益型招式（薩滿的加護/部落英雄）
+        if (intent.type === 'ALLY_BUFF') {
+            this.applyAllyBuff(attacker, intent, enemies, safeLog);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
         // 1. 處理 Buff / Debuff / 特殊機制 (如蓄力、飛翔、威壓)
         if (intent.type === 'BUFF' || intent.type === 'DEBUFF') {
             if (intent.id === 'CHARGE') {
@@ -94,6 +101,70 @@ export class CombatSystem {
             return;
         }
     }
+
+
+// 🟢 通用「友軍增益」招式解析器
+    static applyAllyBuff(attacker, intent, enemies, safeLog) {
+        const allAllies = Array.isArray(enemies) ? enemies.filter(e => e && e.hp > 0) : [];
+        const otherAllies = allAllies.filter(e => e !== attacker);
+
+        switch (intent.effect) {
+            case 'BLOCK': {
+                if (otherAllies.length === 0) {
+                    safeLog(`🔮 ${attacker.name} 發動【${intent.desc}】，但沒有其他友軍在場，效果落空`);
+                    break;
+                }
+                otherAllies.forEach(ally => { ally.block = (ally.block || 0) + intent.value; });
+                safeLog(`🛡️ ${attacker.name} 發動【${intent.desc}】，其他友軍全部獲得 ${intent.value} 點格擋！`);
+                break;
+            }
+            case 'CHARGE_BUFF': {
+                if (otherAllies.length === 0) {
+                    safeLog(`🔮 ${attacker.name} 發動【${intent.desc}】，但沒有其他友軍在場，效果落空`);
+                    break;
+                }
+                otherAllies.forEach(ally => this.applyChargeBuff(ally, intent.turns));
+                safeLog(`⚡ ${attacker.name} 發動【${intent.desc}】，其他友軍獲得【衝鋒】效果 ${intent.turns} 回合！`);
+                break;
+            }
+            case 'HEAL_ALL': {
+                allAllies.forEach(ally => { ally.hp = Math.min(ally.maxHp, ally.hp + intent.value); });
+                safeLog(`✨ ${attacker.name} 發動【${intent.desc}】，友軍全體回復 ${intent.value} 點HP！`);
+                break;
+            }
+            case 'HEROIC_BUFF': {
+                // 部落英雄：自己必定獲得，並隨機挑一位其他友軍一起獲得
+                this.applyHeroicBuff(attacker, intent.turns);
+                let logMsg = `🔥 ${attacker.name} 發動【${intent.desc}】，自己獲得【英勇】效果 ${intent.turns} 回合`;
+                if (otherAllies.length > 0) {
+                    const chosen = otherAllies[Math.floor(Math.random() * otherAllies.length)];
+                    this.applyHeroicBuff(chosen, intent.turns);
+                    logMsg += `，並讓 ${chosen.name} 一同獲得【英勇】效果！`;
+                } else {
+                    logMsg += `！（沒有其他友軍可分享效果）`;
+                }
+                safeLog(logMsg);
+                break;
+            }
+            default:
+                safeLog(`⚠️ 未知的友軍增益效果類型: ${intent.effect}`);
+        }
+    }
+
+    // 🟢 套用「衝鋒」：首次生效才疊加 OD上限+1 / 爆擊增益+1，重複觸發只刷新回合數，避免無限疊加
+    static applyChargeBuff(entity, turns = 2) {
+        if (!(entity.chargeTurns > 0)) {
+            entity.maxOd = (entity.maxOd || 0) + 1;
+            entity.critBonus = (entity.critBonus || 0) + 1;
+        }
+        entity.chargeTurns = turns;
+    }
+
+    // 🟢 套用「英勇」：效果在 onTurnEnd 中持續觸發，這裡只需設定/刷新回合數
+    static applyHeroicBuff(entity, turns = 2) {
+        entity.heroicTurns = turns;
+    }
+
 
     static applyDamageToTarget(target, rawDmg, logCallback) {
         // 1. 🌀 閃避判定

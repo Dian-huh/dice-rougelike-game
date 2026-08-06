@@ -63,8 +63,9 @@ export class MapScene extends Phaser.Scene {
             this.scene.restart();
         } 
         else {
-            // 切換至戰鬥場景，完全由 gameState 自動對接，零傳參負擔
-            this.scene.start('BattleScene');
+            // 🟢 把節點資訊 (含 type: 'BATTLE' / 'BOSS') 一併傳給 BattleScene，
+            // 讓 getStageData() 能正確判斷要組裝一般小怪還是頭目戰
+            this.scene.start('BattleScene', { node });
         }
     }
 }

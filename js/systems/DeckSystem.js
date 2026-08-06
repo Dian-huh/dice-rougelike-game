@@ -15,6 +15,13 @@ export class DeckSystem {
         this.discardPile = [];
     }
 
+    // 🟢 新增：每場戰鬥開始時呼叫，把手牌、抽牌堆、棄牌堆全部收回，
+    // 依「當前擁有的完整收藏」(originalDeck，含永久獲得的新卡) 重新洗牌
+    // 與建構子的 init() 邏輯相同，但語意上代表「戰鬥重置」而非「存檔初始化」
+    resetForNewBattle() {
+        this.init();
+    }
+
     // 費雪-耶茲 (Fisher-Yates) 隨機洗牌演算法
     shuffle(array) {
         for (let i = array.length - 1; i > 0; i--) {
