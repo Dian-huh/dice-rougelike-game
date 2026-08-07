@@ -5,6 +5,7 @@ import { getStageData } from '../data/stageData.js'; // 🟢 補上這一行！
 import { DeckSystem } from '../systems/DeckSystem.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
 import { RewardSystem } from '../systems/RewardSystem.js';
+import { TutorialSystem } from '../systems/TutorialSystem.js';
 
 export class BattleScene extends Phaser.Scene {
     constructor() { 
@@ -20,6 +21,10 @@ export class BattleScene extends Phaser.Scene {
 
         // 🟢 2. 從 MapScene 傳入的 node 資料判斷節點類型（BATTLE / BOSS）
         const nodeType = (data && data.node && data.node.type) ? data.node.type : 'BATTLE';
+
+        // 🟢 新增：判斷這是不是「最終樓層的 Boss 戰」，決定戰勝後要進入一般獎勵流程還是遊戲通關結算
+        const totalFloors = (gameState && gameState.mapData) ? gameState.mapData.length : 5;
+        this.isFinalBoss = (nodeType === 'BOSS' && currentFloor === totalFloors);
 
         // 🟢 3. 依樓層 + 節點類型動態取得關卡資料
         const stageInfo = getStageData ? getStageData(currentStageId, nodeType) : null;
@@ -59,8 +64,30 @@ export class BattleScene extends Phaser.Scene {
         this.skillBtn = this.createButton(40, 360, '✨ 主動技能 (定骰)', () => this.toggleSkillPicker());
 
         this.createSkillPickerUI();
+        this.createSkillPickerUI();
+
+        // 🟢 新增：常駐「查看教學」按鈕，玩家隨時可重看，不受 localStorage 旗標影響
+        this.tutorialBtn = this.createButton(700, 5, '📖 教學', () => this.openTutorial());
+
         this.appendLog(`⚔️ 進入關卡【${this.currentStage.name}】！遇到 ${this.enemies.length} 個敵人！`, 'system');
-        this.startNewTurn();
+
+        // 🟢 第一次進入戰鬥才自動彈出教學；看完（或跳過）後才顯示對話框、開始回合
+        if (!TutorialSystem.hasSeenTutorial()) {
+            TutorialSystem.showTutorialUI(this, () => {
+                this.showChatLogUI();
+                this.startNewTurn();
+            });
+        } else {
+            this.showChatLogUI();
+            this.startNewTurn();
+        }
+    }
+
+    // 🟢 新增：手動重看教學（按鈕觸發），純粹展示，不影響戰鬥流程與回合狀態
+    openTutorial() {
+        TutorialSystem.showTutorialUI(this, () => {
+            // 關閉即可，不需要重新開始回合或做任何遊戲狀態異動
+        });
     }
 
     getCurrentTarget() {
@@ -87,13 +114,18 @@ export class BattleScene extends Phaser.Scene {
         logDiv.style.fontFamily = 'sans-serif';
         logDiv.style.fontSize = '12px';
         logDiv.style.overflowY = 'auto';
-        logDiv.style.display = 'flex';
+        logDiv.style.display = 'none';  // 🟢 改為預設隱藏，等玩家看完教學（或已看過）才顯示
         logDiv.style.flexDirection = 'column';
         logDiv.style.gap = '6px';
         logDiv.style.zIndex = '1000';
 
         document.body.appendChild(logDiv);
         this.logContainer = logDiv;
+    }
+
+    // 🟢 新增：顯示對話框（在教學結束或確認已看過教學後呼叫）
+    showChatLogUI() {
+        if (this.logContainer) this.logContainer.style.display = 'flex';
     }
 
     appendLog(msg, sender = 'player', rightMsg = null) {
@@ -382,26 +414,84 @@ export class BattleScene extends Phaser.Scene {
         const allDead = this.enemies.every(e => e.hp <= 0);
         if (allDead) {
             this.appendLog(`🎉 區域內所有敵人已被全數擊敗！戰鬥獲勝！`, 'system');
-            
-            // 🟢 新增：戰鬥結束重置「戰鬥限定」數值，避免跨戰鬥不合理累積
-            // stigmaPerTurn（被動疊加速率）屬於永久成長，不受影響，只重置 stigma 本身的層數
+
             this.hero.block = 0;
             this.hero.stigma = 0;
+            this.hero.battleCritBonus = 0;   // 🟢 新增：戰鬥內臨時爆擊增益歸零
+            this.hero.battleHealBonus = 0;   // 🟢 新增：戰鬥內臨時回復加成歸零
 
             if (this.handContainer) this.handContainer.destroy();
             if (this.actionBtn) this.actionBtn.destroy();
             if (this.skillBtn) this.skillBtn.destroy();
 
-            this.time.delayedCall(600, () => {
-                RewardSystem.showRewardUI(this, this.currentStage);
-            });
+            // 🟢 分流：最終樓層 Boss 戰勝利 → 遊戲通關結算；一般戰鬥勝利 → 照舊進入獎勵選擇
+            if (this.isFinalBoss) {
+                this.time.delayedCall(600, () => {
+                    this.showVictoryUI();
+                });
+            } else {
+                this.time.delayedCall(600, () => {
+                    RewardSystem.showRewardUI(this, this.currentStage);
+                });
+            }
             return true;
         }
         if (this.hero.hp <= 0) {
             this.appendLog(`💀 勇者倒下了... 遊戲結束！`, 'system');
+            this.time.delayedCall(600, () => {
+                this.showGameOverUI();
+            });
             return true;
         }
         return false;
+    }
+
+    // 🟢 清除戰鬥對話框 DOM 元素，避免切換場景後殘留疊在畫面上
+    removeChatLogUI() {
+        const existingLog = document.getElementById('game-chat-log');
+        if (existingLog) existingLog.remove();
+        this.logContainer = null;
+    }
+
+    // 🟢 死亡結算畫面
+    showGameOverUI() {
+        // 摧毀底下仍可互動的元素，避免玩家對著覆蓋層背後繼續操作
+        if (this.handContainer) this.handContainer.destroy();
+        if (this.actionBtn) this.actionBtn.destroy();
+        if (this.skillBtn) this.skillBtn.destroy();
+        if (this.pickerContainer) this.pickerContainer.setVisible(false);
+
+        this.add.rectangle(425, 275, 850, 550, 0x000000, 0.92).setDepth(3000);
+        this.add.text(425, 220, '💀 遊戲結束', { fontSize: '32px', fill: '#ff4444' }).setOrigin(0.5).setDepth(3001);
+        this.add.text(425, 270, `勇者倒下於第 ${gameState.currentFloor} 層...`, { fontSize: '16px', fill: '#cccccc' }).setOrigin(0.5).setDepth(3001);
+
+        this.add.text(425, 340, '[ 🔄 重新開始 ]', {
+            fontSize: '18px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 14, y: 8 }
+        }).setOrigin(0.5).setDepth(3001)
+          .setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => this.restartGame());
+    }
+
+    // 🟢 全破結算畫面（僅在打贏最終樓層 Boss 時觸發）
+    showVictoryUI() {
+        this.add.rectangle(425, 275, 850, 550, 0x000000, 0.92).setDepth(3000);
+        this.add.text(425, 200, '🏆 恭喜通關！', { fontSize: '32px', fill: '#ffcc00' }).setOrigin(0.5).setDepth(3001);
+        this.add.text(425, 250, `你成功擊敗了滅世黑龍，拯救了世界！`, { fontSize: '16px', fill: '#cccccc' }).setOrigin(0.5).setDepth(3001);
+        this.add.text(425, 290, `💰 最終金幣：${this.hero.gold || 0}　❤️ 剩餘 HP：${this.hero.hp}/${this.hero.maxHp}`, { fontSize: '14px', fill: '#4efa7b' }).setOrigin(0.5).setDepth(3001);
+
+        this.add.text(425, 360, '[ 🔄 開始新的旅程 ]', {
+            fontSize: '18px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 14, y: 8 }
+        }).setOrigin(0.5).setDepth(3001)
+          .setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => this.restartGame());
+    }
+
+    // 🟢 統一的「重新開始」邏輯：清空對話框、重置全域存檔、回到地圖場景
+    restartGame() {
+        this.removeChatLogUI();
+        gameState.initNewGame();
+        this.scene.start('MapScene');
+        this.scene.stop('BattleScene');
     }
 
    // js/scenes/BattleScene.js 中的 nextStage() 方法：
@@ -410,6 +500,7 @@ export class BattleScene extends Phaser.Scene {
         this.appendLog(`🗺️ 戰鬥勝利！返回地圖...`, 'system');
         
         this.time.delayedCall(500, () => {
+            this.removeChatLogUI();  // 🟢 新增
             gameState.nextFloor();   // 🔑 統一只用模組單例，不再判斷 window.gameState
             this.scene.start('MapScene');
             this.scene.stop('BattleScene');
@@ -436,7 +527,7 @@ export class BattleScene extends Phaser.Scene {
             `[ 🛡️ ${this.hero.name} ]  💰 金幣: ${this.hero.gold || 0}${passivesText}${statusText}\n` +
             `HP: ${this.hero.hp}/${this.hero.maxHp} | 格擋: ${this.hero.block} | 閃避: ${this.hero.dodgeCount || 0} 次\n` +
             `魔力: ${this.hero.mana}/${this.hero.maxMana} | 基礎攻擊力: ${this.hero.atk}\n` +
-            `爆擊增益: +${this.hero.critBonus} | 回復比值: x${this.hero.healRatio}\n` +
+            `爆擊增益: +${this.hero.critBonus + this.hero.battleCritBonus} | 回復比值: x${this.hero.healRatio + this.hero.battleHealBonus}\n` +  // 🟢 顯示總和
             `護甲受擊: ${this.hero.armorHits}/${this.hero.armorMax} ${this.hero.isVulnerable ? '⚠️(破防中!)' : ''}\n` +
             `主動技能 CD: ${this.hero.cdActiveSkill} 回合`
         );

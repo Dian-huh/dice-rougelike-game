@@ -228,7 +228,7 @@ export class CombatSystem {
 
 
     static applyHealToHero(hero, baseHeal, logCallback) {
-        const actualHeal = baseHeal * hero.healRatio;
+        const actualHeal = baseHeal * (hero.healRatio + hero.battleHealBonus);  // 🟢 加總永久+臨時
         hero.hp = Math.min(hero.maxHp, hero.hp + actualHeal);
         if (logCallback) logCallback(`💚 回復 ${actualHeal} 點 HP (現有 ${hero.hp}/${hero.maxHp})`);
     }

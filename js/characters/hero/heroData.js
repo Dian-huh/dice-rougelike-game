@@ -4,6 +4,9 @@ export const HERO_DATA = {
     hp: 20, maxHp: 20,
     atk: 3,
     critBonus: 2,
+    battleCritBonus: 0,    // 🟢 新增：戰鬥內臨時爆擊增益（來自骰面2/骰面4觸發，每場戰鬥結束重置）
+    healRatio: 1,           // 永久回復比值基礎值（目前無獎勵來源，保留供未來擴充）
+    battleHealBonus: 0,    // 🟢 新增：戰鬥內臨時回復加成（來自骰面2觸發，每場戰鬥結束重置）
     mana: 3, maxMana: 3,
     healRatio: 1,      
     speedBonus: 0,     
@@ -35,15 +38,15 @@ export const HERO_DATA = {
         2: {
             name: '技能1',
             execute: (hero, enemy, combatSys, log) => {
-                hero.critBonus += 1;
-                hero.healRatio += 1;
-                log(`✨ 觸發 [2:技能1] 爆擊增益+1 (現為${hero.critBonus})，回復量比值+1 (現為${hero.healRatio})`);
+                hero.battleCritBonus += 1;   // 🟢 改為累加到戰鬥內臨時欄位
+                hero.battleHealBonus += 1;   // 🟢 改為累加到戰鬥內臨時欄位
+                log(`✨ 觸發 [2:技能1] 爆擊增益+1 (現為${hero.critBonus + hero.battleCritBonus})，回復量比值+1 (現為${hero.healRatio + hero.battleHealBonus})`);
             }
         },
         3: {
             name: '爆擊攻擊',
             execute: (hero, enemy, combatSys, log) => {
-                let critDmg = hero.atk + hero.critBonus;
+                let critDmg = hero.atk + hero.critBonus + hero.battleCritBonus;  // 🟢 加總永久+臨時
                 log(`💥 觸發 [3:爆擊攻擊] 造成 ${critDmg} 點傷害！`);
                 combatSys.applyDamageToTarget(enemy, critDmg, log);
             }
@@ -51,23 +54,18 @@ export const HERO_DATA = {
         4: {
             name: '技能2',
             execute: (hero, enemy, combatSys, log) => {
-                let s2Dmg = hero.atk + hero.critBonus;
-                
-                // 1. 記錄攻擊前敵人是否已經破防
+                let s2Dmg = hero.atk + hero.critBonus + hero.battleCritBonus;  // 🟢 加總永久+臨時
+
                 let enemyWasVulnerable = enemy.isVulnerable;
-
                 log(`💥 觸發 [4:技能2] 造成 ${s2Dmg} 點爆擊傷害！`);
-                
-                // 2. 結算傷害（包含護甲受擊次數與破防判定）
                 combatSys.applyDamageToTarget(enemy, s2Dmg, log);
-
-                // 3. 判定：如果攻擊前已破防，或者這下攻擊剛好將敵人打破防 (enemy.isVulnerable 變為 true)
+                hero.battleCritBonus += 2;
                 if (enemyWasVulnerable || enemy.isVulnerable) {
-                    hero.critBonus += 3;
+                    hero.battleCritBonus += 4;  // 🟢 這是戰鬥中觸發的加成，改為累加到臨時欄位
                     if (enemyWasVulnerable) {
-                        log(`🎯 技能2成功命中破防敵人！爆擊增益 +3 (現為 +${hero.critBonus})`);
+                        log(`🎯 技能2成功命中破防敵人！爆擊增益 +4 (現為 +${hero.critBonus + hero.battleCritBonus})`);
                     } else {
-                        log(`🎯 技能2成功將敵人【打破防】！觸發額外效果，爆擊增益 +3 (現為 +${hero.critBonus})`);
+                        log(`🎯 技能2成功將敵人【打破防】！觸發額外效果，爆擊增益 +4 (現為 +${hero.critBonus + hero.battleCritBonus})`);
                     }
                 }
             }
@@ -82,7 +80,7 @@ export const HERO_DATA = {
         6: {
             name: '技能3',
             execute: (hero, enemy, combatSys, log) => {
-                let s3Dmg = 3 + hero.critBonus + hero.stigma;
+                let s3Dmg = 3 + hero.critBonus + hero.battleCritBonus + hero.stigma;  // 🟢 加總永久+臨時
                 log(`🗡️ 觸發 [6:技能3] 造成 ${s3Dmg} 點傷害！`);
                 combatSys.applyDamageToTarget(enemy, s3Dmg, log);
                 combatSys.applyHealToHero(hero, 1 + hero.stigma, log);
