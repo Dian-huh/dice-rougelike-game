@@ -52,9 +52,14 @@ export class BattleScene extends Phaser.Scene {
         this.playerSpeedDice = 0;
         this.lastActionDice = null;
 
+        // 🟢 新增：目標選擇 / 攻擊骰結算狀態機相關旗標
+        this.isPickingTarget = false;
+        this.pendingTargetCallback = null;
+        this.attackPhaseState = null;
+        this.enemyDisplays = null;
+
         // UI 區塊
         this.heroText = this.add.text(40, 20, '', { fontSize: '15px', fill: '#4efa7b', lineSpacing: 4 });
-        this.enemyText = this.add.text(450, 20, '', { fontSize: '14px', fill: '#ff5555', lineSpacing: 4 });
         this.diceBoardText = this.add.text(280, 140, '', { fontSize: '15px', fill: '#00ffff', align: 'center', backgroundColor: '#222', padding: { x: 10, y: 8 } });
 
         this.createChatLogUI();
@@ -63,7 +68,6 @@ export class BattleScene extends Phaser.Scene {
         this.actionBtn = this.createButton(620, 360, '🎲 擲攻擊骰並結算', () => this.resolveAttackPhase());
         this.skillBtn = this.createButton(40, 360, '✨ 主動技能 (定骰)', () => this.toggleSkillPicker());
 
-        this.createSkillPickerUI();
         this.createSkillPickerUI();
 
         // 🟢 新增：常駐「查看教學」按鈕，玩家隨時可重看，不受 localStorage 旗標影響
@@ -210,6 +214,7 @@ export class BattleScene extends Phaser.Scene {
     }
 
     toggleSkillPicker() {
+        if (this.isPickingTarget) return; // 🟢 目標選擇中，鎖定其他操作
         if (this.hero.isPressured) {
             this.appendLog(`⚠️ 受到【威壓】封印，本回合無法使用主動技能`, 'system');
             return;
@@ -288,22 +293,111 @@ export class BattleScene extends Phaser.Scene {
         }
     }
 
+    // ============================================================
+    // 🟢 目標選擇 UI：讓場上每隻敵人變成可獨立點擊的物件
+    // ============================================================
+
+    renderEnemyUI() {
+        if (this.enemyDisplays) {
+            this.enemyDisplays.forEach(d => d.container.destroy());
+        }
+        this.enemyDisplays = [];
+
+        this.enemies.forEach((enemy, idx) => {
+            const x = 450;
+            const y = 20 + idx * 100;
+            const container = this.add.container(x, y);
+
+            // 高亮/可點擊用的背景框，平常透明無邊框，只有在選擇目標時才會顯示
+            const bg = this.add.rectangle(150, 35, 320, 80, 0x000000, 0)
+                .setStrokeStyle(0);
+
+            const status = enemy.hp <= 0 ? '💀 (已擊倒)' : `HP: ${enemy.hp}/${enemy.maxHp}`;
+            const extraStatusLine = enemy.getStatusLine ? enemy.getStatusLine() : '';
+            const text = this.add.text(0, 0,
+                `[ 😈 ${enemy.name} #${idx + 1} ] (${status})\n` +
+                `  格擋: ${enemy.block || 0} | 攻: ${enemy.atk} | ${extraStatusLine}\n` +
+                `  速度: [ ${enemy.speedDice || 0} ] | 預告意圖: ${enemy.currentIntent ? enemy.currentIntent.desc : '無'}`,
+                { fontSize: '14px', fill: '#ff5555', lineSpacing: 4 }
+            );
+
+            container.add([bg, text]);
+            this.enemyDisplays.push({ enemy, container, bg, text });
+        });
+    }
+
+    // 顯示目標選擇 UI：只有 aliveEnemies 內的敵人可以點擊，選定後呼叫 callback(target) 並復原顯示
+    showEnemyTargetPicker(aliveEnemies, callback) {
+        if (!this.enemyDisplays || this.enemyDisplays.length === 0) this.renderEnemyUI();
+
+        this.isPickingTarget = true;
+        this.pendingTargetCallback = callback;
+        this.appendLog(`🎯 請點選要攻擊的敵人目標...`, 'system');
+
+        this.enemyDisplays.forEach(display => {
+            if (display.enemy.hp > 0 && aliveEnemies.includes(display.enemy)) {
+                display.bg.setFillStyle(0x333355, 0.35).setStrokeStyle(2, 0xffff00);
+                display.bg.setInteractive({ useHandCursor: true });
+                display.bg.on('pointerdown', () => this.onEnemyTargetChosen(display.enemy));
+            }
+        });
+    }
+
+    onEnemyTargetChosen(enemy) {
+        // 復原所有敵人顯示的可點擊狀態
+        this.enemyDisplays.forEach(display => {
+            display.bg.removeAllListeners('pointerdown');
+            display.bg.disableInteractive();
+            display.bg.setFillStyle(0x000000, 0).setStrokeStyle(0);
+        });
+
+        this.isPickingTarget = false;
+        const cb = this.pendingTargetCallback;
+        this.pendingTargetCallback = null;
+
+        this.appendLog(`🎯 選定目標：${enemy.name}`, 'system');
+
+        if (cb) cb(enemy);
+    }
+
+    // ============================================================
+    // 🟢 卡牌使用：依 scope 判斷是否需要目標選擇
+    // ============================================================
+
     playCard(index) {
+        if (this.isPickingTarget) return;
+
         const card = this.deckSys.hand[index];
+        if (!card) return;
+
         if (this.hero.mana < card.cost) {
             this.appendLog(`⚠️ 魔力不足，無法使用 [${card.name}]`, 'system');
             return;
         }
 
+        const scope = card.scope || 'SELF';
+        const aliveEnemies = this.enemies.filter(e => e.hp > 0);
+
+        if (scope === 'SINGLE_ENEMY' && aliveEnemies.length > 1) {
+            this.showEnemyTargetPicker(aliveEnemies, (target) => {
+                this.finalizeCardPlay(index, card, target);
+            });
+            return;
+        }
+
+        const target = (scope === 'SINGLE_ENEMY') ? (aliveEnemies[0] || null) : null;
+        this.finalizeCardPlay(index, card, target);
+    }
+
+    finalizeCardPlay(index, card, target) {
         this.hero.mana -= card.cost;
         this.deckSys.playCard(index);
         this.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
 
         this.appendLog(`🃏 使用卡牌 [${card.name}] (-${card.cost}費)`, 'player');
 
-        const targetEnemy = this.getCurrentTarget();
         if (card.onPlay) {
-            card.onPlay(this.hero, targetEnemy, CombatSystem, this.deckSys, (m) => this.appendLog(m, 'player'), this);
+            card.onPlay(this.hero, target, CombatSystem, this.deckSys, (m) => this.appendLog(m, 'player'), this);
         }
 
         this.renderHandUI();
@@ -311,88 +405,154 @@ export class BattleScene extends Phaser.Scene {
         this.checkBattleEnd();
     }
 
+    // ============================================================
+    // 🟢 攻擊骰結算：拆成狀態機，讓玩家的單一招式跟敵人各自行動解耦
+    // ============================================================
+
     resolveAttackPhase() {
-        let times = this.hero.atkCount;
-        
-        for (let i = 0; i < times; i++) {
-            if (this.enemies.every(e => e.hp <= 0) || this.hero.hp <= 0) break;
+        if (this.isPickingTarget || this.attackPhaseState) return;
 
-            let actionDice;
-            if (this.hero.isPressured) {
-                actionDice = 1;
-                this.hero.overrideDice = null;
-                this.hero.isPressured = false;
-                this.appendLog(`😱 【威壓】效果發動，攻擊骰被強制鎖定為 1 點！`, 'system');
-            } else {
-                actionDice = this.hero.overrideDice !== null ? this.hero.overrideDice : Phaser.Math.Between(1, 6);
-                this.hero.overrideDice = null;
+        this.attackPhaseState = { timesRemaining: this.hero.atkCount };
+        this.hero.atkCount = 1;
+        this.runAttackPhaseStep();
+    }
+
+    runAttackPhaseStep() {
+        const state = this.attackPhaseState;
+        if (!state) return;
+
+        if (this.enemies.every(e => e.hp <= 0) || this.hero.hp <= 0 || state.timesRemaining <= 0) {
+            this.attackPhaseState = null;
+            if (!this.checkBattleEnd()) {
+                this.startNewTurn();
             }
-            this.lastActionDice = actionDice;
+            return;
+        }
 
-            let repeatCount = this.hero.doubleNextAction ? 2 : 1;
-            if (this.hero.doubleNextAction) {
-                this.appendLog(`⚡ 連打算計生效：[${actionDice}點] 連發 2 次！`, 'player');
-                this.hero.doubleNextAction = false;
+        state.timesRemaining -= 1;
+
+        let actionDice;
+        if (this.hero.isPressured) {
+            actionDice = 1;
+            this.hero.overrideDice = null;
+            this.hero.isPressured = false;
+            this.appendLog(`😱 【威壓】效果發動，攻擊骰被強制鎖定為 1 點！`, 'system');
+        } else {
+            actionDice = this.hero.overrideDice !== null ? this.hero.overrideDice : Phaser.Math.Between(1, 6);
+            this.hero.overrideDice = null;
+        }
+        this.lastActionDice = actionDice;
+
+        const skill = this.hero.diceSkills[actionDice];
+        const scope = (skill && skill.scope) || 'SINGLE_ENEMY';
+        const aliveEnemies = this.enemies.filter(e => e.hp > 0);
+
+        // 🟢 單體招式且場上有 2 隻以上存活敵人 -> 暫停結算，跳出目標選擇 UI
+        if (scope === 'SINGLE_ENEMY' && aliveEnemies.length > 1) {
+            this.showEnemyTargetPicker(aliveEnemies, (target) => {
+                this.executeAttackPhaseAction(actionDice, scope, target);
+            });
+            return;
+        }
+
+        // 只剩 1 隻存活敵人 -> 不用多點一次，直接視為目標
+        const target = aliveEnemies.length > 0 ? aliveEnemies[0] : null;
+        this.executeAttackPhaseAction(actionDice, scope, target);
+    }
+
+    // 依 scope 分流結算玩家招式，敵人各自的行動邏輯維持原樣（不受玩家只打一隻敵人影響）
+    executeAttackPhaseAction(actionDice, scope, chosenTarget) {
+        let repeatCount = this.hero.doubleNextAction ? 2 : 1;
+        if (this.hero.doubleNextAction) {
+            this.appendLog(`⚡ 連打算計生效：[${actionDice}點] 連發 2 次！`, 'player');
+            this.hero.doubleNextAction = false;
+        }
+
+        if (scope === 'SELF') {
+            // 純自身效果：玩家招式只需執行一次，跟敵人數量無關
+            for (let r = 0; r < repeatCount; r++) {
+                if (this.hero.hp <= 0) break;
+                this.executePlayerDiceAction(actionDice, null);
             }
+            // 每隻存活敵人各自照常行動
+            this.enemies.forEach(enemy => {
+                if (enemy.hp > 0 && this.hero.hp > 0) this.executeEnemyAction(enemy);
+            });
 
+        } else if (scope === 'ALL_ENEMIES') {
+            // 全體招式：維持原本「對每隻敵人各自比較速度骰、各自結算」的行為
+            this.enemies.forEach(enemy => {
+                this.resolvePlayerVsEnemy(enemy, actionDice, repeatCount);
+            });
+
+        } else {
+            // SINGLE_ENEMY：只對選定目標做完整的速度骰互動，其他敵人單純各自行動
             this.enemies.forEach(enemy => {
                 if (enemy.hp <= 0 || this.hero.hp <= 0) return;
 
-                if (this.playerSpeedDice > enemy.speedDice) {
-                    for (let r = 0; r < repeatCount; r++) {
-                        if (this.hero.hp > 0 && enemy.hp > 0) this.executePlayerDiceAction(actionDice, enemy);
-                    }
-                    if (enemy.hp > 0) this.executeEnemyAction(enemy);
-                } 
-                else if (this.playerSpeedDice < enemy.speedDice) {
+                if (chosenTarget && enemy === chosenTarget) {
+                    this.resolvePlayerVsEnemy(enemy, actionDice, repeatCount);
+                } else {
                     this.executeEnemyAction(enemy);
-                    if (this.hero.hp > 0 && enemy.hp > 0) {
-                        for (let r = 0; r < repeatCount; r++) {
-                            if (this.hero.hp > 0 && enemy.hp > 0) this.executePlayerDiceAction(actionDice, enemy);
-                        }
-                    }
-                } 
-                else {
-                    let pActionLog = [];
-                    let eActionLog = [];
-
-                    const ATTACK_DICE_IDS = [1, 3, 4, 6];
-                    if (enemy.isFlying && ATTACK_DICE_IDS.includes(actionDice)) {
-                        pActionLog.push(`💨 ${enemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`);
-                    } else {
-                        const pSkill = this.hero.diceSkills[actionDice];
-                        if (pSkill) pSkill.execute(this.hero, enemy, CombatSystem, (m) => pActionLog.push(m));
-                    }
-                    enemy.executeAction(enemy, enemy.currentIntent, this.hero, CombatSystem, (m) => eActionLog.push(m), this.enemies);
-                    this.tickPoison(this.hero, (m) => pActionLog.push(m));
-
-                    this.appendLog(pActionLog.join(' '), 'simultaneous', eActionLog.join(' '));
                 }
             });
         }
 
-        this.hero.atkCount = 1;
+        this.updateUI();
+        this.runAttackPhaseStep();
+    }
 
-        if (!this.checkBattleEnd()) {
-            this.startNewTurn();
+    // 玩家招式 vs 單一敵人的速度骰互動（先手/後手/同時），從原本 resolveAttackPhase 內的邏輯抽出
+    resolvePlayerVsEnemy(enemy, actionDice, repeatCount) {
+        if (enemy.hp <= 0 || this.hero.hp <= 0) return;
+
+        if (this.playerSpeedDice > enemy.speedDice) {
+            for (let r = 0; r < repeatCount; r++) {
+                if (this.hero.hp > 0 && enemy.hp > 0) this.executePlayerDiceAction(actionDice, enemy);
+            }
+            if (enemy.hp > 0) this.executeEnemyAction(enemy);
+        } 
+        else if (this.playerSpeedDice < enemy.speedDice) {
+            this.executeEnemyAction(enemy);
+            if (this.hero.hp > 0 && enemy.hp > 0) {
+                for (let r = 0; r < repeatCount; r++) {
+                    if (this.hero.hp > 0 && enemy.hp > 0) this.executePlayerDiceAction(actionDice, enemy);
+                }
+            }
+        } 
+        else {
+            let pActionLog = [];
+            let eActionLog = [];
+
+            const ATTACK_DICE_IDS = [1, 3, 4, 6];
+            if (enemy.isFlying && ATTACK_DICE_IDS.includes(actionDice)) {
+                pActionLog.push(`💨 ${enemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`);
+            } else {
+                const pSkill = this.hero.diceSkills[actionDice];
+                if (pSkill) pSkill.execute(this.hero, enemy, CombatSystem, (m) => pActionLog.push(m));
+            }
+            enemy.executeAction(enemy, enemy.currentIntent, this.hero, CombatSystem, (m) => eActionLog.push(m), this.enemies);
+            this.tickPoison(this.hero, (m) => pActionLog.push(m));
+
+            this.appendLog(pActionLog.join(' '), 'simultaneous', eActionLog.join(' '));
         }
     }
 
+    // targetEnemy 為 null 時代表純自身效果技能，跳過飛行閃避判定
     executePlayerDiceAction(dice, targetEnemy) {
         const skill = this.hero.diceSkills[dice];
-        const target = targetEnemy || this.getCurrentTarget();
-        if (!skill || !target) return;
+        if (!skill) return;
 
-        // 飛行狀態：一般攻擊骰的傷害招式完全打不中（技能1/技能3/爆擊攻擊/技能2）
-        // 純自身增益的骰面（技能1增益、閃避）不受影響，因為沒有打向敵人
-        const ATTACK_DICE_IDS = [1, 3, 4, 6];
-        if (target.isFlying && ATTACK_DICE_IDS.includes(dice)) {
-            this.appendLog(`💨 ${target.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
-            this.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
-            return;
+        if (targetEnemy) {
+            const ATTACK_DICE_IDS = [1, 3, 4, 6];
+            if (targetEnemy.isFlying && ATTACK_DICE_IDS.includes(dice)) {
+                this.appendLog(`💨 ${targetEnemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
+                this.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
+                return;
+            }
         }
 
-        skill.execute(this.hero, target, CombatSystem, (m) => this.appendLog(m, 'player'));
+        skill.execute(this.hero, targetEnemy, CombatSystem, (m) => this.appendLog(m, 'player'));
         this.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
     }
 
@@ -532,24 +692,7 @@ export class BattleScene extends Phaser.Scene {
             `主動技能 CD: ${this.hero.cdActiveSkill} 回合`
         );
 
-        let enemyInfoString = '';
-        // js/scenes/BattleScene.js - updateUI() 內部
-
-        this.enemies.forEach((enemy, idx) => {
-            const status = enemy.hp <= 0 ? '💀 (已擊倒)' : `HP: ${enemy.hp}/${enemy.maxHp}`;
-            
-            // 🟢 任何敵人只要有狀態（CT/OD/飛行），getStatusLine() 就會自動生成，沒有就回傳空字串
-            const extraStatusLine = enemy.getStatusLine ? enemy.getStatusLine() : '';
-
-            enemyInfoString += 
-                `[ 😈 ${enemy.name} #${idx + 1} ] (${status})\n` +
-                `  格擋: ${enemy.block || 0} | 攻: ${enemy.atk} | ${extraStatusLine}\n` +
-                `  速度: [ ${enemy.speedDice || 0} ] | 預告意圖: ${enemy.currentIntent ? enemy.currentIntent.desc : '無'}\n\n`;
-        });
-
-        this.enemyText.setText(enemyInfoString);
-
-        
-
+        // 🟢 改為渲染每隻敵人各自獨立可互動的物件，而非單一整塊文字
+        this.renderEnemyUI();
     }
 }
