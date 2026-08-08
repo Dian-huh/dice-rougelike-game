@@ -1,11 +1,9 @@
-import { HERO_DATA } from '../characters/hero/heroData.js';
-import { HERO_DECK } from '../characters/hero/heroCards.js';
 import { gameState } from '../data/gameState.js';
-import { getStageData } from '../data/stageData.js'; // 🟢 補上這一行！
-import { DeckSystem } from '../systems/DeckSystem.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
 import { RewardSystem } from '../systems/RewardSystem.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
+import { TurnSystem } from '../systems/TurnSystem.js';
+import { BattleSetup } from '../systems/BattleSetup.js';
 
 export class BattleScene extends Phaser.Scene {
     constructor() { 
@@ -14,36 +12,12 @@ export class BattleScene extends Phaser.Scene {
 
     create(data) {
     // 🟢 1. 取得目前樓層（直接用模組單例 gameState，不要用 window.gameState）
-        const currentFloor = (gameState && gameState.currentFloor) 
-            ? gameState.currentFloor 
-            : 1;
-        const currentStageId = `1-${currentFloor}`;
-
-        // 🟢 2. 從 MapScene 傳入的 node 資料判斷節點類型（BATTLE / BOSS）
-        const nodeType = (data && data.node && data.node.type) ? data.node.type : 'BATTLE';
-
-        // 🟢 新增：判斷這是不是「最終樓層的 Boss 戰」，決定戰勝後要進入一般獎勵流程還是遊戲通關結算
-        const totalFloors = (gameState && gameState.mapData) ? gameState.mapData.length : 5;
-        this.isFinalBoss = (nodeType === 'BOSS' && currentFloor === totalFloors);
-
-        // 🟢 3. 依樓層 + 節點類型動態取得關卡資料
-        const stageInfo = getStageData ? getStageData(currentStageId, nodeType) : null;
-        this.currentStage = stageInfo || { name: '冒險關卡', enemies: [] };
-        this.enemies = (this.currentStage && this.currentStage.enemies) ? this.currentStage.enemies : [];
-
-        // 🟢 4. 角色與牌組初始化（優先序：外部直接傳入 > 全域 gameState 單例 > 全新預設值）
-        //     🔑 關鍵修正：這裡改用 gameState（模組單例），確保拿到的是「同一個」持續累積 buff 的 hero 物件
-        if (data && data.hero) {
-            this.hero = data.hero;
-            this.deckSys = data.deckSys;
-        } else if (gameState && gameState.hero) {
-            this.hero = gameState.hero;
-            this.deckSys = gameState.deckSys;
-        } else {
-            this.hero = JSON.parse(JSON.stringify(HERO_DATA));
-            this.hero.diceSkills = HERO_DATA.diceSkills;
-            this.deckSys = new DeckSystem(HERO_DECK);
-        }
+        const setup = BattleSetup.resolve(data, gameState);
+        this.isFinalBoss = setup.isFinalBoss;
+        this.currentStage = setup.currentStage;
+        this.enemies = setup.enemies;
+        this.hero = setup.hero;
+        this.deckSys = setup.deckSys;
 
         // 🟢 每場戰鬥開始前重置本場牌堆狀態（手牌/抽牌堆/棄牌堆），
         // 但 originalDeck（永久收藏，含戰利品新卡）維持不變
@@ -230,38 +204,13 @@ export class BattleScene extends Phaser.Scene {
         if (this.enemies.every(e => e.hp <= 0) || this.hero.hp <= 0) return;
 
         this.turnCount += 1;
-        this.hero.mana = this.hero.maxMana;
-        if (this.hero.cdActiveSkill > 0) this.hero.cdActiveSkill--;
-        
-        if (this.hero.isVulnerable) { this.hero.isVulnerable = false; this.hero.armorHits = 0; }
-
-        // 🟢 第一回合發動被動 Buff（開局護盾）
-        if (this.turnCount === 1 && this.hero.startBlock && this.hero.startBlock > 0) {
-            this.hero.block += this.hero.startBlock;
-            this.appendLog(`🛡️ [開局被動發動] 獲得 ${this.hero.startBlock} 點格擋！`, 'system');
-        }
-
-                // 🟢 新增：每回合開始發動被動 Buff（聖痕君臨：每回合施加聖痕，可跨回合疊加）
-        if (this.hero.stigmaPerTurn && this.hero.stigmaPerTurn > 0) {
-            this.hero.stigma += this.hero.stigmaPerTurn;
-            this.appendLog(`🔱 [回合被動發動] 對敵方施加 ${this.hero.stigmaPerTurn} 層聖痕 (現為 ${this.hero.stigma} 層)`, 'system');
-        }
-
-        this.enemies.forEach(enemy => {
-            if (enemy.hp > 0) {
-                if (enemy.isVulnerable) { enemy.isVulnerable = false; enemy.armorHits = 0; }
-                // 每回合結束自動+1CT等機制（黑龍設計文件要求），只有第一回合前不觸發
-                if (this.turnCount > 1 && typeof enemy.onTurnEnd === 'function') {
-                    enemy.onTurnEnd((m) => this.appendLog(m, 'system'));
-                }
-                enemy.speedDice = Phaser.Math.Between(1, enemy.speedDiceSides || 6) + (enemy.speedBonus || 0);
-                enemy.currentIntent = enemy.getIntent(this.turnCount, enemy.speedDice, enemy);
-            }
-        });
+        const { playerSpeedDice } = TurnSystem.startTurn(
+            this.hero, this.enemies, this.turnCount,
+            (m, sender) => this.appendLog(m, sender)
+        );
+        this.playerSpeedDice = playerSpeedDice;
 
         this.deckSys.fillHandToMax(this.hero.maxMana);
-        this.playerSpeedDice = Phaser.Math.Between(1, 6) + this.hero.speedBonus;
-
         this.appendLog(`--- 第 ${this.turnCount} 回合開始 ---`, 'system');
         this.renderHandUI();
         this.updateUI();
@@ -282,15 +231,6 @@ export class BattleScene extends Phaser.Scene {
 
             this.handContainer.add([cardBg, title, desc]);
         });
-    }
-
-    // 劇毒：設計文件是「每執行一個動作就受1點傷害」，所以在每次玩家實際行動時觸發，而不是每回合結束觸發一次
-    tickPoison(entity, log) {
-        if (entity.poisonTurns > 0) {
-            entity.hp = Math.max(0, entity.hp - 1);
-            entity.poisonTurns -= 1;
-            log(`🤢 【劇毒】發作，${entity.name} 受到 1 點傷害 (剩餘 ${entity.poisonTurns} 回合)`);
-        }
     }
 
     // ============================================================
@@ -392,7 +332,7 @@ export class BattleScene extends Phaser.Scene {
     finalizeCardPlay(index, card, target) {
         this.hero.mana -= card.cost;
         this.deckSys.playCard(index);
-        this.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
+        CombatSystem.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
 
         this.appendLog(`🃏 使用卡牌 [${card.name}] (-${card.cost}費)`, 'player');
 
@@ -462,10 +402,10 @@ export class BattleScene extends Phaser.Scene {
 
     // 依 scope 分流結算玩家招式，敵人各自的行動邏輯維持原樣（不受玩家只打一隻敵人影響）
     executeAttackPhaseAction(actionDice, scope, chosenTarget) {
-        let repeatCount = this.hero.doubleNextAction ? 2 : 1;
-        if (this.hero.doubleNextAction) {
+        const wasDouble = this.hero.doubleNextAction;
+        const repeatCount = CombatSystem.getRepeatCount(this.hero);
+        if (wasDouble) {
             this.appendLog(`⚡ 連打算計生效：[${actionDice}點] 連發 2 次！`, 'player');
-            this.hero.doubleNextAction = false;
         }
 
         if (scope === 'SELF') {
@@ -506,13 +446,15 @@ export class BattleScene extends Phaser.Scene {
     resolvePlayerVsEnemy(enemy, actionDice, repeatCount) {
         if (enemy.hp <= 0 || this.hero.hp <= 0) return;
 
-        if (this.playerSpeedDice > enemy.speedDice) {
+        const order = CombatSystem.resolveTurnOrder(this.playerSpeedDice, enemy.speedDice);
+
+        if (order === 'PLAYER_FIRST') {
             for (let r = 0; r < repeatCount; r++) {
                 if (this.hero.hp > 0 && enemy.hp > 0) this.executePlayerDiceAction(actionDice, enemy);
             }
             if (enemy.hp > 0) this.executeEnemyAction(enemy);
         } 
-        else if (this.playerSpeedDice < enemy.speedDice) {
+        else if (order === 'ENEMY_FIRST') {
             this.executeEnemyAction(enemy);
             if (this.hero.hp > 0 && enemy.hp > 0) {
                 for (let r = 0; r < repeatCount; r++) {
@@ -543,7 +485,7 @@ export class BattleScene extends Phaser.Scene {
             enemy.executeAction(enemy, enemy.currentIntent, this.hero, CombatSystem, (m) => eActionLog.push(m), this.enemies);
             
             // 3. 中毒結算
-            this.tickPoison(this.hero, (m) => pActionLog.push(m));
+            CombatSystem.tickPoison(this.hero, (m) => pActionLog.push(m));
 
             // 4. 併行 Log 輸出
             this.appendLog(pActionLog.join(' '), 'simultaneous', eActionLog.join(' '));
@@ -559,13 +501,13 @@ export class BattleScene extends Phaser.Scene {
             const ATTACK_DICE_IDS = [1, 3, 4, 6];
             if (targetEnemy.isFlying && ATTACK_DICE_IDS.includes(dice)) {
                 this.appendLog(`💨 ${targetEnemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
-                this.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
+                CombatSystem.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
                 return;
             }
         }
 
         skill.execute(this.hero, targetEnemy, CombatSystem, (m) => this.appendLog(m, 'player'));
-        this.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
+        CombatSystem.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
     }
 
     executeEnemyAction(enemy) {
@@ -587,10 +529,7 @@ export class BattleScene extends Phaser.Scene {
         if (allDead) {
             this.appendLog(`🎉 區域內所有敵人已被全數擊敗！戰鬥獲勝！`, 'system');
 
-            this.hero.block = 0;
-            this.hero.stigma = 0;
-            this.hero.battleCritBonus = 0;   // 🟢 新增：戰鬥內臨時爆擊增益歸零
-            this.hero.battleHealBonus = 0;   // 🟢 新增：戰鬥內臨時回復加成歸零
+            CombatSystem.resetBattleScopedStats(this.hero);
 
             if (this.handContainer) this.handContainer.destroy();
             if (this.actionBtn) this.actionBtn.destroy();

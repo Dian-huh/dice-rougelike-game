@@ -234,6 +234,33 @@ export class CombatSystem {
         if (logCallback) logCallback(`💚 回復 ${actualHeal} 點 HP (現有 ${hero.hp}/${hero.maxHp})`);
     }
 
+    static tickPoison(entity, log) {
+        if (entity.poisonTurns > 0) {
+            entity.hp = Math.max(0, entity.hp - 1);
+            entity.poisonTurns -= 1;
+            log(`🤢 【劇毒】發作，${entity.name} 受到 1 點傷害 (剩餘 ${entity.poisonTurns} 回合)`);
+        }
+    }
+
+    static resetBattleScopedStats(hero) {
+        hero.block = 0;
+        hero.stigma = 0;
+        hero.battleCritBonus = 0;
+        hero.battleHealBonus = 0;
+    }
+
+    static resolveTurnOrder(playerSpeed, enemySpeed) {
+        if (playerSpeed > enemySpeed) return 'PLAYER_FIRST';
+        if (playerSpeed < enemySpeed) return 'ENEMY_FIRST';
+        return 'SIMULTANEOUS';
+    }
+
+    static getRepeatCount(hero) {
+        const count = hero.doubleNextAction ? 2 : 1;
+        hero.doubleNextAction = false;
+        return count;
+    }
+
     onTurnEnd(entity) {
         let logs = [];
         if (entity.poisonTurns && entity.poisonTurns > 0) {
