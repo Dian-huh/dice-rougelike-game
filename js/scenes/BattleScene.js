@@ -521,19 +521,31 @@ export class BattleScene extends Phaser.Scene {
             }
         } 
         else {
+        // 🟢 同時行動區塊修正
             let pActionLog = [];
             let eActionLog = [];
 
             const ATTACK_DICE_IDS = [1, 3, 4, 6];
-            if (enemy.isFlying && ATTACK_DICE_IDS.includes(actionDice)) {
-                pActionLog.push(`💨 ${enemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`);
-            } else {
-                const pSkill = this.hero.diceSkills[actionDice];
-                if (pSkill) pSkill.execute(this.hero, enemy, CombatSystem, (m) => pActionLog.push(m));
+
+            // 1. 依據 repeatCount 跑重複攻擊迴圈
+            for (let r = 0; r < repeatCount; r++) {
+                if (this.hero.hp <= 0 || enemy.hp <= 0) break; // 死亡檢查
+
+                if (enemy.isFlying && ATTACK_DICE_IDS.includes(actionDice)) {
+                    pActionLog.push(`💨 ${enemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`);
+                } else {
+                    const pSkill = this.hero.diceSkills[actionDice];
+                    if (pSkill) pSkill.execute(this.hero, enemy, CombatSystem, (m) => pActionLog.push(m));
+                }
             }
+
+            // 2. 敵人執行行動
             enemy.executeAction(enemy, enemy.currentIntent, this.hero, CombatSystem, (m) => eActionLog.push(m), this.enemies);
+            
+            // 3. 中毒結算
             this.tickPoison(this.hero, (m) => pActionLog.push(m));
 
+            // 4. 併行 Log 輸出
             this.appendLog(pActionLog.join(' '), 'simultaneous', eActionLog.join(' '));
         }
     }
