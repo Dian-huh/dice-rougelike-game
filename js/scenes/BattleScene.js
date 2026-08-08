@@ -687,8 +687,8 @@ export class BattleScene extends Phaser.Scene {
             `[ 🛡️ ${this.hero.name} ]  💰 金幣: ${this.hero.gold || 0}${passivesText}${statusText}\n` +
             `HP: ${this.hero.hp}/${this.hero.maxHp} | 格擋: ${this.hero.block} | 閃避: ${this.hero.dodgeCount || 0} 次\n` +
             `魔力: ${this.hero.mana}/${this.hero.maxMana} | 基礎攻擊力: ${this.hero.atk}\n` +
-            `爆擊增益: +${this.hero.critBonus + this.hero.battleCritBonus} | 回復比值: x${this.hero.healRatio + this.hero.battleHealBonus}\n` +  // 🟢 顯示總和
-            `護甲受擊: ${this.hero.armorHits}/${this.hero.armorMax} ${this.hero.isVulnerable ? '⚠️(破防中!)' : ''}\n` +
+            `爆擊增益: +${this.hero.critBonus + this.hero.battleCritBonus} | 回復量: x${this.hero.healRatio + this.hero.battleHealBonus}\n` +  // 🟢 顯示總和
+            `護甲值: ${Math.max(0, this.hero.armorMax - (this.hero.armorHits || 0))}/${this.hero.armorMax} ${this.hero.isVulnerable ? '⚠️(破防中!)' : ''}\n` +
             `主動技能 CD: ${this.hero.cdActiveSkill} 回合`
         );
 

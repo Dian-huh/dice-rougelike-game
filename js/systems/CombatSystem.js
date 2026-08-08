@@ -207,22 +207,23 @@ export class CombatSystem {
             }
         }
 
-        // 5. 扣除 HP
+        // 5. 扣除 HP 與 受傷次數判定
         if (finalDmg > 0) {
             target.hp = Math.max(0, target.hp - finalDmg);
             let detailStr = logDetails.length > 0 ? ` (${logDetails.join(', ')})` : '';
             if (logCallback) logCallback(`💥 造成 ${finalDmg} 點傷害${detailStr} (剩餘 ${target.hp}/${target.maxHp} HP)`);
+
+            // 🟢 6. 玩家專屬：護甲受傷次數計數與崩潰判定（只有 finalDmg > 0 扣到血才計數）
+            if (target.armorMax && target.armorMax > 0) {
+                target.armorHits = (target.armorHits || 0) + 1;
+                if (target.armorHits >= target.armorMax && !target.isVulnerable) {
+                    target.isVulnerable = true;
+                    if (logCallback) logCallback(`⚠️ 玩家護甲崩潰！進入【破防】狀態！`);
+                }
+            }
         } else {
             if (logCallback) logCallback(`🛡️ 傷害被完全抵銷！`);
-        }
-
-        // 6. 🟢 玩家專屬：護甲受擊次數計數與崩潰判定
-        if (target.armorMax && target.armorMax > 0) {
-            target.armorHits = (target.armorHits || 0) + 1;
-            if (target.armorHits >= target.armorMax && !target.isVulnerable) {
-                target.isVulnerable = true;
-                if (logCallback) logCallback(`⚠️ 玩家護甲崩潰！進入【破防】狀態！`);
-            }
+            // 💡 finalDmg === 0 時（被格擋或閃避抵銷），不增加 armorHits，護甲不會被磨損！
         }
     }
 

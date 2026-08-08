@@ -141,7 +141,7 @@ export const ENEMY_DATABASE = {
             if (this.isBreak) {
                 const normalPool = [
                     { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
-                    { id: 'ROCK_THROW', type: 'ATTACK', value: 1, hits: 3, canCrit: true, desc: '🪨 投石 (造成 3 次 1 點傷害)' }
+                    { id: 'ROCK_THROW', type: 'ATTACK', value: 1, hits: 2, canCrit: true, desc: '🪨 投石 (造成 2 次 1 點傷害)' }
                 ];
                 return Phaser.Utils.Array.GetRandom(normalPool);
             }
@@ -159,7 +159,7 @@ export const ENEMY_DATABASE = {
             // 3. 一般行動池
             const generalPool = [
                 { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
-                { id: 'ROCK_THROW', type: 'ATTACK', value: 1, hits: 3, canCrit: true, desc: '🪨 投石 (造成 3 次 1 點傷害)' }
+                { id: 'ROCK_THROW', type: 'ATTACK', value: 1, hits: 2, canCrit: true, desc: '🪨 投石 (造成 2 次 1 點傷害)' }
             ];
             return Phaser.Utils.Array.GetRandom(generalPool);
         }
