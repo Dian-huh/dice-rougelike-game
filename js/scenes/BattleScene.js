@@ -634,12 +634,17 @@ export class BattleScene extends Phaser.Scene {
         if (this.hero.isPressured) statusText += ` 😱[威壓中]`;
         if (this.hero.stigma > 0) statusText += ` 🔱[聖痕x${this.hero.stigma}]`; // 🟢 新增
 
+        // 改成：
+        const effAtk = CombatSystem.getEffectiveAtk(this.hero);
+        const effCrit = CombatSystem.getEffectiveCritBonus(this.hero);
+        const effArmorMax = CombatSystem.getEffectiveArmorMax(this.hero);
+
         this.heroText.setText(
             `[ 🛡️ ${this.hero.name} ]  💰 金幣: ${this.hero.gold || 0}${passivesText}${statusText}\n` +
             `HP: ${this.hero.hp}/${this.hero.maxHp} | 格擋: ${this.hero.block} | 閃避: ${this.hero.dodgeCount || 0} 次\n` +
-            `魔力: ${this.hero.mana}/${this.hero.maxMana} | 基礎攻擊力: ${this.hero.atk}\n` +
-            `爆擊增益: +${this.hero.critBonus + this.hero.battleCritBonus} | 回復量: x${this.hero.healRatio + this.hero.battleHealBonus}\n` +  // 🟢 顯示總和
-            `護甲值: ${Math.max(0, this.hero.armorMax - (this.hero.armorHits || 0))}/${this.hero.armorMax} ${this.hero.isVulnerable ? '⚠️(破防中!)' : ''}\n` +
+            `魔力: ${this.hero.mana}/${this.hero.maxMana} | 攻擊力: ${effAtk}\n` +
+            `爆擊增益: +${effCrit} | 回復量: x${this.hero.healRatio + this.hero.battleHealBonus}\n` +
+            `護甲值: ${Math.max(0, effArmorMax - (this.hero.armorHits || 0))}/${effArmorMax} ${this.hero.isVulnerable ? '⚠️(破防中!)' : ''}\n` +
             `主動技能 CD: ${this.hero.cdActiveSkill} 回合`
         );
 

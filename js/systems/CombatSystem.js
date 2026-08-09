@@ -216,7 +216,8 @@ export class CombatSystem {
             // 🟢 6. 玩家專屬：護甲受傷次數計數與崩潰判定（只有 finalDmg > 0 扣到血才計數）
             if (target.armorMax && target.armorMax > 0) {
                 target.armorHits = (target.armorHits || 0) + 1;
-                if (target.armorHits >= target.armorMax && !target.isVulnerable) {
+                const effectiveArmorMax = this.getEffectiveArmorMax(target);
+                if (target.armorHits >= effectiveArmorMax && !target.isVulnerable) {
                     target.isVulnerable = true;
                     if (logCallback) logCallback(`⚠️ 玩家護甲崩潰！進入【破防】狀態！`);
                 }
@@ -229,7 +230,7 @@ export class CombatSystem {
 
 
     static applyHealToHero(hero, baseHeal, logCallback) {
-        const actualHeal = baseHeal * (hero.healRatio + hero.battleHealBonus);  // 🟢 加總永久+臨時
+        const actualHeal = baseHeal * (hero.healRatio + hero.battleHealBonus) + (hero.blessingHealingFlatBonus || 0);
         hero.hp = Math.min(hero.maxHp, hero.hp + actualHeal);
         if (logCallback) logCallback(`💚 回復 ${actualHeal} 點 HP (現有 ${hero.hp}/${hero.maxHp})`);
     }
@@ -247,6 +248,39 @@ export class CombatSystem {
         hero.stigma = 0;
         hero.battleCritBonus = 0;
         hero.battleHealBonus = 0;
+        hero.battleAtkBonus = 0;   // 🟢 新增
+    }
+
+    // === 即時計算 Helper（方案A：不存欄位，每次讀取當下 HP 現算）===
+
+    static getDesperationBonus(entity) {
+        const stacks = entity.blessingDesperationStacks || 0;
+        if (stacks <= 0) return 0;
+        const missing = Math.max(0, (entity.maxHp || 0) - (entity.hp || 0));
+        return Math.floor(missing / 3) * 2 * stacks;
+    }
+
+    static getFortifyBonus(entity) {
+        const stacks = entity.blessingFortifyStacks || 0;
+        if (stacks <= 0) return 0;
+        const missing = Math.max(0, (entity.maxHp || 0) - (entity.hp || 0));
+        return Math.floor(missing / 3) * 2 * stacks;
+    }
+
+    static getEffectiveAtk(hero) {
+        return (hero.atk || 0) + (hero.battleAtkBonus || 0) + this.getDesperationBonus(hero);
+    }
+
+    static getEffectiveCritBonus(hero) {
+        return (hero.critBonus || 0) + (hero.battleCritBonus || 0) + this.getDesperationBonus(hero);
+    }
+
+    static getEffectiveSpeedBonus(hero) {
+        return (hero.speedBonus || 0) + this.getDesperationBonus(hero);
+    }
+
+    static getEffectiveArmorMax(entity) {
+        return (entity.armorMax || 0) + this.getFortifyBonus(entity);
     }
 
     static resolveTurnOrder(playerSpeed, enemySpeed) {

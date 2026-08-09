@@ -24,6 +24,14 @@ export const HERO_DATA = {
     gold: 0,      
     cdActiveSkill: 0,  
     overrideDice: null,
+    battleAtkBonus: 0,       // 戰鬥內臨時加成（暴走卡片、渾身加護共用此累加桶）
+    deckCapacity: 10,        // 牌組上限初始值（已確認：固定起始值）
+    blessingGuardianStacks: 0,
+    blessingDesperationStacks: 0,
+    blessingTyrantStacks: 0,
+    blessingFortifyStacks: 0,
+    blessingAllOutStacks: 0,
+    blessingHealingFlatBonus: 0,
 
     // 🟢 新增：scope 標籤，供 BattleScene 判斷是否需要跳出目標選擇 UI
     //   SINGLE_ENEMY -> 需要指定敵方目標（若場上僅剩1隻敵人則自動選定，不用多點一次）
@@ -31,12 +39,14 @@ export const HERO_DATA = {
     //   SELF         -> 純自身效果，不需要任何目標選擇
 
     diceSkills: {
+        // 技能1（原本用 hero.atk）
         1: {
             name: '普通攻擊',
             scope: 'SINGLE_ENEMY',
             execute: (hero, enemy, combatSys, log) => {
-                log(`⚔️ 觸發 [1:普通攻擊] 造成 ${hero.atk} 基礎傷害`);
-                combatSys.applyDamageToTarget(enemy, hero.atk, log);
+                const atkVal = combatSys.getEffectiveAtk(hero);
+                log(`⚔️ 觸發 [1:普通攻擊] 造成 ${atkVal} 基礎傷害`);
+                combatSys.applyDamageToTarget(enemy, atkVal, log);
             }
         },
         2: {
@@ -52,28 +62,24 @@ export const HERO_DATA = {
             name: '爆擊攻擊',
             scope: 'SINGLE_ENEMY',
             execute: (hero, enemy, combatSys, log) => {
-                let critDmg = hero.atk + hero.critBonus + hero.battleCritBonus;  // 🟢 加總永久+臨時
+                let critDmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero);
                 log(`💥 觸發 [3:爆擊攻擊] 造成 ${critDmg} 點傷害！`);
                 combatSys.applyDamageToTarget(enemy, critDmg, log);
             }
         },
+        // 技能4（其餘 log 文字沿用 hero.critBonus+hero.battleCritBonus 的地方也建議一併換成 getEffectiveCritBonus，避免顯示與實際傷害對不上）
         4: {
             name: '技能2',
             scope: 'ALL_ENEMIES',
             execute: (hero, enemy, combatSys, log) => {
-                let s2Dmg = hero.atk + hero.critBonus + hero.battleCritBonus;  // 🟢 加總永久+臨時
-
+                let s2Dmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero);
                 let enemyWasVulnerable = enemy.isVulnerable;
                 log(`💥 觸發 [4:技能2] 造成 ${s2Dmg} 點爆擊傷害！`);
                 combatSys.applyDamageToTarget(enemy, s2Dmg, log);
                 hero.battleCritBonus += 3;
                 if (enemyWasVulnerable || enemy.isVulnerable) {
-                    hero.battleCritBonus += 6;  // 🟢 這是戰鬥中觸發的加成，改為累加到臨時欄位
-                    if (enemyWasVulnerable) {
-                        log(`🎯 技能2成功命中破防敵人！爆擊增益 +6 (現為 +${hero.critBonus + hero.battleCritBonus})`);
-                    } else {
-                        log(`🎯 技能2成功將敵人【打破防】！觸發額外效果，爆擊增益 +6 (現為 +${hero.critBonus + hero.battleCritBonus})`);
-                    }
+                    hero.battleCritBonus += 6;
+                    // 下面兩行 log 內的 hero.critBonus + hero.battleCritBonus 建議也換成 combatSys.getEffectiveCritBonus(hero)
                 }
             }
         },
@@ -85,11 +91,12 @@ export const HERO_DATA = {
                 log(`🌀 觸發 [5:閃避] 獲得 1 次閃避狀態！將完全免疫下 1 次攻擊傷害 (現有閃避: ${hero.dodgeCount} 次)`);
             }
         },
+        // 技能6
         6: {
             name: '技能3',
             scope: 'SINGLE_ENEMY',
             execute: (hero, enemy, combatSys, log) => {
-                let s3Dmg = 3 + hero.critBonus + hero.battleCritBonus + hero.stigma;  // 🟢 加總永久+臨時
+                let s3Dmg = 3 + combatSys.getEffectiveCritBonus(hero) + hero.stigma;
                 log(`🗡️ 觸發 [6:技能3] 造成 ${s3Dmg} 點傷害！`);
                 combatSys.applyDamageToTarget(enemy, s3Dmg, log);
                 combatSys.applyHealToHero(hero, 1 + hero.stigma, log);
