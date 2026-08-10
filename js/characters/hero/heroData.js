@@ -2,7 +2,7 @@ export const HERO_DATA = {
     id: 'hero',
     name: '勇者',
     hp: 20, maxHp: 20,
-    atk: 20,
+    atk: 3,
     critBonus: 2,
     battleCritBonus: 0,    // 🟢 新增：戰鬥內臨時爆擊增益（來自骰面2/骰面4觸發，每場戰鬥結束重置）
     healRatio: 1,           // 永久回復比值基礎值（目前無獎勵來源，保留供未來擴充）
