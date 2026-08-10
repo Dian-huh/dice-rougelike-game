@@ -6,9 +6,12 @@ import { createEnemyInstance } from './enemyData.js';
  * 只需要在這裡依難度擴充陣容組合即可，不需要動到 BattleScene。
  * @param {number} difficulty 樓層數，數字越大代表越後期
  */
-function getBattleEnemyIds(difficulty = 1) {
+function getBattleEnemyIds(difficulty = 1, limitedToOne = false) {
+    if (limitedToOne) {
+        return difficulty >= 4 ? ['goblin_shaman'] : ['goblin']; // 🟢 各個擊破生效中，只出現1隻
+    }
     if (difficulty >= 4) {
-        return ['goblin', 'goblin_shaman']; // 🟢 高樓層：哥布林 + 薩滿輔助
+        return ['goblin', 'goblin_shaman'];
     }
     if (difficulty >= 2) {
         return ['goblin', 'goblin'];
@@ -21,8 +24,9 @@ function getBattleEnemyIds(difficulty = 1) {
  * @param {string} stageId  例如 '1-3'，代表第 3 層（格式：世界-樓層）
  * @param {string} nodeType 'BATTLE' | 'BOSS'（EVENT / REST 節點不會進入戰鬥場景，不在此處理）
  */
-export function getStageData(stageId = '1-1', nodeType = 'BATTLE') {
+export function getStageData(stageId = '1-1', nodeType = 'BATTLE', options = {}) {
     const floorNumber = parseInt(String(stageId).split('-')[1], 10) || 1;
+    const limitedToOne = !!options.limitedToOne;
 
     let enemyIds = [];
     let stageName = '';
@@ -31,8 +35,8 @@ export function getStageData(stageId = '1-1', nodeType = 'BATTLE') {
         enemyIds = ['black_dragon'];
         stageName = `👹 第 ${floorNumber} 層 - 頭目戰：滅世黑龍`;
     } else {
-        enemyIds = getBattleEnemyIds(floorNumber);
-        stageName = `⚔️ 第 ${floorNumber} 層 - 一般戰鬥`;
+        enemyIds = getBattleEnemyIds(floorNumber, limitedToOne);
+        stageName = `⚔️ 第 ${floorNumber} 層 - 一般戰鬥${limitedToOne ? '（各個擊破生效中）' : ''}`;
     }
 
     const enemies = enemyIds

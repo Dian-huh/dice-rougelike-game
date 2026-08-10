@@ -18,10 +18,16 @@ export class BattleScene extends Phaser.Scene {
         this.enemies = setup.enemies;
         this.hero = setup.hero;
         this.deckSys = setup.deckSys;
+        
 
         // 🟢 每場戰鬥開始前重置本場牌堆狀態（手牌/抽牌堆/棄牌堆），
         // 但 originalDeck（永久收藏，含戰利品新卡）維持不變
         this.deckSys.resetForNewBattle();
+
+        this.hero.rerollAttackDiceUsed = 0;
+        this.hero.rerollSpeedDiceUsed = 0;
+        this._firstAttackTriggeredThisBattle = false;
+
         this.turnCount = 0;
         this.playerSpeedDice = 0;
         this.lastActionDice = null;
@@ -188,7 +194,7 @@ export class BattleScene extends Phaser.Scene {
     }
 
     toggleSkillPicker() {
-        if (this.isPickingTarget) return; // 🟢 目標選擇中，鎖定其他操作
+        if (this.isPickingTarget || this.rerollPromptContainer) return; // 🟢 加上重骰確認框判定
         if (this.hero.isPressured) {
             this.appendLog(`⚠️ 受到【威壓】封印，本回合無法使用主動技能`, 'system');
             return;
@@ -210,10 +216,40 @@ export class BattleScene extends Phaser.Scene {
         );
         this.playerSpeedDice = playerSpeedDice;
 
+        // 🟢 新增：戰鬥爆發（一次性，只在本場第1回合觸發）
+        if (this.turnCount === 1 && this.hero.nextBattleBonusManaAndDraw) {
+            this.hero.mana += 3;
+            this.deckSys.drawCard();
+            this.deckSys.drawCard();
+            this.hero.nextBattleBonusManaAndDraw = false;
+            this.appendLog(`⚡ [被動:戰鬥爆發] 開局額外獲得 3 點魔力，並多抽 2 張牌！`, 'system');
+        }
+
         this.deckSys.fillHandToMax(this.hero.maxMana);
         this.appendLog(`--- 第 ${this.turnCount} 回合開始 ---`, 'system');
         this.renderHandUI();
+        this.renderSpeedRerollButton();
         this.updateUI();
+    }
+
+    renderSpeedRerollButton() {
+        if (this.speedRerollBtn) { this.speedRerollBtn.destroy(); this.speedRerollBtn = null; }
+
+        const rerollsLeft = (this.hero.rerollSpeedDiceMax || 0) - (this.hero.rerollSpeedDiceUsed || 0);
+        if (rerollsLeft <= 0) return;
+
+        this.speedRerollBtn = this.add.text(500, 115, `[ 🔄 重骰速度骰 (剩餘${rerollsLeft}次) ]`, {
+            fontSize: '12px', fill: '#66ccff', backgroundColor: '#222', padding: { x: 6, y: 4 }
+        }).setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+            // 🟢 新增：選目標中或攻擊骰重骰確認框開著時，鎖定此按鈕
+            if (this.isPickingTarget || this.rerollPromptContainer) return;
+            this.hero.rerollSpeedDiceUsed = (this.hero.rerollSpeedDiceUsed || 0) + 1;
+            this.playerSpeedDice = Phaser.Math.Between(1, 6) + CombatSystem.getEffectiveSpeedBonus(this.hero);
+            this.appendLog(`🔄 重骰速度骰：新結果 [ ${this.playerSpeedDice} ]`, 'system');
+            this.renderSpeedRerollButton();
+            this.updateUI();
+        });
     }
 
     renderHandUI() {
@@ -305,7 +341,8 @@ export class BattleScene extends Phaser.Scene {
     // ============================================================
 
     playCard(index) {
-        if (this.isPickingTarget) return;
+        if (this.isPickingTarget || this.rerollPromptContainer) return;
+
 
         const card = this.deckSys.hand[index];
         if (!card) return;
@@ -350,8 +387,7 @@ export class BattleScene extends Phaser.Scene {
     // ============================================================
 
     resolveAttackPhase() {
-        if (this.isPickingTarget || this.attackPhaseState) return;
-
+        if (this.isPickingTarget || this.attackPhaseState || this.rerollPromptContainer) return;
         this.attackPhaseState = { timesRemaining: this.hero.atkCount };
         this.hero.atkCount = 1;
         this.runAttackPhaseStep();
@@ -372,22 +408,77 @@ export class BattleScene extends Phaser.Scene {
         state.timesRemaining -= 1;
 
         let actionDice;
+        let allowReroll = true;
         if (this.hero.isPressured) {
             actionDice = 1;
             this.hero.overrideDice = null;
             this.hero.isPressured = false;
             this.appendLog(`😱 【威壓】效果發動，攻擊骰被強制鎖定為 1 點！`, 'system');
-        } else {
-            actionDice = this.hero.overrideDice !== null ? this.hero.overrideDice : Phaser.Math.Between(1, 6);
+            allowReroll = false;
+        } else if (this.hero.overrideDice !== null) {
+            actionDice = this.hero.overrideDice;
             this.hero.overrideDice = null;
+            allowReroll = false; // 主動技能指定骰值，不提供重骰
+        } else {
+            actionDice = Phaser.Math.Between(1, 6);
         }
         this.lastActionDice = actionDice;
+        this.updateUI();
 
+        const rerollsLeft = (this.hero.rerollAttackDiceMax || 0) - (this.hero.rerollAttackDiceUsed || 0);
+        if (allowReroll && rerollsLeft > 0) {
+            this.promptAttackDiceReroll(actionDice, rerollsLeft, (finalDice) => this.continueAttackPhaseStep(finalDice));
+            return;
+        }
+
+        this.continueAttackPhaseStep(actionDice);
+    }
+
+    // 🟢 新增：攻擊骰重骰確認 UI
+    promptAttackDiceReroll(actionDice, rerollsLeft, callback) {
+        if (this.rerollPromptContainer) this.rerollPromptContainer.destroy();
+
+        const container = this.add.container(0, 0).setDepth(1500);
+        const bg = this.add.rectangle(620, 200, 260, 90, 0x000000, 0.95).setStrokeStyle(2, 0x66ccff);
+        const text = this.add.text(500, 165, `🎲 攻擊骰結果：[ ${actionDice} ] 點`, { fontSize: '15px', fill: '#ffffff' });
+        const confirmBtn = this.add.text(500, 200, '[ ✅ 確定使用 ]', { fontSize: '14px', fill: '#00ffaa' })
+            .setInteractive({ useHandCursor: true });
+        const rerollBtn = this.add.text(500, 230, `[ 🔄 重骰 (剩餘${rerollsLeft}次) ]`, { fontSize: '14px', fill: '#66ccff' })
+            .setInteractive({ useHandCursor: true });
+
+        container.add([bg, text, confirmBtn, rerollBtn]);
+        this.rerollPromptContainer = container;
+
+        confirmBtn.on('pointerdown', () => {
+            container.destroy();
+            this.rerollPromptContainer = null;
+            callback(actionDice);
+        });
+
+        rerollBtn.on('pointerdown', () => {
+            this.hero.rerollAttackDiceUsed = (this.hero.rerollAttackDiceUsed || 0) + 1;
+            const newDice = Phaser.Math.Between(1, 6);
+            this.lastActionDice = newDice;
+            this.appendLog(`🔄 重骰攻擊骰：新結果 [ ${newDice} ] 點`, 'system');
+            this.updateUI();
+            container.destroy();
+            this.rerollPromptContainer = null;
+
+            const stillLeft = (this.hero.rerollAttackDiceMax || 0) - (this.hero.rerollAttackDiceUsed || 0);
+            if (stillLeft > 0) {
+                this.promptAttackDiceReroll(newDice, stillLeft, callback);
+            } else {
+                callback(newDice);
+            }
+        });
+    }
+
+    // 🟢 新增：原 runAttackPhaseStep 後半段（目標選擇+結算）搬到這裡
+    continueAttackPhaseStep(actionDice) {
         const skill = this.hero.diceSkills[actionDice];
         const scope = (skill && skill.scope) || 'SINGLE_ENEMY';
         const aliveEnemies = this.enemies.filter(e => e.hp > 0);
 
-        // 🟢 單體招式且場上有 2 隻以上存活敵人 -> 暫停結算，跳出目標選擇 UI
         if (scope === 'SINGLE_ENEMY' && aliveEnemies.length > 1) {
             this.showEnemyTargetPicker(aliveEnemies, (target) => {
                 this.executeAttackPhaseAction(actionDice, scope, target);
@@ -395,7 +486,6 @@ export class BattleScene extends Phaser.Scene {
             return;
         }
 
-        // 只剩 1 隻存活敵人 -> 不用多點一次，直接視為目標
         const target = aliveEnemies.length > 0 ? aliveEnemies[0] : null;
         this.executeAttackPhaseAction(actionDice, scope, target);
     }
@@ -408,25 +498,34 @@ export class BattleScene extends Phaser.Scene {
             this.appendLog(`⚡ 連打算計生效：[${actionDice}點] 連發 2 次！`, 'player');
         }
 
+        // 🟢 先發制人：以「這一次攻擊骰行動」為單位判定一次，
+        // 涵蓋 ALL_ENEMIES 命中的所有敵人、以及連打/雙骰的重複次數，
+        // 而不是打中一隻敵人才判定一次（否則 AoE 招式只有第一隻敵人吃得到）
+        const ATTACK_DICE_IDS = [1, 3, 4, 6];
+        let firstStrikeBonus = 0;
+        if (scope !== 'SELF' && !this._firstAttackTriggeredThisBattle &&
+            ATTACK_DICE_IDS.includes(actionDice) && (this.hero.firstAttackBonusPerBattle || 0) > 0) {
+            firstStrikeBonus = this.hero.firstAttackBonusPerBattle;
+            this.hero.battleAtkBonus = (this.hero.battleAtkBonus || 0) + firstStrikeBonus;
+            this._firstAttackTriggeredThisBattle = true;
+            this.appendLog(`🏹 [被動:先發制人] 本場首次攻擊傷害 +${firstStrikeBonus}！`, 'system');
+        }
+
         if (scope === 'SELF') {
-            // 純自身效果：玩家招式只需執行一次，跟敵人數量無關
             for (let r = 0; r < repeatCount; r++) {
                 if (this.hero.hp <= 0) break;
                 this.executePlayerDiceAction(actionDice, null);
             }
-            // 每隻存活敵人各自照常行動
             this.enemies.forEach(enemy => {
                 if (enemy.hp > 0 && this.hero.hp > 0) this.executeEnemyAction(enemy);
             });
 
         } else if (scope === 'ALL_ENEMIES') {
-            // 全體招式：維持原本「對每隻敵人各自比較速度骰、各自結算」的行為
             this.enemies.forEach(enemy => {
                 this.resolvePlayerVsEnemy(enemy, actionDice, repeatCount);
             });
 
         } else {
-            // SINGLE_ENEMY：只對選定目標做完整的速度骰互動，其他敵人單純各自行動
             this.enemies.forEach(enemy => {
                 if (enemy.hp <= 0 || this.hero.hp <= 0) return;
 
@@ -436,6 +535,12 @@ export class BattleScene extends Phaser.Scene {
                     this.executeEnemyAction(enemy);
                 }
             });
+        }
+
+        // 🟢 先發制人加成只在本次行動範圍內生效，結算完立刻收回，
+        // 避免污染之後其他骰值/回合的傷害計算
+        if (firstStrikeBonus > 0) {
+            this.hero.battleAtkBonus -= firstStrikeBonus;
         }
 
         this.updateUI();
@@ -492,7 +597,6 @@ export class BattleScene extends Phaser.Scene {
         }
     }
 
-    // targetEnemy 為 null 時代表純自身效果技能，跳過飛行閃避判定
     executePlayerDiceAction(dice, targetEnemy) {
         const skill = this.hero.diceSkills[dice];
         if (!skill) return;
@@ -534,6 +638,8 @@ export class BattleScene extends Phaser.Scene {
             if (this.handContainer) this.handContainer.destroy();
             if (this.actionBtn) this.actionBtn.destroy();
             if (this.skillBtn) this.skillBtn.destroy();
+            if (this.speedRerollBtn) { this.speedRerollBtn.destroy(); this.speedRerollBtn = null; }
+            if (this.rerollPromptContainer) { this.rerollPromptContainer.destroy(); this.rerollPromptContainer = null; }
 
             // 🟢 分流：最終樓層 Boss 戰勝利 → 遊戲通關結算；一般戰鬥勝利 → 照舊進入獎勵選擇
             if (this.isFinalBoss) {

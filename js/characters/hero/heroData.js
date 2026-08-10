@@ -26,6 +26,15 @@ export const HERO_DATA = {
     overrideDice: null,
     battleAtkBonus: 0,       // 戰鬥內臨時加成（暴走卡片、渾身加護共用此累加桶）
     deckCapacity: 10,        // 牌組上限初始值（已確認：固定起始值）
+    rerollAttackDiceMax: 0,
+    rerollAttackDiceUsed: 0,
+    rerollSpeedDiceMax: 0,
+    rerollSpeedDiceUsed: 0,
+    firstAttackBonusPerBattle: 0,
+    nextBattleEnemyHpHalved: false,
+    nextBattleBonusManaAndDraw: false,
+    limitedEnemyBattlesRemaining: 0,
+    nextRewardChoiceBonus: 0,
     blessingGuardianStacks: 0,
     blessingDesperationStacks: 0,
     blessingTyrantStacks: 0,
