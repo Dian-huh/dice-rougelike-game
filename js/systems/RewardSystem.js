@@ -4,7 +4,7 @@ import {
     COLLECTION_MILESTONES,
     REWARD_CARD_POOL
 } from '../data/rewardPoolData.js';
-
+import { EffectEngine } from './EffectEngine.js';
 // ====================================================================
 // 🟢 第 2 階段：抽獎邏輯 + UI 重構
 //
@@ -29,25 +29,34 @@ export class RewardSystem {
         const config = (stageData && stageData.rewardConfig) ? stageData.rewardConfig : { baseGold: 15 };
         const stageName = (stageData && stageData.name) ? stageData.name : '戰鬥';
 
-        // 🟢 基本金幣獎勵，套用「金幣獲得量UP」百分比加成
         if (config.baseGold) {
             const goldBonusPct = scene.hero.goldGainBonus || 0;
             const finalGold = Math.round(config.baseGold * (1 + goldBonusPct / 100));
             scene.hero.gold = (scene.hero.gold || 0) + finalGold;
         }
 
-        // 🟢 消耗「下次勝利獎勵可選數量+1」的一次性加成（只在進入畫面時判定一次，
-        //    reroll 時沿用同一個 extraChoices，不會重複疊加）
-        const extraChoices = scene.hero.nextRewardChoiceBonus || 0;
-        scene.hero.nextRewardChoiceBonus = 0;
-        scene._rewardExtraChoices = extraChoices;
+        // 🟢 修正：extraChoices 現在代表「可多選幾次」，不再撐大候選格數
+        const choiceCtx = { extraChoices: 0 };
+        EffectEngine.runHook('onRewardScreenOpen', scene.hero, choiceCtx);
+        scene._rewardChoicesRemaining = 1 + choiceCtx.extraChoices;
+        scene._rewardConfig = config;
+        scene._rewardStageName = stageName;
 
-        // 每次開啟獎勵畫面重置 reroll 狀態
         scene._rewardRerollState = { freeUsed: false, paidCount: 0 };
         scene._rewardPrevCategories = null;
 
-        const batch = this.generateRewardBatch(scene, extraChoices);
+        const batch = this.generateRewardBatch(scene);
         this.renderRewardUI(scene, stageData, config, stageName, batch);
+    }
+
+    // 🟢 修正：拿掉 extraChoices 參數，固定產生 3 組候選（min 是防呆，避免類別數<3時出錯）
+    static generateRewardBatch(scene) {
+        const slotCount = Math.min(ALL_CATEGORIES.length, 3);
+        const categories = this.pickCategories(slotCount, scene._rewardPrevCategories);
+        scene._rewardPrevCategories = categories;
+
+        const items = categories.map(cat => this.createRewardSlot(cat, scene));
+        return items;
     }
 
     // ----------------------------------------------------------------
@@ -229,6 +238,12 @@ export class RewardSystem {
 
         rewardContainer.add([overlay, title, subTitle]);
 
+        // 🟢 新增：多選提示（只有還能選超過1項時才顯示，避免平常畫面多雜訊）
+        if ((scene._rewardChoicesRemaining || 1) > 1) {
+            const choiceHint = scene.add.text(280, 88, `🎯 本次還可選擇 ${scene._rewardChoicesRemaining} 項獎勵！`, { fontSize: '12px', fill: '#ffaaff' });
+            rewardContainer.add(choiceHint);
+        }
+
         const slotCount = batch.length;
         const totalWidth = slotCount * 200 + (slotCount - 1) * 20;
         const startX = 425 - totalWidth / 2 + 100;
@@ -239,7 +254,7 @@ export class RewardSystem {
             const cardBg = scene.add.rectangle(x, 235, 200, 190, 0x222233)
                 .setStrokeStyle(2, 0x00ffff)
                 .setInteractive({ useHandCursor: true })
-                .on('pointerdown', () => this.onRewardChosen(scene, stageData, slot));
+                .on('pointerdown', () => this.onRewardChosen(scene, stageData, slot, batch));
 
             const nameText = scene.add.text(x - 90, 150, slot.title, { fontSize: '13px', fill: '#ffffff', wordWrap: { width: 180 } });
             const descText = scene.add.text(x - 90, 195, slot.desc, { fontSize: '11px', fill: '#aaaaaa', wordWrap: { width: 180 }, lineSpacing: 3 });
@@ -276,9 +291,19 @@ export class RewardSystem {
         rewardContainer.setDepth(2000);
     }
 
-    static onRewardChosen(scene, stageData, slot) {
+    static onRewardChosen(scene, stageData, slot, batch) {
         slot.apply(scene);
         this.handleCollectionProgress(scene, slot.category);
+
+        scene._rewardChoicesRemaining -= 1;
+        const remainingSlots = batch.filter(s => s !== slot);
+
+        // 🟢 還有剩餘選擇次數，且候選牌沒選完 → 不關閉畫面，讓玩家繼續選
+        if (scene._rewardChoicesRemaining > 0 && remainingSlots.length > 0) {
+            scene.appendLog(`🎁 獎勵已套用！還可以再選擇 ${scene._rewardChoicesRemaining} 項！`, 'system');
+            this.renderRewardUI(scene, stageData, scene._rewardConfig, scene._rewardStageName, remainingSlots);
+            return;
+        }
 
         if (scene._rewardContainer) {
             scene._rewardContainer.destroy();
@@ -305,7 +330,7 @@ export class RewardSystem {
             rerollState.paidCount += 1;
         }
 
-        const batch = this.generateRewardBatch(scene, scene._rewardExtraChoices || 0);
+        const batch = this.generateRewardBatch(scene);   // 🟢 拿掉 extraChoices 參數
         this.renderRewardUI(scene, stageData, config, stageName, batch);
     }
 }

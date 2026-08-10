@@ -4,6 +4,7 @@ import { RewardSystem } from '../systems/RewardSystem.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
 import { TurnSystem } from '../systems/TurnSystem.js';
 import { BattleSetup } from '../systems/BattleSetup.js';
+import { EffectEngine } from '../systems/EffectEngine.js';
 
 export class BattleScene extends Phaser.Scene {
     constructor() { 
@@ -24,8 +25,11 @@ export class BattleScene extends Phaser.Scene {
         // 但 originalDeck（永久收藏，含戰利品新卡）維持不變
         this.deckSys.resetForNewBattle();
 
-        this.hero.rerollAttackDiceUsed = 0;
-        this.hero.rerollSpeedDiceUsed = 0;
+        // 🟢 每場戰鬥重置用量：找出DICE計數器，used歸零（max保留，因為是永久疊加的獎勵）
+        ['reroll_attack_dice', 'reroll_speed_dice'].forEach(id => {
+            const entry = EffectEngine.getEntry(this.hero, id);
+            if (entry) entry.used = 0;
+        });
         this._firstAttackTriggeredThisBattle = false;
 
         this.turnCount = 0;
@@ -216,16 +220,17 @@ export class BattleScene extends Phaser.Scene {
         );
         this.playerSpeedDice = playerSpeedDice;
 
-        // 🟢 新增：戰鬥爆發（一次性，只在本場第1回合觸發）
-        if (this.turnCount === 1 && this.hero.nextBattleBonusManaAndDraw) {
-            this.hero.mana += 3;
-            this.deckSys.drawCard();
-            this.deckSys.drawCard();
-            this.hero.nextBattleBonusManaAndDraw = false;
-            this.appendLog(`⚡ [被動:戰鬥爆發] 開局額外獲得 3 點魔力，並多抽 2 張牌！`, 'system');
+        
+        this.deckSys.fillHandToMax(this.hero.maxMana);
+
+        // 🟢 修正：onBattleStart 統一在這裡呼叫一次，涵蓋 BLESSING(守護/渾身) + SPEEDRUN(戰鬥爆發)
+        if (this.turnCount === 1) {
+            EffectEngine.runHook('onBattleStart', this.hero, {
+                log: (m, sender) => this.appendLog(m, sender),
+                deckSys: this.deckSys
+            });
         }
 
-        this.deckSys.fillHandToMax(this.hero.maxMana);
         this.appendLog(`--- 第 ${this.turnCount} 回合開始 ---`, 'system');
         this.renderHandUI();
         this.renderSpeedRerollButton();
@@ -235,16 +240,15 @@ export class BattleScene extends Phaser.Scene {
     renderSpeedRerollButton() {
         if (this.speedRerollBtn) { this.speedRerollBtn.destroy(); this.speedRerollBtn = null; }
 
-        const rerollsLeft = (this.hero.rerollSpeedDiceMax || 0) - (this.hero.rerollSpeedDiceUsed || 0);
+        const rerollsLeft = EffectEngine.getCounterRemaining(this.hero, 'reroll_speed_dice');
         if (rerollsLeft <= 0) return;
 
         this.speedRerollBtn = this.add.text(500, 115, `[ 🔄 重骰速度骰 (剩餘${rerollsLeft}次) ]`, {
             fontSize: '12px', fill: '#66ccff', backgroundColor: '#222', padding: { x: 6, y: 4 }
         }).setInteractive({ useHandCursor: true })
         .on('pointerdown', () => {
-            // 🟢 新增：選目標中或攻擊骰重骰確認框開著時，鎖定此按鈕
             if (this.isPickingTarget || this.rerollPromptContainer) return;
-            this.hero.rerollSpeedDiceUsed = (this.hero.rerollSpeedDiceUsed || 0) + 1;
+            EffectEngine.consumeCounter(this.hero, 'reroll_speed_dice');
             this.playerSpeedDice = Phaser.Math.Between(1, 6) + CombatSystem.getEffectiveSpeedBonus(this.hero);
             this.appendLog(`🔄 重骰速度骰：新結果 [ ${this.playerSpeedDice} ]`, 'system');
             this.renderSpeedRerollButton();
@@ -425,7 +429,7 @@ export class BattleScene extends Phaser.Scene {
         this.lastActionDice = actionDice;
         this.updateUI();
 
-        const rerollsLeft = (this.hero.rerollAttackDiceMax || 0) - (this.hero.rerollAttackDiceUsed || 0);
+        const rerollsLeft = EffectEngine.getCounterRemaining(this.hero, 'reroll_attack_dice');
         if (allowReroll && rerollsLeft > 0) {
             this.promptAttackDiceReroll(actionDice, rerollsLeft, (finalDice) => this.continueAttackPhaseStep(finalDice));
             return;
@@ -456,7 +460,7 @@ export class BattleScene extends Phaser.Scene {
         });
 
         rerollBtn.on('pointerdown', () => {
-            this.hero.rerollAttackDiceUsed = (this.hero.rerollAttackDiceUsed || 0) + 1;
+            EffectEngine.consumeCounter(this.hero, 'reroll_attack_dice');
             const newDice = Phaser.Math.Between(1, 6);
             this.lastActionDice = newDice;
             this.appendLog(`🔄 重骰攻擊骰：新結果 [ ${newDice} ] 點`, 'system');
@@ -464,7 +468,7 @@ export class BattleScene extends Phaser.Scene {
             container.destroy();
             this.rerollPromptContainer = null;
 
-            const stillLeft = (this.hero.rerollAttackDiceMax || 0) - (this.hero.rerollAttackDiceUsed || 0);
+            const stillLeft = EffectEngine.getCounterRemaining(this.hero, 'reroll_attack_dice');
             if (stillLeft > 0) {
                 this.promptAttackDiceReroll(newDice, stillLeft, callback);
             } else {
@@ -503,12 +507,14 @@ export class BattleScene extends Phaser.Scene {
         // 而不是打中一隻敵人才判定一次（否則 AoE 招式只有第一隻敵人吃得到）
         const ATTACK_DICE_IDS = [1, 3, 4, 6];
         let firstStrikeBonus = 0;
-        if (scope !== 'SELF' && !this._firstAttackTriggeredThisBattle &&
-            ATTACK_DICE_IDS.includes(actionDice) && (this.hero.firstAttackBonusPerBattle || 0) > 0) {
-            firstStrikeBonus = this.hero.firstAttackBonusPerBattle;
-            this.hero.battleAtkBonus = (this.hero.battleAtkBonus || 0) + firstStrikeBonus;
-            this._firstAttackTriggeredThisBattle = true;
-            this.appendLog(`🏹 [被動:先發制人] 本場首次攻擊傷害 +${firstStrikeBonus}！`, 'system');
+        if (scope !== 'SELF' && !this._firstAttackTriggeredThisBattle && ATTACK_DICE_IDS.includes(actionDice)) {
+            const bonusCtx = { log: (m, sender) => this.appendLog(m, sender), bonusTotal: 0 };
+            EffectEngine.runHook('onFirstAttack', this.hero, bonusCtx);
+            if (bonusCtx.bonusTotal > 0) {
+                firstStrikeBonus = bonusCtx.bonusTotal;
+                this.hero.battleAtkBonus = (this.hero.battleAtkBonus || 0) + firstStrikeBonus;
+                this._firstAttackTriggeredThisBattle = true;
+            }
         }
 
         if (scope === 'SELF') {

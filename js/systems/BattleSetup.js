@@ -2,6 +2,7 @@ import { HERO_DATA } from '../characters/hero/heroData.js';
 import { HERO_DECK } from '../characters/hero/heroCards.js';
 import { DeckSystem } from './DeckSystem.js';
 import { getStageData } from '../data/stageData.js';
+import { EffectEngine } from './EffectEngine.js';   // 新增
 
 export class BattleSetup {
     static resolve(data, gameState) {
@@ -11,7 +12,6 @@ export class BattleSetup {
         const totalFloors = (gameState && gameState.mapData) ? gameState.mapData.length : 5;
         const isFinalBoss = (nodeType === 'BOSS' && currentFloor === totalFloors);
 
-        // 🟢 hero/deckSys 解析提前，因為下面要讀 hero 身上的速通旗標
         let hero, deckSys;
         if (data && data.hero) {
             hero = data.hero;
@@ -25,24 +25,18 @@ export class BattleSetup {
             deckSys = new DeckSystem(HERO_DECK);
         }
 
-        const isLimitedBattle = nodeType === 'BATTLE' && (hero.limitedEnemyBattlesRemaining || 0) > 0;
-        const stageInfo = getStageData ? getStageData(currentStageId, nodeType, { limitedToOne: isLimitedBattle }) : null;
+        // 🟢 取代：原本 hero.limitedEnemyBattlesRemaining 的直接判斷，
+        //    改成呼叫 onStageQuery，由 ctx.limitedToOne 帶回決定結果
+        const queryCtx = { nodeType, limitedToOne: false };
+        EffectEngine.runHook('onStageQuery', hero, queryCtx);
+
+        const stageInfo = getStageData ? getStageData(currentStageId, nodeType, { limitedToOne: queryCtx.limitedToOne }) : null;
         const currentStage = stageInfo || { name: '冒險關卡', enemies: [] };
         const enemies = currentStage.enemies || [];
 
-        // 🟢 消耗「各個擊破」次數（只在一般戰鬥消耗，Boss戰不消耗）
-        if (nodeType === 'BATTLE' && (hero.limitedEnemyBattlesRemaining || 0) > 0) {
-            hero.limitedEnemyBattlesRemaining -= 1;
-        }
-
-        // 🟢 消耗「敵陣削弱」一次性效果（下次一般戰鬥敵人血量減半）
-        if (nodeType === 'BATTLE' && hero.nextBattleEnemyHpHalved) {
-            enemies.forEach(e => {
-                e.maxHp = Math.max(1, Math.floor(e.maxHp / 2));
-                e.hp = e.maxHp;
-            });
-            hero.nextBattleEnemyHpHalved = false;
-        }
+        // 🟢 取代：原本 hero.nextBattleEnemyHpHalved 的直接判斷，
+        //    改成呼叫 onEnemiesGenerated，效果內部會自行檢查 nodeType 與消耗充能
+        EffectEngine.runHook('onEnemiesGenerated', hero, { nodeType, enemies });
 
         return { hero, deckSys, currentStage, enemies, isFinalBoss };
     }

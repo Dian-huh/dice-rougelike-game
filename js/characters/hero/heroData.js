@@ -2,7 +2,7 @@ export const HERO_DATA = {
     id: 'hero',
     name: '勇者',
     hp: 20, maxHp: 20,
-    atk: 3,
+    atk: 20,
     critBonus: 2,
     battleCritBonus: 0,    // 🟢 新增：戰鬥內臨時爆擊增益（來自骰面2/骰面4觸發，每場戰鬥結束重置）
     healRatio: 1,           // 永久回復比值基礎值（目前無獎勵來源，保留供未來擴充）
@@ -19,28 +19,14 @@ export const HERO_DATA = {
     doubleNextAction: false, // ⚡ 新增：下一次攻擊骰行動是否執行 2 次
     poisonTurns: 0,    // 🐉 黑龍【吐息】劇毒：每執行一個動作扣1點HP，持續回合數歸零後解除
     isPressured: false, // 🐉 黑龍【威壓】：下次攻擊骰鎖定為1，且本回合無法使用主動技
-    stigma: 0, 
-    stigmaPerTurn: 0,   // 🟢 新增：聖痕君臨被動 - 每回合開始施加的聖痕層數（可疊加）  
+    stigma: 0,   
     gold: 0,      
     cdActiveSkill: 0,  
     overrideDice: null,
     battleAtkBonus: 0,       // 戰鬥內臨時加成（暴走卡片、渾身加護共用此累加桶）
     deckCapacity: 10,        // 牌組上限初始值（已確認：固定起始值）
-    rerollAttackDiceMax: 0,
-    rerollAttackDiceUsed: 0,
-    rerollSpeedDiceMax: 0,
-    rerollSpeedDiceUsed: 0,
-    firstAttackBonusPerBattle: 0,
-    nextBattleEnemyHpHalved: false,
-    nextBattleBonusManaAndDraw: false,
-    limitedEnemyBattlesRemaining: 0,
-    nextRewardChoiceBonus: 0,
-    blessingGuardianStacks: 0,
-    blessingDesperationStacks: 0,
-    blessingTyrantStacks: 0,
-    blessingFortifyStacks: 0,
-    blessingAllOutStacks: 0,
-    blessingHealingFlatBonus: 0,
+    activeEffects: [],   // 🟢 A2新增：取代上面7個BLESSING散落欄位，格式 [{id, stacks}]
+    
 
     // 🟢 新增：scope 標籤，供 BattleScene 判斷是否需要跳出目標選擇 UI
     //   SINGLE_ENEMY -> 需要指定敵方目標（若場上僅剩1隻敵人則自動選定，不用多點一次）

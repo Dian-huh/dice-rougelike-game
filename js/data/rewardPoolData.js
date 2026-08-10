@@ -1,3 +1,4 @@
+import { EffectEngine } from '../systems/EffectEngine.js';
 // js/data/rewardPoolData.js
 //
 // 🟢 獎勵池資料層（第 1 階段：只定義資料結構與盡量單純的 apply()，
@@ -158,8 +159,8 @@ export const BLESSING_POOL = [
         desc: () => `每回合開始時給予敵人 1 層聖痕 (可無限疊加)`,
         // 🟢 沿用現有的 hero.stigmaPerTurn 欄位（TurnSystem.js 已經有讀取邏輯）
         apply: (scene) => {
-            scene.hero.stigmaPerTurn = (scene.hero.stigmaPerTurn || 0) + 1;
-            scene.appendLog(`✨ 獲得加護：每回合自動施加 ${scene.hero.stigmaPerTurn} 層聖痕！`, 'system');
+            const entry = EffectEngine.addStacks(scene.hero, 'blessing_stigma_sovereign', 1);
+            scene.appendLog(`✨ 獲得加護：每回合自動施加 ${entry.stacks} 層聖痕！`, 'system');
         }
     },
     {
@@ -169,8 +170,8 @@ export const BLESSING_POOL = [
         roll: () => 1,
         desc: () => `戰鬥開始時，血量每有 5 點就獲得 1 點格擋 (可疊加層數)`,
         apply: (scene) => {
-            scene.hero.blessingGuardianStacks = (scene.hero.blessingGuardianStacks || 0) + 1;
-            scene.appendLog(`✨ 獲得加護【守護】！(層數: ${scene.hero.blessingGuardianStacks})`, 'system');
+            const entry = EffectEngine.addStacks(scene.hero, 'blessing_guardian', 1);
+            scene.appendLog(`✨ 獲得加護【守護】！(層數: ${entry.stacks})`, 'system');
         }
     },
     {
@@ -180,8 +181,8 @@ export const BLESSING_POOL = [
         roll: () => 1,
         desc: () => `每回合開始時，血量每比初始血量少 3 點，攻擊力/速度加值/爆擊增益 皆+2 (可疊加層數)`,
         apply: (scene) => {
-            scene.hero.blessingDesperationStacks = (scene.hero.blessingDesperationStacks || 0) + 1;
-            scene.appendLog(`✨ 獲得加護【背水】！(層數: ${scene.hero.blessingDesperationStacks})`, 'system');
+            const entry = EffectEngine.addStacks(scene.hero, 'blessing_desperation', 1);
+            scene.appendLog(`✨ 獲得加護【背水】！(層數: ${entry.stacks})`, 'system');
         }
     },
     {
@@ -191,8 +192,8 @@ export const BLESSING_POOL = [
         roll: () => 1,
         desc: () => `每回合開始時，血量-3點，魔力+1 (可疊加層數)`,
         apply: (scene) => {
-            scene.hero.blessingTyrantStacks = (scene.hero.blessingTyrantStacks || 0) + 1;
-            scene.appendLog(`✨ 獲得加護【暴君】！(層數: ${scene.hero.blessingTyrantStacks})`, 'system');
+            const entry = EffectEngine.addStacks(scene.hero, 'blessing_tyrant', 1);
+            scene.appendLog(`✨ 獲得加護【暴君】！(層數: ${entry.stacks})`, 'system');
         }
     },
     {
@@ -202,8 +203,8 @@ export const BLESSING_POOL = [
         roll: () => 1,
         desc: () => `每回合開始時，血量每比初始血量少 3 點，護甲值+2 (可疊加層數)`,
         apply: (scene) => {
-            scene.hero.blessingFortifyStacks = (scene.hero.blessingFortifyStacks || 0) + 1;
-            scene.appendLog(`✨ 獲得加護【堅守】！(層數: ${scene.hero.blessingFortifyStacks})`, 'system');
+            const entry = EffectEngine.addStacks(scene.hero, 'blessing_fortify', 1);
+            scene.appendLog(`✨ 獲得加護【堅守】！(層數: ${entry.stacks})`, 'system');
         }
     },
     {
@@ -213,8 +214,8 @@ export const BLESSING_POOL = [
         roll: () => 1,
         desc: () => `戰鬥開始時，每有 10 點血量，攻擊力與爆擊增益 +1 (可疊加層數)`,
         apply: (scene) => {
-            scene.hero.blessingAllOutStacks = (scene.hero.blessingAllOutStacks || 0) + 1;
-            scene.appendLog(`✨ 獲得加護【渾身】！(層數: ${scene.hero.blessingAllOutStacks})`, 'system');
+            const entry = EffectEngine.addStacks(scene.hero, 'blessing_all_out', 1);
+            scene.appendLog(`✨ 獲得加護【渾身】！(層數: ${entry.stacks})`, 'system');
         }
     },
     {
@@ -224,8 +225,8 @@ export const BLESSING_POOL = [
         roll: () => 1,
         desc: () => `每次回血都多回復 2 點 (不受回復量加成影響，可疊加層數)`,
         apply: (scene) => {
-            scene.hero.blessingHealingFlatBonus = (scene.hero.blessingHealingFlatBonus || 0) + 2;
-            scene.appendLog(`✨ 獲得加護【治癒】！(額外固定回復: +${scene.hero.blessingHealingFlatBonus})`, 'system');
+            const entry = EffectEngine.addStacks(scene.hero, 'blessing_healing', 1);
+            scene.appendLog(`✨ 獲得加護【治癒】！(額外固定回復: +${entry.stacks * 2})`, 'system');
         }
     }
 ];
@@ -385,8 +386,8 @@ export const DICE_POOL = [
         roll: () => 1,
         desc: () => `每次戰鬥有 1 次機會重骰攻擊骰 (可疊加次數)`,
         apply: (scene) => {
-            scene.hero.rerollAttackDiceMax = (scene.hero.rerollAttackDiceMax || 0) + 1;
-            scene.appendLog(`✨ 獲得【重骰攻擊骰】機會！(每場可用次數: ${scene.hero.rerollAttackDiceMax})`, 'system');
+            const entry = EffectEngine.addCounterMax(scene.hero, 'reroll_attack_dice', 1);
+            scene.appendLog(`✨ 獲得【重骰攻擊骰】機會！(每場可用次數: ${entry.max})`, 'system');
         }
     },
     {
@@ -396,8 +397,8 @@ export const DICE_POOL = [
         roll: () => 1,
         desc: () => `每次戰鬥有 1 次機會重骰速度骰 (可疊加次數)`,
         apply: (scene) => {
-            scene.hero.rerollSpeedDiceMax = (scene.hero.rerollSpeedDiceMax || 0) + 1;
-            scene.appendLog(`✨ 獲得【重骰速度骰】機會！(每場可用次數: ${scene.hero.rerollSpeedDiceMax})`, 'system');
+            const entry = EffectEngine.addCounterMax(scene.hero, 'reroll_speed_dice', 1);
+            scene.appendLog(`✨ 獲得【重骰速度骰】機會！(每場可用次數: ${entry.max})`, 'system');
         }
     }
 ];
@@ -414,7 +415,7 @@ export const SPEEDRUN_POOL = [
         oneTime: true,
         desc: () => `下一次的一般戰鬥，敵人血量減半 (只生效一次)`,
         apply: (scene) => {
-            scene.hero.nextBattleEnemyHpHalved = true;
+            EffectEngine.addStacks(scene.hero, 'speedrun_halve_next_enemy_hp', 1);
             scene.appendLog(`✨ 下一次一般戰鬥的敵人血量將會減半！`, 'system');
         }
     },
@@ -422,11 +423,11 @@ export const SPEEDRUN_POOL = [
         id: 'speedrun_first_strike_bonus',
         name: '先發制人',
         weight: 1,
-        oneTime: false, // 🟢 判斷為永久被動（未標「只生效一次」），每場一般戰鬥的第一次攻擊都生效，待 Dian 確認
+        oneTime: false,
         desc: () => `每次一般戰鬥的第一次攻擊傷害 +10 (永久被動)`,
         apply: (scene) => {
-            scene.hero.firstAttackBonusPerBattle = (scene.hero.firstAttackBonusPerBattle || 0) + 10;
-            scene.appendLog(`✨ 獲得被動：每場一般戰鬥的第一次攻擊傷害 +10！`, 'system');
+            const entry = EffectEngine.addStacks(scene.hero, 'speedrun_first_strike_bonus', 1);
+            scene.appendLog(`✨ 獲得被動：每場一般戰鬥的第一次攻擊傷害 +${entry.stacks * 10}！`, 'system');
         }
     },
     {
@@ -436,7 +437,7 @@ export const SPEEDRUN_POOL = [
         oneTime: true,
         desc: () => `下次戰鬥開始時，魔力額外+3，抽 2 張牌 (只生效一次)`,
         apply: (scene) => {
-            scene.hero.nextBattleBonusManaAndDraw = true;
+            EffectEngine.addStacks(scene.hero, 'speedrun_battle_start_boost', 1);
             scene.appendLog(`✨ 下次戰鬥開始時，將額外獲得 3 點魔力並多抽 2 張牌！`, 'system');
         }
     },
@@ -444,10 +445,10 @@ export const SPEEDRUN_POOL = [
         id: 'speedrun_limited_enemies',
         name: '各個擊破',
         weight: 1,
-        oneTime: true, // 效果本身有限定持續「2場戰鬥」，但屬於一次性獎勵觸發
+        oneTime: true,
         desc: () => `接下來 2 場一般戰鬥，敵人只會出現一個`,
         apply: (scene) => {
-            scene.hero.limitedEnemyBattlesRemaining = (scene.hero.limitedEnemyBattlesRemaining || 0) + 2;
+            EffectEngine.addStacks(scene.hero, 'speedrun_limited_enemies', 2);
             scene.appendLog(`✨ 接下來 2 場一般戰鬥，敵人只會出現一個！`, 'system');
         }
     },
@@ -458,7 +459,7 @@ export const SPEEDRUN_POOL = [
         oneTime: true,
         desc: () => `下次勝利獎勵可選數量 +1 (只生效一次)`,
         apply: (scene) => {
-            scene.hero.nextRewardChoiceBonus = (scene.hero.nextRewardChoiceBonus || 0) + 1;
+            EffectEngine.addStacks(scene.hero, 'speedrun_extra_reward_choice', 1);
             scene.appendLog(`✨ 下次獎勵可選數量將 +1！`, 'system');
         }
     }
@@ -514,13 +515,8 @@ export const COLLECTION_MILESTONES = [
         name: '加護類收集 x4',
         desc: '全加護層數 +1',
         apply: (scene) => {
-            const hero = scene.hero;
-            // TODO：第3階段完成加護層數統一管理後，這裡改成遍歷所有 blessing*Stacks 欄位 +1
-            hero.blessingGuardianStacks = (hero.blessingGuardianStacks || 0) + 1;
-            hero.blessingDesperationStacks = (hero.blessingDesperationStacks || 0) + 1;
-            hero.blessingTyrantStacks = (hero.blessingTyrantStacks || 0) + 1;
-            hero.blessingFortifyStacks = (hero.blessingFortifyStacks || 0) + 1;
-            hero.blessingAllOutStacks = (hero.blessingAllOutStacks || 0) + 1;
+            ['blessing_guardian', 'blessing_desperation', 'blessing_tyrant', 'blessing_fortify', 'blessing_all_out']
+                .forEach(id => EffectEngine.addStacks(scene.hero, id, 1));
             scene.appendLog(`🏅 [收集達成] 加護類獎勵達 4 個！全加護層數 +1！`, 'system');
         }
     },

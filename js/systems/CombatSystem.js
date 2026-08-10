@@ -1,4 +1,5 @@
 import { createEnemyInstance } from '../data/enemyData.js';
+import { EffectEngine } from './EffectEngine.js';
 // js/systems/CombatSystem.js
 export class CombatSystem {
 
@@ -230,7 +231,7 @@ export class CombatSystem {
 
 
     static applyHealToHero(hero, baseHeal, logCallback) {
-        const actualHeal = baseHeal * (hero.healRatio + hero.battleHealBonus) + (hero.blessingHealingFlatBonus || 0);
+        const actualHeal = baseHeal * (hero.healRatio + hero.battleHealBonus) + EffectEngine.getHealBonus(hero);
         hero.hp = Math.min(hero.maxHp, hero.hp + actualHeal);
         if (logCallback) logCallback(`💚 回復 ${actualHeal} 點 HP (現有 ${hero.hp}/${hero.maxHp})`);
     }
@@ -253,34 +254,22 @@ export class CombatSystem {
 
     // === 即時計算 Helper（方案A：不存欄位，每次讀取當下 HP 現算）===
 
-    static getDesperationBonus(entity) {
-        const stacks = entity.blessingDesperationStacks || 0;
-        if (stacks <= 0) return 0;
-        const missing = Math.max(0, (entity.maxHp || 0) - (entity.hp || 0));
-        return Math.floor(missing / 3) * 2 * stacks;
-    }
 
-    static getFortifyBonus(entity) {
-        const stacks = entity.blessingFortifyStacks || 0;
-        if (stacks <= 0) return 0;
-        const missing = Math.max(0, (entity.maxHp || 0) - (entity.hp || 0));
-        return Math.floor(missing / 3) * 2 * stacks;
-    }
 
     static getEffectiveAtk(hero) {
-        return (hero.atk || 0) + (hero.battleAtkBonus || 0) + this.getDesperationBonus(hero);
+        return (hero.atk || 0) + (hero.battleAtkBonus || 0) + EffectEngine.getLiveStatBonus(hero, 'atk');
     }
 
     static getEffectiveCritBonus(hero) {
-        return (hero.critBonus || 0) + (hero.battleCritBonus || 0) + this.getDesperationBonus(hero);
+        return (hero.critBonus || 0) + (hero.battleCritBonus || 0) + EffectEngine.getLiveStatBonus(hero, 'crit');
     }
 
     static getEffectiveSpeedBonus(hero) {
-        return (hero.speedBonus || 0) + this.getDesperationBonus(hero);
+        return (hero.speedBonus || 0) + EffectEngine.getLiveStatBonus(hero, 'speed');
     }
 
     static getEffectiveArmorMax(entity) {
-        return (entity.armorMax || 0) + this.getFortifyBonus(entity);
+        return (entity.armorMax || 0) + EffectEngine.getLiveStatBonus(entity, 'armor');
     }
 
     static resolveTurnOrder(playerSpeed, enemySpeed) {
