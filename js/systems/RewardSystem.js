@@ -3,7 +3,7 @@ import {
     REWARD_CATEGORY_NAMES,
     COLLECTION_MILESTONES,
     REWARD_CARD_POOL
-} from '../data/rewardPoolData.js';
+} from '../data/RewardPooldata.js';
 
 // ====================================================================
 // 🟢 第 2 階段：抽獎邏輯 + UI 重構
