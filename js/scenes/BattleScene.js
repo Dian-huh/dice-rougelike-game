@@ -5,6 +5,7 @@ import { TutorialSystem } from '../systems/TutorialSystem.js';
 import { TurnSystem } from '../systems/TurnSystem.js';
 import { BattleSetup } from '../systems/BattleSetup.js';
 import { EffectEngine } from '../systems/EffectEngine.js';
+import { AttackFlowSystem } from '../systems/AttackFlowSystem.js';
 
 export class BattleScene extends Phaser.Scene {
     constructor() { 
@@ -30,16 +31,22 @@ export class BattleScene extends Phaser.Scene {
             const entry = EffectEngine.getEntry(this.hero, id);
             if (entry) entry.used = 0;
         });
-        this._firstAttackTriggeredThisBattle = false;
-
         this.turnCount = 0;
-        this.playerSpeedDice = 0;
-        this.lastActionDice = null;
-
+        // 🟢 B2新增：battleCtx 是 AttackFlowSystem 的唯一資料來源，
+        // playerSpeedDice/lastActionDice/firstAttackTriggeredThisBattle 的所有權都搬到這裡
+        this.battleCtx = {
+            hero: this.hero,
+            enemies: this.enemies,
+            playerSpeedDice: 0,
+            lastActionDice: null,
+            firstAttackTriggeredThisBattle: false,
+            log: (m, sender, rightMsg) => this.appendLog(m, sender, rightMsg)
+        };
+        
         // 🟢 新增：目標選擇 / 攻擊骰結算狀態機相關旗標
         this.isPickingTarget = false;
         this.pendingTargetCallback = null;
-        this.attackPhaseState = null;
+        this._attackFlowRunning = false;
         this.enemyDisplays = null;
 
         // UI 區塊
@@ -218,7 +225,7 @@ export class BattleScene extends Phaser.Scene {
             this.hero, this.enemies, this.turnCount,
             (m, sender) => this.appendLog(m, sender)
         );
-        this.playerSpeedDice = playerSpeedDice;
+        this.battleCtx.playerSpeedDice = playerSpeedDice;
 
         
         this.deckSys.fillHandToMax(this.hero.maxMana);
@@ -249,8 +256,8 @@ export class BattleScene extends Phaser.Scene {
         .on('pointerdown', () => {
             if (this.isPickingTarget || this.rerollPromptContainer) return;
             EffectEngine.consumeCounter(this.hero, 'reroll_speed_dice');
-            this.playerSpeedDice = Phaser.Math.Between(1, 6) + CombatSystem.getEffectiveSpeedBonus(this.hero);
-            this.appendLog(`🔄 重骰速度骰：新結果 [ ${this.playerSpeedDice} ]`, 'system');
+            this.battleCtx.playerSpeedDice = Phaser.Math.Between(1, 6) + CombatSystem.getEffectiveSpeedBonus(this.hero);
+            this.appendLog(`🔄 重骰速度骰：新結果 [ ${this.battleCtx.playerSpeedDice} ]`, 'system');
             this.renderSpeedRerollButton();
             this.updateUI();
         });
@@ -386,60 +393,39 @@ export class BattleScene extends Phaser.Scene {
         this.checkBattleEnd();
     }
 
-    // ============================================================
-    // 🟢 攻擊骰結算：拆成狀態機，讓玩家的單一招式跟敵人各自行動解耦
+// ============================================================
+    // 🟢 B2重構：攻擊骰結算改由 AttackFlowSystem 驅動狀態機，
+    // BattleScene 只負責畫面互動（顯示目標選擇/重骰確認框）與收尾流程控制
     // ============================================================
 
     resolveAttackPhase() {
-        if (this.isPickingTarget || this.attackPhaseState || this.rerollPromptContainer) return;
-        this.attackPhaseState = { timesRemaining: this.hero.atkCount };
-        this.hero.atkCount = 1;
-        this.runAttackPhaseStep();
+        if (this.isPickingTarget || this._attackFlowRunning || this.rerollPromptContainer) return;
+        this._attackFlowRunning = true;
+        this.runFlowStep(AttackFlowSystem.begin(this.battleCtx));
     }
 
-    runAttackPhaseStep() {
-        const state = this.attackPhaseState;
-        if (!state) return;
-
-        if (this.enemies.every(e => e.hp <= 0) || this.hero.hp <= 0 || state.timesRemaining <= 0) {
-            this.attackPhaseState = null;
+    // 統一收 AttackFlowSystem 回傳的 step，依 type 分派
+    runFlowStep(step) {
+        if (step.type === 'NEED_TARGET') {
+            this.showEnemyTargetPicker(step.candidates, (target) => {
+                this.runFlowStep(AttackFlowSystem.resume(this.battleCtx, { target }));
+            });
+        } else if (step.type === 'NEED_REROLL_CONFIRM') {
+            this.promptAttackDiceReroll(step.actionDice, step.rerollsLeft);
+        } else if (step.type === 'ACTION_UPDATE') {
+            this.updateUI();
+            this.runFlowStep(AttackFlowSystem.resume(this.battleCtx));
+        } else { // 'DONE'
+            this._attackFlowRunning = false;
             if (!this.checkBattleEnd()) {
                 this.startNewTurn();
             }
-            return;
         }
-
-        state.timesRemaining -= 1;
-
-        let actionDice;
-        let allowReroll = true;
-        if (this.hero.isPressured) {
-            actionDice = 1;
-            this.hero.overrideDice = null;
-            this.hero.isPressured = false;
-            this.appendLog(`😱 【威壓】效果發動，攻擊骰被強制鎖定為 1 點！`, 'system');
-            allowReroll = false;
-        } else if (this.hero.overrideDice !== null) {
-            actionDice = this.hero.overrideDice;
-            this.hero.overrideDice = null;
-            allowReroll = false; // 主動技能指定骰值，不提供重骰
-        } else {
-            actionDice = Phaser.Math.Between(1, 6);
-        }
-        this.lastActionDice = actionDice;
-        this.updateUI();
-
-        const rerollsLeft = EffectEngine.getCounterRemaining(this.hero, 'reroll_attack_dice');
-        if (allowReroll && rerollsLeft > 0) {
-            this.promptAttackDiceReroll(actionDice, rerollsLeft, (finalDice) => this.continueAttackPhaseStep(finalDice));
-            return;
-        }
-
-        this.continueAttackPhaseStep(actionDice);
     }
 
-    // 🟢 新增：攻擊骰重骰確認 UI
-    promptAttackDiceReroll(actionDice, rerollsLeft, callback) {
+    // 🟢 重構：不再遞迴自己呼叫自己，每次只顯示「當下這顆骰」的確認框，
+    // 玩家選完後透過 resume() 交還給 AttackFlowSystem 決定要不要再問一次
+    promptAttackDiceReroll(actionDice, rerollsLeft) {
         if (this.rerollPromptContainer) this.rerollPromptContainer.destroy();
 
         const container = this.add.container(0, 0).setDepth(1500);
@@ -456,182 +442,14 @@ export class BattleScene extends Phaser.Scene {
         confirmBtn.on('pointerdown', () => {
             container.destroy();
             this.rerollPromptContainer = null;
-            callback(actionDice);
+            this.runFlowStep(AttackFlowSystem.resume(this.battleCtx, { reroll: false }));
         });
 
         rerollBtn.on('pointerdown', () => {
-            EffectEngine.consumeCounter(this.hero, 'reroll_attack_dice');
-            const newDice = Phaser.Math.Between(1, 6);
-            this.lastActionDice = newDice;
-            this.appendLog(`🔄 重骰攻擊骰：新結果 [ ${newDice} ] 點`, 'system');
-            this.updateUI();
             container.destroy();
             this.rerollPromptContainer = null;
-
-            const stillLeft = EffectEngine.getCounterRemaining(this.hero, 'reroll_attack_dice');
-            if (stillLeft > 0) {
-                this.promptAttackDiceReroll(newDice, stillLeft, callback);
-            } else {
-                callback(newDice);
-            }
+            this.runFlowStep(AttackFlowSystem.resume(this.battleCtx, { reroll: true }));
         });
-    }
-
-    // 🟢 新增：原 runAttackPhaseStep 後半段（目標選擇+結算）搬到這裡
-    continueAttackPhaseStep(actionDice) {
-        const skill = this.hero.diceSkills[actionDice];
-        const scope = (skill && skill.scope) || 'SINGLE_ENEMY';
-        const aliveEnemies = this.enemies.filter(e => e.hp > 0);
-
-        if (scope === 'SINGLE_ENEMY' && aliveEnemies.length > 1) {
-            this.showEnemyTargetPicker(aliveEnemies, (target) => {
-                this.executeAttackPhaseAction(actionDice, scope, target);
-            });
-            return;
-        }
-
-        const target = aliveEnemies.length > 0 ? aliveEnemies[0] : null;
-        this.executeAttackPhaseAction(actionDice, scope, target);
-    }
-
-    // 依 scope 分流結算玩家招式，敵人各自的行動邏輯維持原樣（不受玩家只打一隻敵人影響）
-    executeAttackPhaseAction(actionDice, scope, chosenTarget) {
-        const wasDouble = this.hero.doubleNextAction;
-        const repeatCount = CombatSystem.getRepeatCount(this.hero);
-        if (wasDouble) {
-            this.appendLog(`⚡ 連打算計生效：[${actionDice}點] 連發 2 次！`, 'player');
-        }
-
-        // 🟢 先發制人：以「這一次攻擊骰行動」為單位判定一次，
-        // 涵蓋 ALL_ENEMIES 命中的所有敵人、以及連打/雙骰的重複次數，
-        // 而不是打中一隻敵人才判定一次（否則 AoE 招式只有第一隻敵人吃得到）
-        const ATTACK_DICE_IDS = [1, 3, 4, 6];
-        let firstStrikeBonus = 0;
-        if (scope !== 'SELF' && !this._firstAttackTriggeredThisBattle && ATTACK_DICE_IDS.includes(actionDice)) {
-            const bonusCtx = { log: (m, sender) => this.appendLog(m, sender), bonusTotal: 0 };
-            EffectEngine.runHook('onFirstAttack', this.hero, bonusCtx);
-            if (bonusCtx.bonusTotal > 0) {
-                firstStrikeBonus = bonusCtx.bonusTotal;
-                this.hero.battleAtkBonus = (this.hero.battleAtkBonus || 0) + firstStrikeBonus;
-                this._firstAttackTriggeredThisBattle = true;
-            }
-        }
-
-        if (scope === 'SELF') {
-            for (let r = 0; r < repeatCount; r++) {
-                if (this.hero.hp <= 0) break;
-                this.executePlayerDiceAction(actionDice, null);
-            }
-            this.enemies.forEach(enemy => {
-                if (enemy.hp > 0 && this.hero.hp > 0) this.executeEnemyAction(enemy);
-            });
-
-        } else if (scope === 'ALL_ENEMIES') {
-            this.enemies.forEach(enemy => {
-                this.resolvePlayerVsEnemy(enemy, actionDice, repeatCount);
-            });
-
-        } else {
-            this.enemies.forEach(enemy => {
-                if (enemy.hp <= 0 || this.hero.hp <= 0) return;
-
-                if (chosenTarget && enemy === chosenTarget) {
-                    this.resolvePlayerVsEnemy(enemy, actionDice, repeatCount);
-                } else {
-                    this.executeEnemyAction(enemy);
-                }
-            });
-        }
-
-        // 🟢 先發制人加成只在本次行動範圍內生效，結算完立刻收回，
-        // 避免污染之後其他骰值/回合的傷害計算
-        if (firstStrikeBonus > 0) {
-            this.hero.battleAtkBonus -= firstStrikeBonus;
-        }
-
-        this.updateUI();
-        this.runAttackPhaseStep();
-    }
-
-    // 玩家招式 vs 單一敵人的速度骰互動（先手/後手/同時），從原本 resolveAttackPhase 內的邏輯抽出
-    resolvePlayerVsEnemy(enemy, actionDice, repeatCount) {
-        if (enemy.hp <= 0 || this.hero.hp <= 0) return;
-
-        const order = CombatSystem.resolveTurnOrder(this.playerSpeedDice, enemy.speedDice);
-
-        if (order === 'PLAYER_FIRST') {
-            for (let r = 0; r < repeatCount; r++) {
-                if (this.hero.hp > 0 && enemy.hp > 0) this.executePlayerDiceAction(actionDice, enemy);
-            }
-            if (enemy.hp > 0) this.executeEnemyAction(enemy);
-        } 
-        else if (order === 'ENEMY_FIRST') {
-            this.executeEnemyAction(enemy);
-            if (this.hero.hp > 0 && enemy.hp > 0) {
-                for (let r = 0; r < repeatCount; r++) {
-                    if (this.hero.hp > 0 && enemy.hp > 0) this.executePlayerDiceAction(actionDice, enemy);
-                }
-            }
-        } 
-        else {
-        // 🟢 同時行動區塊修正
-            let pActionLog = [];
-            let eActionLog = [];
-
-            const ATTACK_DICE_IDS = [1, 3, 4, 6];
-
-            // 1. 依據 repeatCount 跑重複攻擊迴圈
-            for (let r = 0; r < repeatCount; r++) {
-                if (this.hero.hp <= 0 || enemy.hp <= 0) break; // 死亡檢查
-
-                if (enemy.isFlying && ATTACK_DICE_IDS.includes(actionDice)) {
-                    pActionLog.push(`💨 ${enemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`);
-                } else {
-                    const pSkill = this.hero.diceSkills[actionDice];
-                    if (pSkill) pSkill.execute(this.hero, enemy, CombatSystem, (m) => pActionLog.push(m));
-                }
-            }
-
-            // 2. 敵人執行行動
-            enemy.executeAction(enemy, enemy.currentIntent, this.hero, CombatSystem, (m) => eActionLog.push(m), this.enemies);
-            
-            // 3. 中毒結算
-            CombatSystem.tickPoison(this.hero, (m) => pActionLog.push(m));
-
-            // 4. 併行 Log 輸出
-            this.appendLog(pActionLog.join(' '), 'simultaneous', eActionLog.join(' '));
-        }
-    }
-
-    executePlayerDiceAction(dice, targetEnemy) {
-        const skill = this.hero.diceSkills[dice];
-        if (!skill) return;
-
-        if (targetEnemy) {
-            const ATTACK_DICE_IDS = [1, 3, 4, 6];
-            if (targetEnemy.isFlying && ATTACK_DICE_IDS.includes(dice)) {
-                this.appendLog(`💨 ${targetEnemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
-                CombatSystem.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
-                return;
-            }
-        }
-
-        skill.execute(this.hero, targetEnemy, CombatSystem, (m) => this.appendLog(m, 'player'));
-        CombatSystem.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
-    }
-
-    executeEnemyAction(enemy) {
-        
-        if (enemy && enemy.hp > 0) {
-            enemy.executeAction(
-                enemy, 
-                enemy.currentIntent, 
-                this.hero, 
-                CombatSystem, 
-                (m) => this.appendLog(m, 'enemy'),
-                this.enemies
-            );
-        }
     }
 
     checkBattleEnd() {
@@ -732,11 +550,11 @@ export class BattleScene extends Phaser.Scene {
 
     updateUI() {
         let overrideText = this.hero.overrideDice !== null ? `(預定: ${this.hero.overrideDice})` : '';
-        let lastDiceText = this.lastActionDice !== null ? `上次攻擊骰: [ ${this.lastActionDice} ]` : '攻擊骰: 未擲骰';
+        let lastDiceText = this.battleCtx.lastActionDice !== null ? `上次攻擊骰: [ ${this.battleCtx.lastActionDice} ]` : '攻擊骰: 未擲骰';
         
         this.diceBoardText.setText(
             `【第 ${this.turnCount} 回合】\n` +
-            `🎲 速度骰：玩家 [ ${this.playerSpeedDice} ]\n` +
+            `🎲 速度骰：玩家 [ ${this.battleCtx.playerSpeedDice} ]\n` +
             `${lastDiceText} ${overrideText}`
         );
 

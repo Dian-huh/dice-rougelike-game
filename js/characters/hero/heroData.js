@@ -24,7 +24,7 @@ export const HERO_DATA = {
     cdActiveSkill: 0,  
     overrideDice: null,
     battleAtkBonus: 0,       // 戰鬥內臨時加成（暴走卡片、渾身加護共用此累加桶）
-    deckCapacity: 10,        // 牌組上限初始值（已確認：固定起始值）
+    deckCapacity: 15,        // 牌組上限初始值（已確認：固定起始值）
     activeEffects: [],   // 🟢 A2新增：取代上面7個BLESSING散落欄位，格式 [{id, stacks}]
     
 
