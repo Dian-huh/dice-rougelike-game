@@ -53,7 +53,7 @@ export class CombatSystem {
                 safeLog(`⚡ ${attacker.name} 使用【${intent.desc}】，造成 ${baseDmg} 點無視防禦與閃避的真實傷害！`);
             } else {
                 // 一般結算 (經由 applyDamageToTarget)
-                this.applyDamageToTarget(target, baseDmg, safeLog);
+                this.applyDamageToTarget(target, baseDmg, safeLog, enemies);   // 🟢 Stage 5-6：補上 enemies
             }
         }
 
@@ -167,7 +167,7 @@ export class CombatSystem {
     }
 
 
-    static applyDamageToTarget(target, rawDmg, logCallback) {
+    static applyDamageToTarget(target, rawDmg, logCallback, enemies) {   // 🟢 Stage 5-6：新增 enemies 參數
         // 1. 🌀 閃避判定
         if (target.dodgeCount && target.dodgeCount > 0) {
             target.dodgeCount -= 1;
@@ -184,28 +184,35 @@ export class CombatSystem {
         let logDetails = [];
         
         // 3. 破防狀態加傷判定
-        // 🟢 敵人：由 isBreak 觸發破防加傷
         if (target.isBreak) {
             finalDmg += 2;
             logDetails.push(`Break破防+2`);
         } 
-        // 🟢 玩家：若護甲已崩潰 (isVulnerable) 則套用破防加傷
         else if (target.isVulnerable) {
             finalDmg += 2;
             logDetails.push(`玩家破防+2`);
         }
 
         // 4. 格擋 (Block) 抵銷扣除 (玩家與敵人皆適用)
+        let blockedAmount = 0;   // 🟢 Stage 5-6：記錄這次實際被格擋吸收的量
         if (target.block && target.block > 0) {
             if (target.block >= finalDmg) {
+                blockedAmount = finalDmg;
                 target.block -= finalDmg;
                 logDetails.push(`格擋完全抵銷`);
                 finalDmg = 0;
             } else {
+                blockedAmount = target.block;
                 finalDmg -= target.block;
                 logDetails.push(`格擋抵銷 ${target.block}`);
                 target.block = 0;
             }
+        }
+
+        // 🟢 Stage 5-6：格擋有實際吸收傷害時，觸發 onBlockedDamage hook（盾反等效果掛在這裡）
+        // combatSys: this 讓 registry 不用 import CombatSystem，避免循環依賴
+        if (blockedAmount > 0) {
+            EffectEngine.runHook('onBlockedDamage', target, { blockedAmount, enemies, log: logCallback, combatSys: this });
         }
 
         // 5. 扣除 HP 與 受傷次數判定
@@ -214,7 +221,6 @@ export class CombatSystem {
             let detailStr = logDetails.length > 0 ? ` (${logDetails.join(', ')})` : '';
             if (logCallback) logCallback(`💥 造成 ${finalDmg} 點傷害${detailStr} (剩餘 ${target.hp}/${target.maxHp} HP)`);
 
-            // 🟢 6. 玩家專屬：護甲受傷次數計數與崩潰判定（只有 finalDmg > 0 扣到血才計數）
             if (target.armorMax && target.armorMax > 0) {
                 target.armorHits = (target.armorHits || 0) + 1;
                 const effectiveArmorMax = this.getEffectiveArmorMax(target);
@@ -225,7 +231,6 @@ export class CombatSystem {
             }
         } else {
             if (logCallback) logCallback(`🛡️ 傷害被完全抵銷！`);
-            // 💡 finalDmg === 0 時（被格擋或閃避抵銷），不增加 armorHits，護甲不會被磨損！
         }
     }
 
@@ -275,6 +280,26 @@ export class CombatSystem {
 
     static getEffectiveArmorMax(entity) {
         return (entity.armorMax || 0) + EffectEngine.getLiveStatBonus(entity, 'armor');
+    }
+
+    // 🟢 Stage 5-1 新增：卡片動態費用計算
+    static getEffectiveCost(card, hero) {
+        const base = (typeof card.getCost === 'function') ? card.getCost(hero) : (card.cost || 0);
+        const globalReduction = EffectEngine.getLiveStatBonus(hero, 'cardCost');
+        return Math.max(0, base + globalReduction);
+    }
+
+    // 🟢 新增：統一計算「顯示/實際扣款用」的最終費用，把「首張卡片免費」被動也一併算進去
+    // 供 BattleScene 的手牌顯示、出牌前檢查、實際扣款三處共用，避免各自重複判斷造成不一致
+    static getDisplayCost(card, hero, battleCtx) {
+        const baseEffCost = this.getEffectiveCost(card, hero);
+        const isFreeFirstCard = battleCtx &&
+            !battleCtx.firstCardPlayedThisBattle &&
+            hero.firstCardFreeEachBattle;
+        return {
+            cost: isFreeFirstCard ? 0 : baseEffCost,
+            isFreeFirstCard
+        };
     }
 
     static resolveTurnOrder(playerSpeed, enemySpeed) {

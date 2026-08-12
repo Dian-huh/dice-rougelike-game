@@ -168,26 +168,30 @@ export class RewardSystem {
         }
 
         if (category === 'CARD') {
-            // 🟢 目前先只從「已實作」的卡片中抽，未實作的（大撒幣/神聖的導引/甘霖/天罰/
-            //    贗品/獵龍斬擊/哥布林殺手/盾反）等第5階段引擎擴充完成後再放開篩選。
             const implementedCards = REWARD_CARD_POOL_SAFE_FILTER();
             const [cardDef] = this.weightedSampleWithoutReplacement(implementedCards, 1);
+            const displayCost = (typeof cardDef.getCost === 'function') ? cardDef.getCost(scene.hero) : cardDef.cost;
+            const costLabel = (typeof cardDef.getCost === 'function')
+                ? `(${displayCost}費，依聖痕層數浮動)`
+                : `(${displayCost}費)`;
+
+            const newCard = {   // 🟢 提前建立，供牌組已滿時的替換流程共用
+                id: `reward_${cardDef.id}_${Date.now()}`,
+                name: cardDef.name,
+                cost: cardDef.cost,
+                getCost: cardDef.getCost,
+                tags: cardDef.tags || [],
+                desc: cardDef.desc,
+                scope: cardDef.scope,
+                onPlay: cardDef.onPlay
+            };
+
             return {
                 category,
                 title: `${catLabel} [卡牌] ${cardDef.name}`,
-                desc: `(${cardDef.cost}費) ${cardDef.desc}`,
+                desc: `${costLabel} ${cardDef.desc}`,
+                pendingCardDef: newCard,   // 🟢 給 onRewardChosen 判斷是否要走替換流程
                 apply: (s) => {
-                    // TODO 第3階段：這裡要先檢查 s.deckSys.originalDeck.length 是否已達
-                    //    s.hero.deckCapacity 上限，達到上限的話要跳出「選一張現有卡刪除」的
-                    //    互動流程，而不是直接 push 新卡。
-                    const newCard = {
-                        id: `reward_${cardDef.id}_${Date.now()}`,
-                        name: cardDef.name,
-                        cost: cardDef.cost,
-                        desc: cardDef.desc,
-                        scope: cardDef.scope,
-                        onPlay: cardDef.onPlay
-                    };
                     s.deckSys.originalDeck.push(newCard);
                     s.appendLog(`🎁 獲得新卡片：[${newCard.name}]！`, 'system');
                 }
@@ -274,14 +278,15 @@ export class RewardSystem {
           .on('pointerdown', () => this.onRerollClicked(scene, stageData, config, stageName));
         rewardContainer.add(rerollBtn);
 
-        // 跳過獎勵按鈕
-        const skipBtn = scene.add.text(280, 425, '[ 🚫 跳過獎勵：換取 +20 金幣 & 恢復 5 HP ]', {
+        const skipBtn = scene.add.text(280, 425, '[ 🚫 跳過獎勵：換取 +50 金幣 & 恢復 5 HP ]', {
             fontSize: '14px', fill: '#ff6666', backgroundColor: '#222', padding: { x: 10, y: 5 }
         }).setInteractive({ useHandCursor: true })
           .on('pointerdown', () => {
-              scene.hero.gold = (scene.hero.gold || 0) + 20;
+              const goldBonusPct = scene.hero.goldGainBonus || 0;                    // 🔧 Stage 5後續修正
+              const bonusGold = Math.round(50 * (1 + goldBonusPct / 100));           // 🔧 套用跟戰鬥勝利金幣一致的加成公式
+              scene.hero.gold = (scene.hero.gold || 0) + bonusGold;
               scene.hero.hp = Math.min(scene.hero.maxHp, scene.hero.hp + 5);
-              scene.appendLog(`🚫 跳過獎勵：獲得 +20 金幣，並恢復 5 HP`, 'system');
+              scene.appendLog(`🚫 跳過獎勵：獲得 +${bonusGold} 金幣，並恢復 5 HP`, 'system');
               rewardContainer.destroy();
               scene._rewardContainer = null;
               if (scene && typeof scene.nextStage === 'function') scene.nextStage();
@@ -292,27 +297,91 @@ export class RewardSystem {
     }
 
     static onRewardChosen(scene, stageData, slot, batch) {
-        slot.apply(scene);
-        this.handleCollectionProgress(scene, slot.category);
+        const finalizeChoice = () => {
+            this.handleCollectionProgress(scene, slot.category);
+            scene._rewardChoicesRemaining -= 1;
+            const remainingSlots = batch.filter(s => s !== slot);
 
-        scene._rewardChoicesRemaining -= 1;
-        const remainingSlots = batch.filter(s => s !== slot);
+            if (scene._rewardChoicesRemaining > 0 && remainingSlots.length > 0) {
+                scene.appendLog(`🎁 獎勵已套用！還可以再選擇 ${scene._rewardChoicesRemaining} 項！`, 'system');
+                this.renderRewardUI(scene, stageData, scene._rewardConfig, scene._rewardStageName, remainingSlots);
+                return;
+            }
 
-        // 🟢 還有剩餘選擇次數，且候選牌沒選完 → 不關閉畫面，讓玩家繼續選
-        if (scene._rewardChoicesRemaining > 0 && remainingSlots.length > 0) {
-            scene.appendLog(`🎁 獎勵已套用！還可以再選擇 ${scene._rewardChoicesRemaining} 項！`, 'system');
-            this.renderRewardUI(scene, stageData, scene._rewardConfig, scene._rewardStageName, remainingSlots);
+            if (scene._rewardContainer) {
+                scene._rewardContainer.destroy();
+                scene._rewardContainer = null;
+            }
+            if (scene && typeof scene.nextStage === 'function') {
+                scene.nextStage();
+            }
+        };
+
+        // 🟢 新增：CARD 類且牌組已達上限時，先跳出替換選擇 UI，選完/放棄後才繼續原本流程
+        const atCapacity = slot.category === 'CARD' &&
+            scene.deckSys.originalDeck.length >= (scene.hero.deckCapacity || Infinity);
+
+        if (atCapacity) {
+            if (scene._rewardContainer) {
+                scene._rewardContainer.destroy();
+                scene._rewardContainer = null;
+            }
+            this.showCardReplacePicker(scene, slot.pendingCardDef, finalizeChoice);
             return;
         }
 
-        if (scene._rewardContainer) {
-            scene._rewardContainer.destroy();
-            scene._rewardContainer = null;
-        }
+        slot.apply(scene);
+        finalizeChoice();
+    }
 
-        if (scene && typeof scene.nextStage === 'function') {
-            scene.nextStage();
-        }
+    // ----------------------------------------------------------------
+    // 🟢 新增：牌組已達上限時，讓玩家選一張現有卡片替換成新卡（或放棄新卡）
+    // ----------------------------------------------------------------
+    static showCardReplacePicker(scene, newCardDef, onDone) {
+        const container = scene.add.container(0, 0).setDepth(2000);
+        scene._rewardContainer = container;
+
+        const overlay = scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.92);
+        const title = scene.add.text(60, 25,
+            `🎴 牌組已達上限 (${scene.deckSys.originalDeck.length}/${scene.hero.deckCapacity})，請選一張現有卡片替換為 [${newCardDef.name}]：`,
+            { fontSize: '13px', fill: '#ffcc00', wordWrap: { width: 730 } });
+        container.add([overlay, title]);
+
+        const deck = scene.deckSys.originalDeck;
+        const perRow = 5;
+        deck.forEach((card, idx) => {
+            const col = idx % perRow;
+            const row = Math.floor(idx / perRow);
+            const x = 90 + col * 140;
+            const y = 90 + row * 85;
+
+            const cardBg = scene.add.rectangle(x, y, 120, 65, 0x222233)
+                .setStrokeStyle(2, 0x00ffff)
+                .setInteractive({ useHandCursor: true });
+            const nameText = scene.add.text(x - 55, y - 25, card.name, { fontSize: '12px', fill: '#fff', wordWrap: { width: 110 } });
+
+            cardBg.on('pointerdown', () => {
+                deck.splice(idx, 1);
+                deck.push(newCardDef);
+                scene.appendLog(`🔄 以 [${newCardDef.name}] 替換掉 [${card.name}]！`, 'system');
+                container.destroy();
+                scene._rewardContainer = null;
+                onDone();
+            });
+
+            container.add([cardBg, nameText]);
+        });
+
+        const cancelBtn = scene.add.text(320, 500, '[ 🚫 放棄這張新卡片 ]', {
+            fontSize: '13px', fill: '#ff6666', backgroundColor: '#222', padding: { x: 10, y: 5 }
+        }).setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => {
+              scene.appendLog(`🚫 放棄了新卡片 [${newCardDef.name}]`, 'system');
+              container.destroy();
+              scene._rewardContainer = null;
+              onDone();
+          });
+        container.add(cancelBtn);
     }
 
     static onRerollClicked(scene, stageData, config, stageName) {

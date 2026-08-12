@@ -241,16 +241,37 @@ export const REWARD_CARD_POOL = [
         id: 'card_gold_bomb',
         name: '大撒幣',
         cost: 3,
-        scope: 'SINGLE_ENEMY', // 隨機單體，暫定仍需一個目標作為基準（TODO 確認）
+        scope: 'SELF',   // 🟢 Stage 5-3：改為 SELF，不需要玩家選目標，引擎內部隨機挑
+        tags: [],
         desc: '消耗金幣，每 50 塊對隨機單體造成一次 5 點傷害 (最多消耗 500 金幣)',
-        implemented: false, // TODO：動態消耗金幣、隨機挑目標的邏輯，第 5 階段實作
-        onPlay: null
+        implemented: true,   // 🟢 Stage 5-3
+        onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
+            const availableGold = Math.min(hero.gold || 0, 500);
+            const spend = Math.floor(availableGold / 50) * 50;
+
+            if (spend <= 0) {
+                log(`💸 效果發動：金幣不足 50，大撒幣沒有任何效果...`);
+                return;
+            }
+
+            hero.gold -= spend;
+            const hitCount = spend / 50;
+            log(`💰 效果發動：花費 ${spend} 金幣，對隨機目標發動 ${hitCount} 次 5 點傷害！`);
+
+            for (let i = 0; i < hitCount; i++) {
+                const aliveEnemies = scene.enemies.filter(e => e.hp > 0);
+                if (aliveEnemies.length === 0) break;
+                const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+                combatSys.applyDamageToTarget(target, 5, log);
+            }
+        }
     },
     {
         id: 'card_treasure',
         name: '祕寶',
         cost: 0,
         scope: 'SELF',
+        tags: [],
         desc: '獲得 50 金幣，抽 1 張牌',
         implemented: true,
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
@@ -264,6 +285,7 @@ export const REWARD_CARD_POOL = [
         name: '祈禱',
         cost: 1,
         scope: 'SELF',
+        tags: [],
         desc: '回復量 +1，回復 2 點HP',
         implemented: true,
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
@@ -277,6 +299,7 @@ export const REWARD_CARD_POOL = [
         name: '雙骰',
         cost: 3,
         scope: 'SELF',
+        tags: [],
         desc: '下次的攻擊骰將骰 2 次',
         implemented: true,
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
@@ -289,43 +312,105 @@ export const REWARD_CARD_POOL = [
         name: '神聖的導引',
         cost: 0,
         scope: 'SELF',
+        tags: [],
         desc: '抽 1 張具「聖痕」詞條的卡片，給予敵方一層聖痕',
-        implemented: false, // TODO：需要能篩選帶「聖痕」詞條的卡片，第 5 階段實作
-        onPlay: null
+        implemented: true,   // 🟢 Stage 5-4
+        onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
+            const drawn = deckSys.drawCardByTag('聖痕');
+            if (drawn) {
+                log(`📖 效果發動：抽到具「聖痕」詞條的卡片 [${drawn.name}]！`);
+            } else {
+                log(`📖 效果發動：牌堆與棄牌堆中已無「聖痕」詞條卡片，抽取落空`);
+            }
+
+            hero.stigma += 1;
+            log(`🔱 敵方附加 1 層聖痕 (現為 ${hero.stigma} 層)`);
+        }
     },
     {
         id: 'card_sweet_rain',
         name: '甘霖',
         cost: 2,
         scope: 'SELF',
-        desc: '回復 (1+聖痕層數)，超出血量上限的回血轉變成格擋 (每超出3就轉變成1點格擋)',
-        implemented: false, // TODO：需要「回血溢出轉格擋」的引擎擴充，第 5 階段實作
-        onPlay: null
+        tags: ['聖痕'],
+        desc: '回復 (1+聖痕層數)，超出血量上限的回血轉變成格擋 (每超出2就轉變成1點格擋)',
+        implemented: true,   // 🟢 Stage 5-2
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            const baseHeal = 1 + (hero.stigma || 0);
+            const actualHeal = baseHeal * (hero.healRatio + hero.battleHealBonus) + EffectEngine.getHealBonus(hero);
+            const hpBefore = hero.hp;
+            const overflow = Math.max(0, (hpBefore + actualHeal) - hero.maxHp);
+
+            hero.hp = Math.min(hero.maxHp, hpBefore + actualHeal);
+            log(`💧 效果發動：回復 ${actualHeal} 點 HP (基礎回復 ${baseHeal}，聖痕層數 ${hero.stigma || 0})`);
+
+            if (overflow > 0) {
+                const bonusBlock = Math.floor(overflow / 2);
+                if (bonusBlock > 0) {
+                    hero.block += bonusBlock;
+                    log(`🛡️ 溢出的 ${overflow} 點回血轉換為 ${bonusBlock} 點格擋！`);
+                }
+            }
+        }
     },
     {
         id: 'card_divine_punishment',
         name: '天罰',
-        cost: 5, // 基礎費用；動態費用（每5層聖痕-1）由 getCost(hero) 決定
+        cost: 5,
         scope: 'ALL_ENEMIES',
+        tags: ['聖痕'],
         desc: '對敵方全體造成 (5+聖痕層數) 傷害 (每 5 層聖痕，此卡費用 -1)',
-        implemented: false, // TODO：需要 getCost(hero) 動態費用函式支援，第 5 階段實作
-        getCost: null,
-        onPlay: null
+        implemented: true,   // 🟢 Stage 5-2
+        getCost: (hero) => Math.max(0, 5 - Math.floor((hero.stigma || 0) / 5)),
+        onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
+            const dmg = 5 + (hero.stigma || 0);
+            const aliveEnemies = scene.enemies.filter(e => e.hp > 0);
+            log(`⚡ 效果發動：對敵方全體造成 ${dmg} 點傷害！`);
+            aliveEnemies.forEach(en => combatSys.applyDamageToTarget(en, dmg, log));
+        }
     },
     {
         id: 'card_counterfeit',
         name: '贗品',
         cost: 2,
-        scope: 'SELF', // 實際 scope 取決於「上一張打出的卡片」，TODO 於第5階段處理
+        scope: 'SELF',
+        tags: [],
         desc: '此卡效果變成與上一張打出卡片相同',
-        implemented: false, // TODO：需要 lastEffectiveCard 追蹤器，第 5 階段實作
-        onPlay: null
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
+            const source = hero.lastPlayedCard;
+
+            if (!source) {
+                log(`🎭 效果發動：本場尚未打出過其他卡片，贗品沒有可複製的對象`);
+                return;
+            }
+
+            if (source.name === '贗品') {   // 🔧 修正：改用名稱比對，避免 id 型別不一致（數字 vs 字串）導致報錯
+                log(`🎭 效果發動：上一張打出的也是【贗品】，效果無法重複複製`);
+                return;
+            }
+
+            if (!source.onPlay) {
+                log(`🎭 效果發動：嘗試複製 [${source.name}]，但該卡沒有可觸發的效果`);
+                return;
+            }
+
+            log(`🎭 效果發動：複製上一張卡片 [${source.name}] 的效果！`);
+
+            let effectiveTarget = enemy;
+            if (!effectiveTarget && source.scope === 'SINGLE_ENEMY') {
+                effectiveTarget = scene.enemies.find(e => e.hp > 0) || null;
+            }
+
+            source.onPlay(hero, effectiveTarget, combatSys, deckSys, log, scene);
+        }
     },
     {
         id: 'card_berserk',
         name: '暴走',
         cost: 1,
         scope: 'SELF',
+        tags: [],
         desc: '給予自己 10 點傷害，攻擊力與爆擊增益 +4 (戰鬥內臨時加成)',
         implemented: true,
         // 🟢 確認：比照 battleCritBonus 的模式，做成「戰鬥內臨時加成」，
@@ -345,32 +430,68 @@ export const REWARD_CARD_POOL = [
         name: '獵龍斬擊',
         cost: 2,
         scope: 'SINGLE_ENEMY',
-        // 🟢 語意已確認：對名稱帶有「龍」的敵人單體，
-        //    每次造成「傷害 = 目標當下 CT 值」，重複次數 = (目標當下 OD值 - CT值)
-        //    例如 目標 OD=6, CT=2 → 造成 2 點傷害，共 4 次
-        //    ⚠️ 邊界情況待第5階段實作時處理：若 (OD-CT) <= 0 或 CT = 0 時如何處理（不可觸發 or 至少1次？）
-        desc: '對名稱帶有「龍」的敵人單體，造成傷害=CT值，重複次數=(OD值-CT值)',
-        implemented: false, // TODO：需要「名稱含龍」比對 + 動態次數/傷害計算，第 5 階段實作
-        onPlay: null
+        tags: [],
+        desc: '對名稱帶有「龍」的敵人單體，造成傷害=CT值，重複次數=(OD值-CT值)，至少1次',
+        implemented: true,   // 🟢 Stage 5-5
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            if (!enemy || !enemy.name || !enemy.name.includes('龍')) {
+                log(`🐲 效果發動：目標並非「龍」屬性敵人，效果落空`);
+                return;
+            }
+
+            const ct = enemy.ct || 0;
+            const od = enemy.od || 0;
+            const hits = Math.max(1, od - ct);   // 🟢 至少1次
+            const dmgPerHit = ct;
+
+            if (dmgPerHit <= 0) {
+                log(`🐲 效果發動：${enemy.name} 當前 CT 為 0，無法造成傷害`);
+                return;
+            }
+
+            log(`🐲 效果發動：對 ${enemy.name} 造成 ${dmgPerHit} 點傷害，共 ${hits} 次！`);
+            for (let i = 0; i < hits; i++) {
+                if (enemy.hp <= 0) break;
+                combatSys.applyDamageToTarget(enemy, dmgPerHit, log);
+            }
+        }
     },
     {
         id: 'card_goblin_slayer',
         name: '哥布林殺手',
         cost: 5,
-        scope: 'ALL_ENEMIES',
+        scope: 'SELF',   // 🟢 Stage 5-5：改為 SELF，效果是全場掃描而非對單一目標結算
+        tags: [],
         desc: '使所有名稱帶有「哥布林」的敵人死亡',
-        implemented: false, // TODO：需要敵人名稱比對邏輯，第 5 階段實作
-        onPlay: null
+        implemented: true,   // 🟢 Stage 5-5
+        onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
+            const targets = scene.enemies.filter(e => e.hp > 0 && e.name && e.name.includes('哥布林'));
+
+            if (targets.length === 0) {
+                log(`💀 效果發動：場上沒有「哥布林」屬性的敵人，效果落空`);
+                return;
+            }
+
+            targets.forEach(e => {
+                e.hp = 0;
+            });
+            log(`💀 效果發動：${targets.map(e => e.name).join('、')} 應聲倒地！`);
+        }
     },
     {
         id: 'card_shield_counter',
         name: '盾反',
         cost: 1,
         scope: 'SELF',
+        tags: [],
         desc: '獲得格擋 5、盾反效果 2 回合 (期間格擋下來的傷害會等量隨機對單體反擊)',
-        implemented: false, // TODO：需要反擊 hook，第 5 階段實作
-        onPlay: null
-    }
+        implemented: true,   // 🟢 Stage 5-6
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            hero.block += 5;
+            const entry = EffectEngine.addStacks(hero, 'shield_counter', 2);
+            log(`🛡️ 效果發動：獲得 5 點格擋，並取得【盾反】效果 (剩餘 ${entry.stacks} 回合)！`);
+        }
+    },
 ];
 
 // ====================================================================

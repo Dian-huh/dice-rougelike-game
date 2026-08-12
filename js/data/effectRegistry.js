@@ -73,6 +73,29 @@ export const EFFECT_REGISTRY = {
         onHealModify: (hero, entry) => entry.stacks * 2
     },
 
+    // ================= CARD_EFFECT (卡片附加效果，非加護/速通類，供 Stage5+ 卡片使用) =================
+    // 🟢 Stage 5-6 新增：盾反 —— stacks 代表剩餘回合數，每次 onTurnStart 遞減；
+    // 期間格擋吸收的傷害會等量對隨機存活敵人反擊
+    shield_counter: {
+        category: 'CARD_EFFECT',
+        onTurnStart: (hero, entry, ctx) => {
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                hero.activeEffects = hero.activeEffects.filter(e => e !== entry);
+                ctx.log(`🛡️ [盾反] 效果已結束`, 'system');
+            }
+        },
+        onBlockedDamage: (hero, entry, ctx) => {
+            if (!(entry.stacks > 0) || !(ctx.blockedAmount > 0)) return;
+            const aliveEnemies = (ctx.enemies || []).filter(e => e.hp > 0);
+            if (aliveEnemies.length === 0) return;
+
+            const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+            ctx.log(`🔁 [盾反] 格擋下 ${ctx.blockedAmount} 點傷害，對 ${target.name} 反擊！`, 'system');
+            ctx.combatSys.applyDamageToTarget(target, ctx.blockedAmount, ctx.log, ctx.enemies);
+        }
+    },
+
 // ================= SPEEDRUN =================
     speedrun_halve_next_enemy_hp: {
         category: 'SPEEDRUN',

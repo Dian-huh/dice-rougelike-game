@@ -268,12 +268,14 @@ export class BattleScene extends Phaser.Scene {
         this.handContainer = this.add.container(40, 260);
 
         this.deckSys.hand.forEach((card, index) => {
+            const { cost: effCost, isFreeFirstCard } = CombatSystem.getDisplayCost(card, this.hero, this.battleCtx);
+
             let cardBg = this.add.rectangle(index * 130 + 50, 40, 120, 80, 0x333333)
                 .setStrokeStyle(2, 0x00ffff)
                 .setInteractive({ useHandCursor: true })
                 .on('pointerdown', () => this.playCard(index));
 
-            let title = this.add.text(index * 130 + 5, 10, `${card.name} (${card.cost}費)`, { fontSize: '13px', fill: '#fff' });
+            let title = this.add.text(index * 130 + 5, 10, `${card.name} (${effCost}費${isFreeFirstCard ? '🏅' : ''})`, { fontSize: '13px', fill: '#fff' });
             let desc = this.add.text(index * 130 + 5, 30, card.desc, { fontSize: '11px', fill: '#aaa', wordWrap: { width: 110 } });
 
             this.handContainer.add([cardBg, title, desc]);
@@ -354,11 +356,12 @@ export class BattleScene extends Phaser.Scene {
     playCard(index) {
         if (this.isPickingTarget || this.rerollPromptContainer) return;
 
-
         const card = this.deckSys.hand[index];
         if (!card) return;
 
-        if (this.hero.mana < card.cost) {
+        const { cost: effCost } = CombatSystem.getDisplayCost(card, this.hero, this.battleCtx);
+
+        if (this.hero.mana < effCost) {
             this.appendLog(`⚠️ 魔力不足，無法使用 [${card.name}]`, 'system');
             return;
         }
@@ -378,15 +381,25 @@ export class BattleScene extends Phaser.Scene {
     }
 
     finalizeCardPlay(index, card, target) {
-        this.hero.mana -= card.cost;
+        const { cost: effCost, isFreeFirstCard } = CombatSystem.getDisplayCost(card, this.hero, this.battleCtx);
+
+        this.battleCtx.firstCardPlayedThisBattle = true;   // 🟢 判斷完就立刻標記，確保只有「這一張」吃得到免費
+
+        this.hero.mana -= effCost;
         this.deckSys.playCard(index);
         CombatSystem.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
 
-        this.appendLog(`🃏 使用卡牌 [${card.name}] (-${card.cost}費)`, 'player');
+        if (isFreeFirstCard) {
+            this.appendLog(`🎴 使用卡牌 [${card.name}] (🏅收集被動：本場首張卡片0費！)`, 'player');
+        } else {
+            this.appendLog(`🃏 使用卡牌 [${card.name}] (-${effCost}費)`, 'player');
+        }
 
         if (card.onPlay) {
             card.onPlay(this.hero, target, CombatSystem, this.deckSys, (m) => this.appendLog(m, 'player'), this);
         }
+
+        this.hero.lastPlayedCard = card;
 
         this.renderHandUI();
         this.updateUI();

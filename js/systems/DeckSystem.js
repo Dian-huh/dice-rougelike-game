@@ -1,6 +1,6 @@
 export class DeckSystem {
     constructor(initialDeck) {
-        this.originalDeck = initialDeck;
+        this.originalDeck = [...initialDeck];
         this.drawPile = [];
         this.hand = [];
         this.discardPile = [];
@@ -41,6 +41,26 @@ export class DeckSystem {
         const card = this.drawPile.pop();
         this.hand.push(card);
         return card;
+    }
+
+    // 🟢 Stage 5-4 新增：依詞條(tag)篩選抽牌，優先找抽牌堆，找不到再找棄牌堆
+    // 找不到就回傳 null（不消耗任何動作、不洗牌），由呼叫端決定要不要顯示「抽取失敗」提示
+    drawCardByTag(tag) {
+        let idx = this.drawPile.findIndex(c => (c.tags || []).includes(tag));
+        if (idx !== -1) {
+            const card = this.drawPile.splice(idx, 1)[0];
+            this.hand.push(card);
+            return card;
+        }
+
+        idx = this.discardPile.findIndex(c => (c.tags || []).includes(tag));
+        if (idx !== -1) {
+            const card = this.discardPile.splice(idx, 1)[0];
+            this.hand.push(card);
+            return card;
+        }
+
+        return null; // 抽牌堆與棄牌堆都沒有帶該詞條的卡
     }
 
     fillHandToMax(maxMana) {

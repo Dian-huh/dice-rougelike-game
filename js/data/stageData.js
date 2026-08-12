@@ -52,7 +52,7 @@ export function getStageData(stageId = '1-1', nodeType = 'BATTLE', options = {})
         name: stageName,
         enemies: enemies,
         rewardConfig: {
-            baseGold: nodeType === 'BOSS' ? 100 : 15 + floorNumber * 5
+            baseGold: nodeType === 'BOSS' ? 200 : 20 + floorNumber * 10
         }
     };
 }

@@ -4,11 +4,10 @@ export const HERO_DATA = {
     hp: 20, maxHp: 20,
     atk: 3,
     critBonus: 2,
-    battleCritBonus: 0,    // 🟢 新增：戰鬥內臨時爆擊增益（來自骰面2/骰面4觸發，每場戰鬥結束重置）
-    healRatio: 1,           // 永久回復比值基礎值（目前無獎勵來源，保留供未來擴充）
-    battleHealBonus: 0,    // 🟢 新增：戰鬥內臨時回復加成（來自骰面2觸發，每場戰鬥結束重置）
+    battleCritBonus: 0,
+    battleHealBonus: 0,
     mana: 3, maxMana: 3,
-    healRatio: 1,      
+    healRatio: 1,               
     speedBonus: 0,     
     atkCount: 1,       
     armorMax: 3,       
@@ -16,16 +15,22 @@ export const HERO_DATA = {
     isVulnerable: false,
     block: 0,          
     dodgeCount: 0,     
-    doubleNextAction: false, // ⚡ 新增：下一次攻擊骰行動是否執行 2 次
-    poisonTurns: 0,    // 🐉 黑龍【吐息】劇毒：每執行一個動作扣1點HP，持續回合數歸零後解除
-    isPressured: false, // 🐉 黑龍【威壓】：下次攻擊骰鎖定為1，且本回合無法使用主動技
+    doubleNextAction: false,
+    poisonTurns: 0,
+    isPressured: false,
     stigma: 0,   
     gold: 0,      
     cdActiveSkill: 0,  
     overrideDice: null,
-    battleAtkBonus: 0,       // 戰鬥內臨時加成（暴走卡片、渾身加護共用此累加桶）
-    deckCapacity: 15,        // 牌組上限初始值（已確認：固定起始值）
-    activeEffects: [],   // 🟢 A2新增：取代上面7個BLESSING散落欄位，格式 [{id, stacks}]
+    battleAtkBonus: 0,
+    deckCapacity: 10,
+    activeEffects: [],
+    lastPlayedCard: null,
+
+    startBlock: 0,                                    // 🟢 補上：開局被動格擋（守護加護、數值收集里程碑會疊加此欄位）
+    goldGainBonus: 0,                                  // 🟢 補上：金幣獲得量加成百分比
+    rewardCounts: { STAT: 0, BLESSING: 0, CARD: 0 },   // 🟢 補上：獎勵選擇次數計數，供收集類里程碑判斷
+    firstCardFreeEachBattle: false,                    // 🟢 補上：卡片類收集x2的里程碑旗標（目前尚未接上實際生效邏輯，Stage 6待補）
     
 
     // 🟢 新增：scope 標籤，供 BattleScene 判斷是否需要跳出目標選擇 UI
