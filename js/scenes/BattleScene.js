@@ -21,16 +21,9 @@ export class BattleScene extends Phaser.Scene {
         this.hero = setup.hero;
         this.deckSys = setup.deckSys;
         
-
         // 🟢 每場戰鬥開始前重置本場牌堆狀態（手牌/抽牌堆/棄牌堆），
         // 但 originalDeck（永久收藏，含戰利品新卡）維持不變
         this.deckSys.resetForNewBattle();
-
-        // 🟢 每場戰鬥重置用量：找出DICE計數器，used歸零（max保留，因為是永久疊加的獎勵）
-        ['reroll_attack_dice', 'reroll_speed_dice'].forEach(id => {
-            const entry = EffectEngine.getEntry(this.hero, id);
-            if (entry) entry.used = 0;
-        });
         this.turnCount = 0;
         // 🟢 B2新增：battleCtx 是 AttackFlowSystem 的唯一資料來源，
         // playerSpeedDice/lastActionDice/firstAttackTriggeredThisBattle 的所有權都搬到這裡

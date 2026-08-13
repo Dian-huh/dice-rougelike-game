@@ -7,14 +7,16 @@ export class MapScene extends Phaser.Scene {
         super({ key: 'MapScene' }); 
     }
 
+    // 修改後
     create() {
-        // 1. 如果全域存檔尚未初始化，自動啟動新遊戲
+        // 1. 如果全域狀態尚未初始化（例如頁面剛載入/重整），先嘗試讀取存檔，
+        //    讀不到才視為全新玩家，啟動新遊戲
         if (!gameState.mapData) {
-            gameState.initNewGame();
+            const loaded = gameState.tryLoadSave();
+            if (!loaded) {
+                gameState.initNewGame();
+            }
         }
-
-        this.add.text(400, 30, '🗺️ 冒險地圖 (請選擇路線)', { fontSize: '20px', fill: '#00ffff' }).setOrigin(0.5);
-        this.renderMapUI();
     }
 
     renderMapUI() {

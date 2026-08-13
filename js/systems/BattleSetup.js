@@ -1,5 +1,4 @@
-import { HERO_DATA } from '../characters/hero/heroData.js';
-import { HERO_DECK } from '../characters/hero/heroCards.js';
+import { getCharacterData, getCharacterDeck } from '../characters/characterRegistry.js';
 import { DeckSystem } from './DeckSystem.js';
 import { getStageData } from '../data/stageData.js';
 import { EffectEngine } from './EffectEngine.js';   // 新增
@@ -20,9 +19,10 @@ export class BattleSetup {
             hero = gameState.hero;
             deckSys = gameState.deckSys;
         } else {
-            hero = JSON.parse(JSON.stringify(HERO_DATA));
-            hero.diceSkills = HERO_DATA.diceSkills;
-            deckSys = new DeckSystem(HERO_DECK);
+            const charData = getCharacterData('hero');   // 防呆 fallback，理論上不會走到這裡
+            hero = JSON.parse(JSON.stringify(charData));
+            hero.diceSkills = charData.diceSkills;
+            deckSys = new DeckSystem(getCharacterDeck('hero'));
         }
 
         // 🟢 取代：原本 hero.limitedEnemyBattlesRemaining 的直接判斷，

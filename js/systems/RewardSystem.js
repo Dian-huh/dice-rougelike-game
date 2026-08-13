@@ -49,21 +49,13 @@ export class RewardSystem {
         this.renderRewardUI(scene, stageData, config, stageName, batch);
     }
 
-    // 🟢 修正：拿掉 extraChoices 參數，固定產生 3 組候選（min 是防呆，避免類別數<3時出錯）
-    static generateRewardBatch(scene) {
-        const slotCount = Math.min(ALL_CATEGORIES.length, 3);
-        const categories = this.pickCategories(slotCount, scene._rewardPrevCategories);
-        scene._rewardPrevCategories = categories;
-
-        const items = categories.map(cat => this.createRewardSlot(cat, scene));
-        return items;
-    }
-
     // ----------------------------------------------------------------
     // 抽獎核心：決定本次要出現的 N 組獎勵（N = 3 + extraChoices）
     // ----------------------------------------------------------------
-    static generateRewardBatch(scene, extraChoices = 0) {
-        const slotCount = Math.min(ALL_CATEGORIES.length, 3 + (extraChoices || 0));
+    // 抽獎核心：固定產生 3 組候選（min 是防呆，避免類別數<3時出錯）
+    // ----------------------------------------------------------------
+    static generateRewardBatch(scene) {
+        const slotCount = Math.min(ALL_CATEGORIES.length, 3);
         const categories = this.pickCategories(slotCount, scene._rewardPrevCategories);
         scene._rewardPrevCategories = categories;
 
@@ -175,16 +167,19 @@ export class RewardSystem {
                 ? `(${displayCost}費，依聖痕層數浮動)`
                 : `(${displayCost}費)`;
 
-            const newCard = {   // 🟢 提前建立，供牌組已滿時的替換流程共用
-                id: `reward_${cardDef.id}_${Date.now()}`,
-                name: cardDef.name,
-                cost: cardDef.cost,
-                getCost: cardDef.getCost,
-                tags: cardDef.tags || [],
-                desc: cardDef.desc,
-                scope: cardDef.scope,
-                onPlay: cardDef.onPlay
-            };
+            // 修改後
+        const newCard = {   // 🟢 提前建立，供牌組已滿時的替換流程共用
+            id: `reward_${cardDef.id}_${Date.now()}`,
+            name: cardDef.name,
+            cost: cardDef.cost,
+            getCost: cardDef.getCost,
+            tags: cardDef.tags || [],
+            desc: cardDef.desc,
+            scope: cardDef.scope,
+            onPlay: cardDef.onPlay,
+            __source: 'reward',      // 🟢 存檔用：標記此卡片來源類別
+            __defId: cardDef.id      // 🟢 存檔用：對應 REWARD_CARD_POOL 中的定義 id
+        };
 
             return {
                 category,
