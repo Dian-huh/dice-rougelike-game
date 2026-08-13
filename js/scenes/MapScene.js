@@ -17,6 +17,8 @@ export class MapScene extends Phaser.Scene {
                 gameState.initNewGame();
             }
         }
+
+        this.renderMapUI();   // 🟢 補上：畫出地圖節點，否則畫面永遠是空的
     }
 
     renderMapUI() {
