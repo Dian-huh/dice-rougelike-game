@@ -175,9 +175,16 @@ export class CombatSystem {
             return;
         }
 
+        // 改成
         // 2. 觸發受擊 OD / Break 增減 (適用於敵人)
         if (typeof target.onTakeHit === 'function') {
             target.onTakeHit(logCallback);
+        }
+
+        // 🟢 若這一擊讓敵人當場進入Break，立刻重新驗證意圖並更新顯示，
+        // 不要等到敵人真正執行動作時才切換，避免玩家看到過期的預告文字
+        if (target.isBreak && typeof target.getIntent === 'function') {
+            this.resolveEnemyIntent(target);
         }
 
         let finalDmg = rawDmg;
@@ -232,6 +239,16 @@ export class CombatSystem {
         } else {
             if (logCallback) logCallback(`🛡️ 傷害被完全抵銷！`);
         }
+    }
+
+    // 🟢 中途被打進Break時，作廢原本鎖定的非一般意圖，改成當下的一般行動
+    // Break分支邏輯不依賴 turnCount/speedDice，帶入安全值 0 即可正確走到 generalPool
+    static resolveEnemyIntent(enemy) {
+        if (enemy.isBreak && !enemy._intentLockedInBreak) {
+            enemy.currentIntent = enemy.getIntent(0, enemy.speedDice, enemy);
+            enemy._intentLockedInBreak = true;
+        }
+        return enemy.currentIntent;
     }
 
 

@@ -190,8 +190,9 @@ export const AttackFlowSystem = {
                     if (pSkill) pSkill.execute(hero, enemy, CombatSystem, (m) => pActionLog.push(m));
                 }
             }
-
-            enemy.executeAction(enemy, enemy.currentIntent, hero, CombatSystem, (m) => eActionLog.push(m), ctx.enemies);
+            
+            const enemyIntent = CombatSystem.resolveEnemyIntent(enemy);
+            enemy.executeAction(enemy, enemyIntent, hero, CombatSystem, (m) => eActionLog.push(m), ctx.enemies);
             CombatSystem.tickPoison(hero, (m) => pActionLog.push(m));
 
             ctx.log(pActionLog.join(' '), 'simultaneous', eActionLog.join(' '));
@@ -217,7 +218,8 @@ export const AttackFlowSystem = {
     // === 對應原 executeEnemyAction ===
     _executeEnemyAction(ctx, enemy) {
         if (enemy && enemy.hp > 0) {
-            enemy.executeAction(enemy, enemy.currentIntent, ctx.hero, CombatSystem, (m) => ctx.log(m, 'enemy'), ctx.enemies);
+            const intent = CombatSystem.resolveEnemyIntent(enemy);
+            enemy.executeAction(enemy, intent, ctx.hero, CombatSystem, (m) => ctx.log(m, 'enemy'), ctx.enemies);
         }
     }
 };

@@ -24,6 +24,7 @@ export class TurnSystem {
             }
             enemy.speedDice = Phaser.Math.Between(1, enemy.speedDiceSides || 6) + (enemy.speedBonus || 0);
             enemy.currentIntent = enemy.getIntent(turnCount, enemy.speedDice, enemy);
+            enemy._intentLockedInBreak = enemy.isBreak;
         });
 
         return { playerSpeedDice: Phaser.Math.Between(1, 6) + CombatSystem.getEffectiveSpeedBonus(hero) };

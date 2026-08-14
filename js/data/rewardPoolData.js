@@ -608,6 +608,7 @@ export const COLLECTION_MILESTONES = [
             hero.armorMax += 1;
             hero.speedBonus += 1;
             hero.healRatio += 1;
+            EffectEngine.addStacks(hero, 'collection_stat_4', 1);
             scene.appendLog(`🏅 [收集達成] 數值類獎勵達 4 個！全數值 +1！`, 'system');
         }
     },
@@ -626,6 +627,7 @@ export const COLLECTION_MILESTONES = [
             hero.armorMax += 1;
             hero.speedBonus += 1;
             hero.healRatio += 1;
+            EffectEngine.addStacks(hero, 'collection_stat_6', 1);
             scene.appendLog(`🏅 [收集達成] 數值類獎勵達 6 個！全數值再 +1！`, 'system');
         }
     },
@@ -638,6 +640,7 @@ export const COLLECTION_MILESTONES = [
         apply: (scene) => {
             ['blessing_guardian', 'blessing_desperation', 'blessing_tyrant', 'blessing_fortify', 'blessing_all_out']
                 .forEach(id => EffectEngine.addStacks(scene.hero, id, 1));
+            EffectEngine.addStacks(scene.hero, 'collection_blessing_4', 1);
             scene.appendLog(`🏅 [收集達成] 加護類獎勵達 4 個！全加護層數 +1！`, 'system');
         }
     },
@@ -649,6 +652,7 @@ export const COLLECTION_MILESTONES = [
         desc: '戰鬥開始時，第一張打出的卡片變 0 費',
         apply: (scene) => {
             scene.hero.firstCardFreeEachBattle = true; // TODO：第5階段串接到 BattleScene 的出牌邏輯
+            EffectEngine.addStacks(scene.hero, 'collection_card_2', 1);
             scene.appendLog(`🏅 [收集達成] 卡片類獎勵達 2 個！戰鬥開始時第一張卡片變 0 費！`, 'system');
         }
     }

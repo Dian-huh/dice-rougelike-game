@@ -75,4 +75,20 @@ export class DeckSystem {
         this.discardPile.push(card);
         return card;
     }
+
+    // 查看用：把 originalDeck 依卡片名稱分組計數，供「查看牌組」面板使用
+    getCollectionSummary() {
+        const groups = [];
+        const indexByName = new Map();
+        this.originalDeck.forEach(card => {
+            if (indexByName.has(card.name)) {
+                groups[indexByName.get(card.name)].count += 1;
+            } else {
+                indexByName.set(card.name, groups.length);
+                groups.push({ card, count: 1 });
+            }
+        });
+        return groups;
+    }
+
 }

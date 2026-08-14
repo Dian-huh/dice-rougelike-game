@@ -56,6 +56,11 @@ export class BattleScene extends Phaser.Scene {
 
         // 🟢 新增：常駐「查看教學」按鈕，玩家隨時可重看，不受 localStorage 旗標影響
         this.tutorialBtn = this.createButton(700, 5, '📖 教學', () => this.openTutorial());
+        this.blessingBtn = this.createButton(700, 40, '🔱 查看加護', () => this.toggleBlessingPanel());
+        this.blessingPanelContainer = null;
+        this.deckBtn = this.createButton(700, 75, '🎴 查看牌組', () => this.toggleDeckPanel());
+        this.deckPanelContainer = null;
+
 
         this.appendLog(`⚔️ 進入關卡【${this.currentStage.name}】！遇到 ${this.enemies.length} 個敵人！`, 'system');
 
@@ -76,6 +81,136 @@ export class BattleScene extends Phaser.Scene {
         TutorialSystem.showTutorialUI(this, () => {
             // 關閉即可，不需要重新開始回合或做任何遊戲狀態異動
         });
+    }
+
+    toggleBlessingPanel() {
+        if (this.blessingPanelContainer) {
+            this.blessingPanelContainer.destroy();
+            this.blessingPanelContainer = null;
+            return;
+        }
+        if (this.isPickingTarget || this.rerollPromptContainer) return;
+
+        const effects = EffectEngine.getVisibleEffects(this.hero);
+        const container = this.add.container(0, 0).setDepth(1800);
+        const overlay = this.add.rectangle(425, 275, 850, 550, 0x000000, 0.9).setInteractive();
+        const title = this.add.text(425, 50, '🔱 目前持有的加護 / 被動', { fontSize: '18px', fill: '#ffcc00' }).setOrigin(0.5);
+        container.add([overlay, title]);
+
+        if (effects.length === 0) {
+            const emptyText = this.add.text(425, 150, '目前沒有任何加護或被動效果。', { fontSize: '14px', fill: '#aaaaaa' }).setOrigin(0.5);
+            container.add(emptyText);
+        } else {
+            effects.forEach((e, idx) => {
+                const y = 100 + idx * 36;
+                const line = this.add.text(150, y, `• ${e.statusText}`, { fontSize: '14px', fill: '#eeeeee', wordWrap: { width: 550 } });
+                container.add(line);
+            });
+        }
+
+        const closeBtn = this.add.text(425, 480, '[ 關閉 ]', {
+            fontSize: '15px', fill: '#ff6666', backgroundColor: '#222', padding: { x: 12, y: 6 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => {
+              container.destroy();
+              this.blessingPanelContainer = null;
+          });
+        container.add(closeBtn);
+
+        this.blessingPanelContainer = container;
+    }
+
+    toggleDeckPanel() {
+        if (this.deckPanelContainer) {
+            this.closeDeckPanel();
+            return;
+        }
+        if (this.isPickingTarget || this.rerollPromptContainer || this.blessingPanelContainer) return;
+
+        const groups = this.deckSys.getCollectionSummary();
+        const container = this.add.container(0, 0).setDepth(1800);
+        const overlay = this.add.rectangle(425, 275, 850, 550, 0x000000, 0.9).setInteractive();
+        const title = this.add.text(425, 25, `🎴 目前牌組收藏 (${this.deckSys.originalDeck.length}/${this.hero.deckCapacity || '∞'})`, { fontSize: '16px', fill: '#ffcc00' }).setOrigin(0.5);
+        container.add([overlay, title]);
+
+        // 🟢 可捲動區域：卡片群組全部放進 gridContainer，viewport 外的部分靠遮罩隱藏
+        const viewportX = 20, viewportY = 60, viewportW = 810, viewportH = 400;
+        const gridContainer = this.add.container(0, 0);
+        container.add(gridContainer);
+
+        const perRow = 5;
+        groups.forEach((g, idx) => {
+            const col = idx % perRow;
+            const row = Math.floor(idx / perRow);
+            const x = 90 + col * 140;
+            const y = viewportY + 40 + row * 95;
+
+            const { cost } = CombatSystem.getDisplayCost(g.card, this.hero, this.battleCtx);
+            const costLabel = (typeof g.card.getCost === 'function') ? `${cost}費(浮動)` : `${cost}費`;
+            const countLabel = g.count > 1 ? ` x${g.count}` : '';
+
+            const cardBg = this.add.rectangle(x, y, 120, 78, 0x222233).setStrokeStyle(2, 0x00ffff);
+            const nameText = this.add.text(x - 55, y - 33, `${g.card.name}${countLabel}`, { fontSize: '12px', fill: '#fff', wordWrap: { width: 110 } });
+            const costText = this.add.text(x - 55, y - 14, costLabel, { fontSize: '10px', fill: '#66ccff' });
+            const descText = this.add.text(x - 55, y + 2, g.card.desc, { fontSize: '9px', fill: '#aaaaaa', wordWrap: { width: 110 } });
+
+            gridContainer.add([cardBg, nameText, costText, descText]);
+        });
+
+        // 遮罩：只顯示 viewport 範圍內的內容
+        const maskGraphics = this.add.graphics();
+        maskGraphics.fillStyle(0xffffff);
+        maskGraphics.fillRect(viewportX, viewportY, viewportW, viewportH);
+        maskGraphics.setVisible(false);
+        gridContainer.setMask(maskGraphics.createGeometryMask());
+
+        // 捲動範圍計算
+        const totalRows = Math.ceil(groups.length / perRow);
+        const totalContentHeight = totalRows * 95;
+        const maxScroll = Math.max(0, totalContentHeight - viewportH + 40);
+
+        const scrollBy = (delta) => {
+            const newY = Phaser.Math.Clamp(gridContainer.y - delta, -maxScroll, 0);
+            gridContainer.y = newY;
+        };
+
+        // 滑鼠滾輪（桌面）
+        this._deckWheelHandler = (pointer, objs, dx, dy) => scrollBy(-dy * 0.5);
+        this.input.on('wheel', this._deckWheelHandler);
+
+        // 上下按鈕（觸控/手機）
+        if (maxScroll > 0) {
+            const upBtn = this.add.text(810, viewportY + 20, '▲', { fontSize: '20px', fill: '#66ccff', backgroundColor: '#222', padding: { x: 6, y: 4 } })
+                .setInteractive({ useHandCursor: true }).on('pointerdown', () => scrollBy(95));
+            const downBtn = this.add.text(810, viewportY + viewportH - 20, '▼', { fontSize: '20px', fill: '#66ccff', backgroundColor: '#222', padding: { x: 6, y: 4 } })
+                .setInteractive({ useHandCursor: true }).on('pointerdown', () => scrollBy(-95));
+            container.add([upBtn, downBtn]);
+        }
+
+        const closeBtn = this.add.text(425, 505, '[ 關閉 ]', {
+            fontSize: '15px', fill: '#ff6666', backgroundColor: '#222', padding: { x: 12, y: 6 }
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => this.closeDeckPanel());
+        container.add(closeBtn);
+
+        this.deckPanelContainer = container;
+        this._deckMaskGraphics = maskGraphics;
+    }
+
+    // 🟢 統一收尾：銷毀面板、遮罩，並解除 wheel 監聽（避免累積殘留監聽器）
+    closeDeckPanel() {
+        if (this._deckWheelHandler) {
+            this.input.off('wheel', this._deckWheelHandler);
+            this._deckWheelHandler = null;
+        }
+        if (this._deckMaskGraphics) {
+            this._deckMaskGraphics.destroy();
+            this._deckMaskGraphics = null;
+        }
+        if (this.deckPanelContainer) {
+            this.deckPanelContainer.destroy();
+            this.deckPanelContainer = null;
+        }
     }
 
     getCurrentTarget() {

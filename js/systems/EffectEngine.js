@@ -31,6 +31,20 @@ export const EffectEngine = {
         });
     },
 
+    // 查看用：回傳所有「有標記顯示資訊」的效果，供 UI 面板渲染，不做任何寫入
+    getVisibleEffects(hero) {
+        const effects = hero.activeEffects || [];
+        return effects
+            .filter(entry => {
+                const def = EFFECT_REGISTRY[entry.id];
+                return def && def.displayName && typeof def.getStatusText === 'function';
+            })
+            .map(entry => {
+                const def = EFFECT_REGISTRY[entry.id];
+                return { name: def.displayName, statusText: def.getStatusText(entry) };
+            });
+    },
+
     // 即時查詢型：加總所有 liveStatModifier 對指定 statName 的加成
     getLiveStatBonus(entity, statName) {
         const effects = entity.activeEffects || [];
