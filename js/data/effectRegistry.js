@@ -112,6 +112,21 @@ export const EFFECT_REGISTRY = {
         }
     },
 
+    swordsman_petal_shadow: {
+        category: 'CARD_EFFECT',
+        liveStatModifier: (hero, entry, statName) => (statName === 'speed' ? 1 : 0),
+        onTurnStart: (hero, entry, ctx) => {
+            if (entry.stacks <= 0) return;
+            hero.insightStacks = Math.min(1, (hero.insightStacks || 0) + 1);
+            ctx.log(`🌸 [槿花泡影] 回合開始，獲得【慧眼】(剩餘 ${entry.stacks} 回合)`, 'system');
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                hero.activeEffects = hero.activeEffects.filter(e => e !== entry);
+                ctx.log(`🌸 [槿花泡影] 效果已結束`, 'system');
+            }
+        }
+    },
+
     // ================= COLLECTION（純顯示標記，實際效果已在達成當下直接套用到hero欄位） =================
     collection_stat_4: {
         category: 'COLLECTION',

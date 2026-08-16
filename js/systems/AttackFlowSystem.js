@@ -7,7 +7,7 @@ const ATTACK_DICE_IDS = [1, 3, 4, 6];
 export const AttackFlowSystem = {
     // 入口：開始一次攻擊骰結算流程
     begin(ctx) {
-        ctx._flow = { timesRemaining: ctx.hero.atkCount };
+        ctx._flow = { timesRemaining: ctx.hero.atkCount, pendingReattacks: 0 };  // 🟢 新增 pendingReattacks
         ctx.hero.atkCount = 1;
         return this._startAction(ctx);
     },
@@ -25,15 +25,33 @@ export const AttackFlowSystem = {
 
     // === 對應原 runAttackPhaseStep 前半：擲骰、判斷是否可重骰 ===
     _startAction(ctx) {
+    const { hero, enemies } = ctx;
+    const flow = ctx._flow;
+
+    if (enemies.every(e => e.hp <= 0) || hero.hp <= 0 || flow.timesRemaining <= 0) {
+        ctx._flow = null;
+        return { type: 'DONE' };
+    }
+
+    flow.timesRemaining -= 1;
+    return this._rollAndProceed(ctx);
+},
+
+    // 🟢 新增：再攻擊專用啟動點，不消耗 timesRemaining（那是「攻擊次數UP」的額度，跟角色技能觸發的額外攻擊是兩回事）
+    _startReattack(ctx) {
         const { hero, enemies } = ctx;
-        const flow = ctx._flow;
-
-        if (enemies.every(e => e.hp <= 0) || hero.hp <= 0 || flow.timesRemaining <= 0) {
-            ctx._flow = null;
-            return { type: 'DONE' };
+        if (enemies.every(e => e.hp <= 0) || hero.hp <= 0) {
+            ctx._flow.pendingReattacks = 0;
+            ctx._flow.stage = 'WAIT_UPDATE';
+            return { type: 'ACTION_UPDATE' };
         }
+        return this._rollAndProceed(ctx);
+    },
 
-        flow.timesRemaining -= 1;
+    // 🟢 從原 _startAction 拆出來，一般攻擊與再攻擊共用同一套擲骰＋重骰判斷
+    _rollAndProceed(ctx) {
+        const { hero } = ctx;
+        const flow = ctx._flow;
 
         let actionDice;
         let allowReroll = true;
@@ -154,7 +172,17 @@ export const AttackFlowSystem = {
             hero.battleAtkBonus -= firstStrikeBonus;
         }
 
-        ctx._flow.stage = 'WAIT_UPDATE';
+        return this._finishActionSegment(ctx);
+    },
+
+    // 🟢 新增：一段攻擊骰行動結束後的收尾——有排隊中的「再攻擊」就接著跑新一輪擲骰，沒有才交還畫面
+    _finishActionSegment(ctx) {
+        const flow = ctx._flow;
+        if (flow.pendingReattacks > 0) {
+            flow.pendingReattacks -= 1;
+            return this._startReattack(ctx);
+        }
+        flow.stage = 'WAIT_UPDATE';
         return { type: 'ACTION_UPDATE' };
     },
 
@@ -187,7 +215,7 @@ export const AttackFlowSystem = {
                     pActionLog.push(`💨 ${enemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`);
                 } else {
                     const pSkill = hero.diceSkills[actionDice];
-                    if (pSkill) pSkill.execute(hero, enemy, CombatSystem, (m) => pActionLog.push(m));
+                    if (pSkill) pSkill.execute(hero, enemy, CombatSystem, (m) => pActionLog.push(m), ctx._flow, ctx.enemies);
                 }
             }
             
@@ -211,7 +239,7 @@ export const AttackFlowSystem = {
             return;
         }
 
-        skill.execute(hero, targetEnemy, CombatSystem, (m) => ctx.log(m, 'player'));
+        skill.execute(hero, targetEnemy, CombatSystem, (m) => ctx.log(m, 'player'), ctx._flow, ctx.enemies);
         CombatSystem.tickPoison(hero, (m) => ctx.log(m, 'player'));
     },
 

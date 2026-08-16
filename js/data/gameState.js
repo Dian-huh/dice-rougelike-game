@@ -11,7 +11,7 @@ export const gameState = {
     currentFloor: 1,
 
     // 🟢 新增 characterId 參數，預設 'hero' 保持向下相容（現有呼叫端不用馬上全部改）
-    initNewGame(characterId = 'hero') {
+    initNewGame(characterId = 'swordsman') {
         const charData = getCharacterData(characterId);
         const charDeck = getCharacterDeck(characterId);
 

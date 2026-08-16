@@ -169,9 +169,14 @@ export class CombatSystem {
 
     static applyDamageToTarget(target, rawDmg, logCallback, enemies) {   // 🟢 Stage 5-6：新增 enemies 參數
         // 1. 🌀 閃避判定
+        // 1. 🌀 閃避判定
         if (target.dodgeCount && target.dodgeCount > 0) {
             target.dodgeCount -= 1;
             if (logCallback) logCallback(`🌀 發動【閃避】！完全免疫本次 ${rawDmg} 點傷害`);
+            // 🟢 新增：角色專屬「閃避成功」被動掛勾（只有定義了 onDodgeSuccess 的角色才會觸發，目前僅劍豪）
+            if (typeof target.onDodgeSuccess === 'function') {
+                target.onDodgeSuccess(enemies, logCallback, this);
+            }
             return;
         }
 
@@ -278,6 +283,13 @@ export class CombatSystem {
         hero.dodgeCount = 0;
         hero.armorHits = 0;
         hero.isVulnerable = false;
+
+        // 🟢 新增：劍豪專屬的單場戰鬥狀態，勇者身上沒有這些欄位，設定不影響勇者
+        hero.stance = 'SHEATHED';
+        hero.swordIntent = 0;
+        hero.insightStacks = 0;
+        hero.turnCritBonus = 0;
+        hero.forceCritThisTurn = false;
 
         // 🟢 欄位生命週期稽核補上：以下 6 個欄位理論上會在戰鬥流程中被消耗歸零，
         // 但若戰鬥在「已設定、尚未被消耗」的狀態下結束，殘留值會直接帶進下一場戰鬥

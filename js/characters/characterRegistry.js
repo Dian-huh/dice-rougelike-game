@@ -6,12 +6,12 @@
 
 import { HERO_DATA } from './hero/heroData.js';
 import { HERO_DECK } from './hero/heroCards.js';
-// import { MAGE_DATA } from './mage/mageData.js';
-// import { MAGE_DECK } from './mage/mageCards.js';
+import { SWORDSMAN_DATA } from './swordsman/swordsmanData.js';
+import { SWORDSMAN_DECK } from './swordsman/swordsmanCards.js';
 
 export const CHARACTER_REGISTRY = {
     hero: { data: HERO_DATA, deck: HERO_DECK },
-    // mage: { data: MAGE_DATA, deck: MAGE_DECK },
+    swordsman: { data: SWORDSMAN_DATA, deck: SWORDSMAN_DECK },
 };
 
 export function getCharacterData(characterId) {

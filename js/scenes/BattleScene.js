@@ -342,6 +342,14 @@ export class BattleScene extends Phaser.Scene {
             this.appendLog(`⚠️ 主動技能冷卻中！還需等待 ${this.hero.cdActiveSkill} 回合`, 'system');
             return;
         }
+
+        // 🟢 新增：角色若定義了 useActiveSkill，代表主動技能不需要選項面板（例如劍豪的型態切換），直接執行
+        if (typeof this.hero.useActiveSkill === 'function') {
+            this.hero.useActiveSkill(CombatSystem, (m) => this.appendLog(m, 'player'));
+            this.updateUI();
+            return;
+        }
+
         this.pickerContainer.setVisible(!this.pickerContainer.visible);
     }
 
