@@ -1,6 +1,7 @@
 export const HERO_DATA = {
     id: 'hero',
     name: '勇者',
+    description: '均衡型角色，技能組完整涵蓋攻擊、防禦與聖痕流派，適合新手熟悉戰鬥系統。',
     hp: 20, maxHp: 20,
     atk: 3,
     critBonus: 2,

@@ -1,24 +1,72 @@
 import { NODE_TYPES } from '../data/mapData.js';
 import { gameState } from '../data/gameState.js';
-import { EVENT_DATABASE } from '../data/eventData.js'; 
+import { EVENT_DATABASE } from '../data/eventData.js';
+import { getAllCharacterIds, getCharacterData } from '../characters/characterRegistry.js';   // 🟢 這行要存在
 
 export class MapScene extends Phaser.Scene {
     constructor() { 
         super({ key: 'MapScene' }); 
     }
 
-    // 修改後
     create() {
-        // 1. 如果全域狀態尚未初始化（例如頁面剛載入/重整），先嘗試讀取存檔，
-        //    讀不到才視為全新玩家，啟動新遊戲
         if (!gameState.mapData) {
             const loaded = gameState.tryLoadSave();
             if (!loaded) {
-                gameState.initNewGame();
+                this.showCharacterSelectUI();   // 🔴 改動：不再直接 initNewGame()，先跳選角
+                return;
             }
         }
+        this.renderMapUI();
+    }
 
-        this.renderMapUI();   // 🟢 補上：畫出地圖節點，否則畫面永遠是空的
+    // ============================================================
+    // 🟢 新增：選角UI —— 動態依 characterRegistry 產生卡片，未來加角色不用改這裡
+    // ============================================================
+    showCharacterSelectUI() {
+        const container = this.add.container(0, 0).setDepth(2000);
+        const overlay = this.add.rectangle(425, 275, 850, 550, 0x000000, 0.95);
+        const title = this.add.text(425, 45, '⚔️ 請選擇你的冒險者', { fontSize: '22px', fill: '#ffcc00' }).setOrigin(0.5);
+        container.add([overlay, title]);
+
+        const ids = getAllCharacterIds();
+        const cardWidth = 220, cardHeight = 380, gap = 30;
+        const totalWidth = ids.length * cardWidth + (ids.length - 1) * gap;
+        const startX = 425 - totalWidth / 2 + cardWidth / 2;
+        const y = 290;
+
+        ids.forEach((id, idx) => {
+            const data = getCharacterData(id);
+            const x = startX + idx * (cardWidth + gap);
+
+            const cardBg = this.add.rectangle(x, y, cardWidth, cardHeight, 0x222233)
+                .setStrokeStyle(2, 0x00ffff)
+                .setInteractive({ useHandCursor: true });
+
+            const nameText = this.add.text(x, y - 160, data.name, { fontSize: '19px', fill: '#ffffff' }).setOrigin(0.5);
+
+            const statsText = this.add.text(x, y - 60,
+                `HP: ${data.maxHp}\n攻擊力: ${data.atk}\n魔力: ${data.maxMana}\n爆擊增益: +${data.critBonus || 0}\n速度加值: +${data.speedBonus || 0}\n攻擊次數: ${data.atkCount || 1}`,
+                { fontSize: '13px', fill: '#aaddff', align: 'center', lineSpacing: 6 }
+            ).setOrigin(0.5);
+
+            const descText = this.add.text(x, y + 100, data.description || '', {
+                fontSize: '12px', fill: '#cccccc', align: 'center',
+                wordWrap: { width: cardWidth - 30 , useAdvancedWrap: true }, lineSpacing: 4
+            }).setOrigin(0.5);
+
+            const selectBtn = this.add.text(x, y + 165, '[ 選擇此角色 ]', {
+                fontSize: '14px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 10, y: 6 }
+            }).setOrigin(0.5);
+
+            cardBg.on('pointerdown', () => this.onCharacterChosen(id, container));
+            container.add([cardBg, nameText, statsText, descText, selectBtn]);
+        });
+    }
+
+    onCharacterChosen(characterId, container) {
+        gameState.initNewGame(characterId);
+        container.destroy();
+        this.renderMapUI();
     }
 
     renderMapUI() {

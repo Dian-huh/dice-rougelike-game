@@ -127,6 +127,30 @@ export const EFFECT_REGISTRY = {
         }
     },
 
+    swordsman_lonely_inaction: {
+        category: 'CARD_EFFECT',
+        displayName: '寂寞無為',
+        getStatusText: (entry) => `寂寞無為 (剩餘 ${entry.stacks} 回合，閃避成功額外反擊5點)`,
+        onTurnStart: (hero, entry, ctx) => {
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                hero.activeEffects = hero.activeEffects.filter(e => e !== entry);
+                ctx.log(`🌀 [寂寞無為] 效果已結束`, 'system');
+            }
+        },
+        onDodgeSuccess: (hero, entry, ctx) => {
+            if (!(entry.stacks > 0)) return;
+            const aliveEnemies = (ctx.enemies || []).filter(e => e.hp > 0);
+            if (aliveEnemies.length === 0) return;
+            const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+            ctx.log(`🌀 [寂寞無為] 閃避觸發反擊，對 ${target.name} 造成 5 點傷害！`, 'system');
+            ctx.combatSys.applyDamageToTarget(target, 5, ctx.log, ctx.enemies);
+            hero.swordIntent = Math.max(0, Math.min(10, (hero.swordIntent || 0) + 1));
+            hero.insightStacks = Math.min(1, (hero.insightStacks || 0) + 1);
+            ctx.log(`🗡️ [寂寞無為] 劍意+1，獲得【慧眼】`, 'system');
+        }
+    },
+
     // ================= COLLECTION（純顯示標記，實際效果已在達成當下直接套用到hero欄位） =================
     collection_stat_4: {
         category: 'COLLECTION',

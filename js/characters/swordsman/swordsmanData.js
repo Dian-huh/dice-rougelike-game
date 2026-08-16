@@ -46,6 +46,7 @@ function applyDrawnStanceBonus(hero, enemies, combatSys, log) {
 export const SWORDSMAN_DATA = {
     id: 'swordsman',
     name: '劍豪',
+    description: '高風險高回報的雙型態角色，透過切換【收刀】/【拔刀】狀態與經營【劍意】資源，打出爆發連段。血量偏低，須謹慎運用閃避反擊。',
     hp: 8, maxHp: 8,
     atk: 5,
     critBonus: 2,
@@ -117,7 +118,7 @@ export const SWORDSMAN_DATA = {
                 const insightBonus = consumeInsightBonus(hero, log);
                 let atkVal = combatSys.getEffectiveAtk(hero) + insightBonus;
                 if (hero.forceCritThisTurn) {
-                    atkVal += combatSys.getEffectiveCritBonus(hero) + (hero.turnCritBonus || 0);
+                    atkVal += combatSys.getEffectiveCritBonus(hero);
                     log(`🌸 [花風・薄紅舞] 本回合必定爆擊生效！`);
                 }
                 log(`⚔️ 觸發 [1:普通攻擊] 造成 ${atkVal} 點傷害`);
@@ -144,7 +145,7 @@ export const SWORDSMAN_DATA = {
                 } else {
                     // 千紫萬紅：劍意-3，造成單體爆擊傷害，再給予目標(劍意-3後的層數)次1點傷害
                     addSwordIntent(hero, -3);
-                    const critDmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero) + (hero.turnCritBonus || 0) + insightBonus;
+                    const critDmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero) + insightBonus;
                     log(`💥 觸發 [技能1:千紫萬紅] 造成 ${critDmg} 點爆擊傷害`);
                     combatSys.applyDamageToTarget(enemy, critDmg, log);
                     const hits = hero.swordIntent || 0;
@@ -161,7 +162,7 @@ export const SWORDSMAN_DATA = {
             scope: 'SINGLE_ENEMY',
             execute: (hero, enemy, combatSys, log, flowCtx, enemies) => {
                 const insightBonus = consumeInsightBonus(hero, log);
-                const critDmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero) + (hero.turnCritBonus || 0) + insightBonus;
+                const critDmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero) + insightBonus;
                 log(`💥 觸發 [3:爆擊攻擊] 造成 ${critDmg} 點傷害！`);
                 combatSys.applyDamageToTarget(enemy, critDmg, log);
                 applyPursuitBonus(hero, enemy, combatSys, log);
@@ -179,7 +180,8 @@ export const SWORDSMAN_DATA = {
                     hero.dodgeCount = (hero.dodgeCount || 0) + 3;
                     addSwordIntent(hero, 1);
                     hero.insightStacks = Math.min(1, (hero.insightStacks || 0) + 1);
-                    log(`🌀 觸發 [技能2:寂寞無為] 獲得 3 次閃避，劍意+1，獲得【慧眼】`);
+                    EffectEngine.addStacks(hero, 'swordsman_lonely_inaction', 3);   // 🟢 新增
+                    log(`🌀 觸發 [技能2:寂寞無為] 獲得 3 次閃避，劍意+1，獲得【慧眼】(接下來3回合，閃避成功額外反擊5點)`);
                 } else {
                     // 清風明月：劍意-3，全體爆擊傷害，敵全體CT-1，依CT被減少的敵人數獲得等量劍意
                     addSwordIntent(hero, -3);
@@ -187,7 +189,7 @@ export const SWORDSMAN_DATA = {
                     const aliveEnemies = (enemies || []).filter(e => e.hp > 0);
                     let ctReducedCount = 0;
                     aliveEnemies.forEach(en => {
-                        const dmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero) + (hero.turnCritBonus || 0) + insightBonus;
+                        const dmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero) + insightBonus;
                         combatSys.applyDamageToTarget(en, dmg, log);
                         if ((en.ct || 0) > 0) {
                             en.ct = Math.max(0, en.ct - 1);
@@ -236,7 +238,7 @@ export const SWORDSMAN_DATA = {
                     log(`⚔️ 觸發 [技能3:蝴蝶刃・萬華蝶] 造成 ${hits} 次 ${atkVal} 點傷害，消耗全部劍意`);
                     hero.swordIntent = 0;
                     if (insightBonus > 0 && enemy.hp > 0) {
-                        const critDmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero) + (hero.turnCritBonus || 0);
+                        const critDmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero);;
                         log(`👁️ 慧眼被消耗，追加 ${critDmg} 點爆擊傷害！`);
                         combatSys.applyDamageToTarget(enemy, critDmg, log);
                     }

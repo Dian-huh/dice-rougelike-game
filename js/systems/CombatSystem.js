@@ -173,10 +173,11 @@ export class CombatSystem {
         if (target.dodgeCount && target.dodgeCount > 0) {
             target.dodgeCount -= 1;
             if (logCallback) logCallback(`🌀 發動【閃避】！完全免疫本次 ${rawDmg} 點傷害`);
-            // 🟢 新增：角色專屬「閃避成功」被動掛勾（只有定義了 onDodgeSuccess 的角色才會觸發，目前僅劍豪）
             if (typeof target.onDodgeSuccess === 'function') {
                 target.onDodgeSuccess(enemies, logCallback, this);
             }
+            // 🟢 新增：讓「戰鬥內限時」的閃避連動效果（寂寞無為）跟角色固有被動分開掛勾
+            EffectEngine.runHook('onDodgeSuccess', target, { enemies, log: logCallback, combatSys: this });
             return;
         }
 
@@ -317,7 +318,7 @@ export class CombatSystem {
     }
 
     static getEffectiveCritBonus(hero) {
-        return (hero.critBonus || 0) + (hero.battleCritBonus || 0) + EffectEngine.getLiveStatBonus(hero, 'crit');
+        return (hero.critBonus || 0) + (hero.battleCritBonus || 0) + (hero.turnCritBonus || 0) + EffectEngine.getLiveStatBonus(hero, 'crit');
     }
 
     static getEffectiveSpeedBonus(hero) {

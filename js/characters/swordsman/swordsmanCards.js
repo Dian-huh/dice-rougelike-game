@@ -31,26 +31,33 @@ const SWORDSMAN_CARD_DEFS = [
             log(`🌸 效果發動：本回合爆擊增益+2，且必定觸發爆擊加成`);
         }
     },
-    // ⚠️ 這張目前沒有實作，見文末說明——需要一個新的「選骰UI」才能正確做「指定點數」
     {
         id: 4, name: '花風・比翼舞', cost: 2,
-        desc: '劍意-2，指定自己下次攻擊骰的點數 (每5層劍意，此卡費用-1) 【未實作，需要新UI】',
+        desc: '劍意-2，指定自己下次攻擊骰的點數 (每5層劍意，此卡費用-1)',
         scope: 'SELF', tags: [],
-        implemented: false,
+        implemented: true,
+        minSwordIntent: 2,
         getCost: (hero) => Math.max(0, 2 - Math.floor((hero.swordIntent || 0) / 5)),
-        onPlay: (hero, enemy, combatSys, deckSys, log) => {
-            log(`⚠️ 花風・比翼舞尚未實作（需要選骰UI），本次出牌沒有效果`);
+        onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
+            hero.swordIntent = Math.max(0, (hero.swordIntent || 0) - 2);
+            log(`🌸 效果發動：劍意-2 (現為 ${hero.swordIntent} 層)，請指定下次攻擊骰點數`);
+            if (scene) {
+                scene.openDicePicker('花風・比翼舞：指定下次攻擊骰點數 (1~6):', (i) => {
+                    hero.overrideDice = i;
+                    log(`🌸 已指定下次攻擊骰為【 ${i} 】點`);
+                    scene.updateUI();
+                });
+            }
         }
     },
     {
-        id: 5, name: '瞬・連擊', cost: 2, desc: '劍意-3，擲一次攻擊骰並執行',
+        id: 5, name: '瞬・連擊', cost: 2, desc: '劍意-3，擲一次攻擊骰並執行(不比速度、敵方不反應)',
         scope: 'SELF', tags: [],
+        minSwordIntent: 3,   // 🟢 新增：出牌前檢查用
         onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
             hero.swordIntent = Math.max(0, (hero.swordIntent || 0) - 3);
             log(`🗡️ 效果發動：劍意-3，觸發一次攻擊骰行動！`);
-            if (scene && !scene._attackFlowRunning && !scene.isPickingTarget) {
-                scene.resolveAttackPhase();
-            }
+            if (scene) scene.triggerSoloAttack();
         }
     },
     {

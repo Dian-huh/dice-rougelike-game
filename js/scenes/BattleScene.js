@@ -152,7 +152,7 @@ export class BattleScene extends Phaser.Scene {
             const cardBg = this.add.rectangle(x, y, 120, 78, 0x222233).setStrokeStyle(2, 0x00ffff);
             const nameText = this.add.text(x - 55, y - 33, `${g.card.name}${countLabel}`, { fontSize: '12px', fill: '#fff', wordWrap: { width: 110 } });
             const costText = this.add.text(x - 55, y - 14, costLabel, { fontSize: '10px', fill: '#66ccff' });
-            const descText = this.add.text(x - 55, y + 2, g.card.desc, { fontSize: '9px', fill: '#aaaaaa', wordWrap: { width: 110 } });
+            const descText = this.add.text(x - 55, y + 2, g.card.desc, { fontSize: '9px', fill: '#aaaaaa', wordWrap: { width: 110 , useAdvancedWrap: true } });
 
             gridContainer.add([cardBg, nameText, costText, descText]);
         });
@@ -314,26 +314,38 @@ export class BattleScene extends Phaser.Scene {
     createSkillPickerUI() {
         this.pickerContainer = this.add.container(200, 160);
         let bg = this.add.rectangle(180, 40, 420, 90, 0x000000, 0.95).setStrokeStyle(2, 0xffcc00);
-        let title = this.add.text(10, 5, '請選擇下一次攻擊骰的指定數字 (1~6):', { fontSize: '14px', fill: '#ffcc00' });
-        this.pickerContainer.add([bg, title]);
+        this.pickerTitleText = this.add.text(10, 5, '請選擇下一次攻擊骰的指定數字 (1~6):', { fontSize: '14px', fill: '#ffcc00' });
+        this.pickerContainer.add([bg, this.pickerTitleText]);
 
         for (let i = 1; i <= 6; i++) {
             let btn = this.add.text((i - 1) * 65 + 15, 35, `[ ${i} ]`, { fontSize: '20px', fill: '#ffffff', backgroundColor: '#333' })
                 .setInteractive({ useHandCursor: true })
                 .on('pointerdown', () => {
-                    this.hero.overrideDice = i;
-                    this.hero.cdActiveSkill = 3;
                     this.pickerContainer.setVisible(false);
-                    this.appendLog(`✨ [主動技能] 指定下次攻擊骰為【 ${i} 】點`, 'player');
-                    this.updateUI();
+                    const cb = this._dicePickerOnChosen;
+                    this._dicePickerOnChosen = null;   // 🔴 一定要在呼叫cb「之前」先清空，避免殘留
+                    if (cb) {
+                        cb(i);
+                    } else {
+                        this.hero.overrideDice = i;
+                        this.hero.cdActiveSkill = 3;
+                        this.appendLog(`✨ [主動技能] 指定下次攻擊骰為【 ${i} 】點`, 'player');
+                        this.updateUI();
+                    }
                 });
             this.pickerContainer.add(btn);
         }
         this.pickerContainer.setDepth(100).setVisible(false);
     }
 
+    openDicePicker(title, onChosen) {
+        if (this.pickerTitleText) this.pickerTitleText.setText(title);
+        this._dicePickerOnChosen = onChosen;   // 🔴 必須在 setVisible(true) 之前設定好
+        this.pickerContainer.setVisible(true);
+    }
+
     toggleSkillPicker() {
-        if (this.isPickingTarget || this.rerollPromptContainer) return; // 🟢 加上重骰確認框判定
+        if (this.isPickingTarget || this.rerollPromptContainer) return;
         if (this.hero.isPressured) {
             this.appendLog(`⚠️ 受到【威壓】封印，本回合無法使用主動技能`, 'system');
             return;
@@ -342,15 +354,16 @@ export class BattleScene extends Phaser.Scene {
             this.appendLog(`⚠️ 主動技能冷卻中！還需等待 ${this.hero.cdActiveSkill} 回合`, 'system');
             return;
         }
-
-        // 🟢 新增：角色若定義了 useActiveSkill，代表主動技能不需要選項面板（例如劍豪的型態切換），直接執行
         if (typeof this.hero.useActiveSkill === 'function') {
             this.hero.useActiveSkill(CombatSystem, (m) => this.appendLog(m, 'player'));
             this.updateUI();
             return;
         }
-
-        this.pickerContainer.setVisible(!this.pickerContainer.visible);
+        if (this.pickerContainer.visible) {
+            this.pickerContainer.setVisible(false);
+        } else {
+            this.openDicePicker('請選擇下一次攻擊骰的指定數字 (1~6):', null);
+        }
     }
 
     startNewTurn() {
@@ -412,7 +425,7 @@ export class BattleScene extends Phaser.Scene {
                 .on('pointerdown', () => this.playCard(index));
 
             let title = this.add.text(index * 130 + 5, 10, `${card.name} (${effCost}費${isFreeFirstCard ? '🏅' : ''})`, { fontSize: '13px', fill: '#fff' });
-            let desc = this.add.text(index * 130 + 5, 30, card.desc, { fontSize: '11px', fill: '#aaa', wordWrap: { width: 110 } });
+            let desc = this.add.text(index * 130 + 5, 30, card.desc, { fontSize: '11px', fill: '#aaa', wordWrap: { width: 110 ,useAdvancedWrap: true } });
 
             this.handContainer.add([cardBg, title, desc]);
         });
@@ -423,6 +436,7 @@ export class BattleScene extends Phaser.Scene {
     // ============================================================
 
     renderEnemyUI() {
+        if (this.isPickingTarget) return;
         if (this.enemyDisplays) {
             this.enemyDisplays.forEach(d => d.container.destroy());
         }
@@ -502,6 +516,12 @@ export class BattleScene extends Phaser.Scene {
             return;
         }
 
+         // 🟢 新增：卡片可宣告 minSwordIntent，劍意不足就擋下（目前僅劍豪卡片使用）
+        if (card.minSwordIntent && (this.hero.swordIntent || 0) < card.minSwordIntent) {
+            this.appendLog(`⚠️ 劍意不足 ${card.minSwordIntent}，無法使用 [${card.name}]`, 'system');
+            return;
+        }
+
         const scope = card.scope || 'SELF';
         const aliveEnemies = this.enemies.filter(e => e.hp > 0);
 
@@ -546,6 +566,24 @@ export class BattleScene extends Phaser.Scene {
     // 🟢 B2重構：攻擊骰結算改由 AttackFlowSystem 驅動狀態機，
     // BattleScene 只負責畫面互動（顯示目標選擇/重骰確認框）與收尾流程控制
     // ============================================================
+
+    // 🟢 新增：卡片/技能觸發的「偷打」——不比速度、敵方不反應，跟主攻擊流程分開但共用目標選擇UI
+    triggerSoloAttack() {
+        if (this.isPickingTarget || this.rerollPromptContainer) return;
+        this.runSoloStep(AttackFlowSystem.beginSolo(this.battleCtx));
+    }
+
+    runSoloStep(step) {
+        if (step.type === 'NEED_TARGET') {
+            this.showEnemyTargetPicker(step.candidates, (target) => {
+                this.runSoloStep(AttackFlowSystem.resumeSolo(this.battleCtx, { target }));
+            });
+        } else {
+            this.updateUI();
+            this.checkBattleEnd();
+        }
+    }
+
 
     resolveAttackPhase() {
         if (this.isPickingTarget || this._attackFlowRunning || this.rerollPromptContainer) return;
@@ -676,10 +714,10 @@ export class BattleScene extends Phaser.Scene {
           .on('pointerdown', () => this.restartGame());
     }
 
-    // 🟢 統一的「重新開始」邏輯：清空對話框、重置全域存檔、回到地圖場景
+    // 🟢 統一的「重新開始」邏輯：清空對話框、重置全域狀態、回到地圖場景讓玩家重新選角
     restartGame() {
         this.removeChatLogUI();
-        gameState.initNewGame();
+        gameState.resetToCharacterSelect();   // 🔴 改動：不再直接 initNewGame()（原本會固定角色）
         this.scene.start('MapScene');
         this.scene.stop('BattleScene');
     }
@@ -711,7 +749,14 @@ export class BattleScene extends Phaser.Scene {
         let statusText = '';
         if (this.hero.poisonTurns > 0) statusText += ` 🤢[劇毒x${this.hero.poisonTurns}]`;
         if (this.hero.isPressured) statusText += ` 😱[威壓中]`;
-        if (this.hero.stigma > 0) statusText += ` 🔱[聖痕x${this.hero.stigma}]`; // 🟢 新增
+        if (this.hero.stigma > 0) statusText += ` 🔱[聖痕x${this.hero.stigma}]`; 
+
+        if (this.hero.stance !== undefined) {
+            statusText += this.hero.stance === 'DRAWN' ? ` 🗡️[拔刀]` : ` 🛡️[收刀]`;
+        }
+        if (this.hero.swordIntent > 0) statusText += ` 💠[劍意x${this.hero.swordIntent}]`;
+        if (this.hero.insightStacks > 0) statusText += ` 👁️[慧眼]`;
+        if (this.hero.forceCritThisTurn) statusText += ` 🌸[必定爆擊-本回合]`;
 
         // 改成：
         const effAtk = CombatSystem.getEffectiveAtk(this.hero);
