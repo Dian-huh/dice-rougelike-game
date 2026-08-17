@@ -2,7 +2,7 @@
 
 const SWORDSMAN_CARD_DEFS = [
     {
-        id: 1, name: '型態切換', cost: 0, desc: '切換收刀/拔刀狀態，抽1張牌，劍意+1',
+        id: 'KG_01', name: '型態切換', cost: 0, desc: '切換收刀/拔刀狀態，抽1張牌，劍意+1',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             hero.stance = hero.stance === 'DRAWN' ? 'SHEATHED' : 'DRAWN';
@@ -12,7 +12,7 @@ const SWORDSMAN_CARD_DEFS = [
         }
     },
     {
-        id: 2, name: '槿花泡影', cost: 2, desc: '接下來3T內，速度+1，回合開始時獲得慧眼',
+        id: 'KG_02', name: '槿花泡影', cost: 2, desc: '接下來3T內，速度+1，回合開始時獲得慧眼',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             hero.activeEffects = hero.activeEffects || [];
@@ -23,7 +23,7 @@ const SWORDSMAN_CARD_DEFS = [
         }
     },
     {
-        id: 3, name: '花風・薄紅舞', cost: 1, desc: '此回合爆擊增益+2、必定爆擊',
+        id: 'KG_03', name: '花風・薄紅舞', cost: 1, desc: '此回合爆擊增益+2、必定爆擊',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             hero.turnCritBonus = (hero.turnCritBonus || 0) + 2;
@@ -32,7 +32,7 @@ const SWORDSMAN_CARD_DEFS = [
         }
     },
     {
-        id: 4, name: '花風・比翼舞', cost: 2,
+        id: 'KG_04', name: '花風・比翼舞', cost: 2,
         desc: '劍意-2，指定自己下次攻擊骰的點數 (每5層劍意，此卡費用-1)',
         scope: 'SELF', tags: [],
         implemented: true,
@@ -51,7 +51,7 @@ const SWORDSMAN_CARD_DEFS = [
         }
     },
     {
-        id: 5, name: '瞬・連擊', cost: 2, desc: '劍意-3，擲一次攻擊骰並執行(不比速度、敵方不反應)',
+        id: 'KG_05', name: '瞬・連擊', cost: 2, desc: '劍意-3，擲一次攻擊骰並執行(不比速度、敵方不反應)',
         scope: 'SELF', tags: [],
         minSwordIntent: 3,   // 🟢 新增：出牌前檢查用
         onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
@@ -61,7 +61,7 @@ const SWORDSMAN_CARD_DEFS = [
         }
     },
     {
-        id: 6, name: '風之低語', cost: 1, desc: '閃避+1，回復2，劍意+1',
+        id: 'KG_06', name: '風之低語', cost: 1, desc: '閃避+1，回復2，劍意+1',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             hero.dodgeCount = (hero.dodgeCount || 0) + 1;
@@ -74,7 +74,7 @@ const SWORDSMAN_CARD_DEFS = [
 
 // 🟢 方法B：數量表跟卡片定義分開，之後要調張數只改這裡
 const SWORDSMAN_CARD_COUNTS = {
-    1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1
+    KG_01: 3, KG_02: 1, KG_03: 2, KG_04: 1, KG_05: 1, KG_06: 2
 };
 
 export const SWORDSMAN_DECK = SWORDSMAN_CARD_DEFS.flatMap(def =>

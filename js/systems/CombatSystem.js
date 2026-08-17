@@ -286,11 +286,14 @@ export class CombatSystem {
         hero.isVulnerable = false;
 
         // 🟢 新增：劍豪專屬的單場戰鬥狀態，勇者身上沒有這些欄位，設定不影響勇者
-        hero.stance = 'SHEATHED';
-        hero.swordIntent = 0;
-        hero.insightStacks = 0;
-        hero.turnCritBonus = 0;
-        hero.forceCritThisTurn = false;
+        // 🟢 劍豪專屬單場戰鬥狀態：只在角色本身有定義該欄位時才重置，避免污染其他角色
+        if ('stance' in hero) {
+            hero.stance = 'SHEATHED';
+            hero.swordIntent = 0;
+            hero.insightStacks = 0;
+            hero.turnCritBonus = 0;
+            hero.forceCritThisTurn = false;
+        }
 
         // 🟢 欄位生命週期稽核補上：以下 6 個欄位理論上會在戰鬥流程中被消耗歸零，
         // 但若戰鬥在「已設定、尚未被消耗」的狀態下結束，殘留值會直接帶進下一場戰鬥

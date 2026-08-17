@@ -14,8 +14,23 @@ export const REWARD_CARD_ID_MIGRATIONS = {
 
 export const STARTER_CARD_ID_MIGRATIONS = {
     hero: {
+        '1' : 'YS_01',
+        '2' : 'YS_02',
+        '3' : 'YS_03',
+        '6' : 'YS_04',
+        '7' : 'YS_05',
+        '8' : 'YS_06',
         // 'old_id': 'new_id',
     },
+
+    swordsman:{
+        '1' : 'KG_01',
+        '2' : 'KG_02',
+        '3' : 'KG_03',
+        '4' : 'KG_04',
+        '5' : 'KG_05',
+        '6' : 'KG_06',
+    }
     // mage: {
     //     'old_id': 'new_id',
     // },

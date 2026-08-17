@@ -2,14 +2,14 @@
 
 const HERO_CARD_DEFS = [
     { 
-        id: 1, name: '重擊', cost: 2, desc: '造成 4 點傷害',
+        id: 'YS_01', name: '重擊', cost: 2, desc: '造成 4 點傷害',
         scope: 'SINGLE_ENEMY', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             combatSys.applyDamageToTarget(enemy, 4, log);
         }
     },
     { 
-        id: 2, name: '戰術思考', cost: 0, desc: '抽 2 張牌',
+        id: 'YS_02', name: '戰術思考', cost: 0, desc: '抽 2 張牌',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             deckSys.drawCard();
@@ -18,7 +18,7 @@ const HERO_CARD_DEFS = [
         }
     },
     { 
-        id: 3, name: '聖痕印記', cost: 1, desc: '給敵方 1 層聖痕',
+        id: 'YS_03', name: '聖痕印記', cost: 1, desc: '給敵方 1 層聖痕',
         scope: 'SELF', tags: ['聖痕'],
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             hero.stigma += 1;
@@ -26,14 +26,14 @@ const HERO_CARD_DEFS = [
         }
     },
     { 
-        id: 6, name: '光芒治癒', cost: 1, desc: '回復 3 基礎血量',
+        id: 'YS_04', name: '光芒治癒', cost: 1, desc: '回復 3 基礎血量',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             combatSys.applyHealToHero(hero, 3, log);
         }
     },
     { 
-        id: 7, name: '連打算計', cost: 3, desc: '下一次攻擊骰行動執行 2 次',
+        id: 'YS_05', name: '連打算計', cost: 3, desc: '下一次攻擊骰行動執行 2 次',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             hero.doubleNextAction = true;
@@ -41,7 +41,7 @@ const HERO_CARD_DEFS = [
         }
     },
     { 
-        id: 8, name: '堅定防禦', cost: 1, desc: '獲得 3 點格擋',
+        id: 'YS_06', name: '堅定防禦', cost: 1, desc: '獲得 3 點格擋',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             hero.block += 3;
@@ -51,7 +51,7 @@ const HERO_CARD_DEFS = [
 ];
 
 const HERO_CARD_COUNTS = {
-    1: 1, 2: 1, 3: 1, 6: 1, 7: 1, 8: 1
+    YS_01: 1, YS_02: 1, YS_03: 1, YS_04: 1, YS_05: 1, YS_06: 1
 };
 
 export const HERO_DECK = HERO_CARD_DEFS.flatMap(def =>

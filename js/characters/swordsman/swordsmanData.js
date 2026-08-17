@@ -47,7 +47,7 @@ export const SWORDSMAN_DATA = {
     id: 'swordsman',
     name: '劍豪',
     description: '高風險高回報的雙型態角色，透過切換【收刀】/【拔刀】狀態與經營【劍意】資源，打出爆發連段。血量偏低，須謹慎運用閃避反擊。',
-    hp: 8, maxHp: 8,
+    hp: 50, maxHp: 8,
     atk: 5,
     critBonus: 2,
     battleCritBonus: 0,
@@ -184,7 +184,7 @@ export const SWORDSMAN_DATA = {
                     log(`🌀 觸發 [技能2:寂寞無為] 獲得 3 次閃避，劍意+1，獲得【慧眼】(接下來3回合，閃避成功額外反擊5點)`);
                 } else {
                     // 清風明月：劍意-3，全體爆擊傷害，敵全體CT-1，依CT被減少的敵人數獲得等量劍意
-                    addSwordIntent(hero, -3);
+                    addSwordIntent(hero, -1);
                     const insightBonus = consumeInsightBonus(hero, log);
                     const aliveEnemies = (enemies || []).filter(e => e.hp > 0);
                     let ctReducedCount = 0;

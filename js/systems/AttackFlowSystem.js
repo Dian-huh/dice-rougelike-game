@@ -7,8 +7,10 @@ const ATTACK_DICE_IDS = [1, 3, 4, 6];
 export const AttackFlowSystem = {
     // 入口：開始一次攻擊骰結算流程
     begin(ctx) {
-        ctx._flow = { timesRemaining: ctx.hero.atkCount, pendingReattacks: 0 };  // 🟢 新增 pendingReattacks
-        ctx.hero.atkCount = 1;
+        const totalTimes = ctx.hero.atkCount;   // 🟢 先讀出來，不動 hero 本尊
+        ctx._flow = { timesRemaining: totalTimes, pendingReattacks: 0, totalTimes };
+        ctx._enemyActedSet = new Set();
+        ctx._pendingOrderedActions = new Set();
         return this._startAction(ctx);
     },
 
@@ -25,17 +27,18 @@ export const AttackFlowSystem = {
 
     // === 對應原 runAttackPhaseStep 前半：擲骰、判斷是否可重骰 ===
     _startAction(ctx) {
-    const { hero, enemies } = ctx;
-    const flow = ctx._flow;
+        const { hero, enemies } = ctx;
+        const flow = ctx._flow;
 
-    if (enemies.every(e => e.hp <= 0) || hero.hp <= 0 || flow.timesRemaining <= 0) {
-        ctx._flow = null;
-        return { type: 'DONE' };
-    }
+        if (enemies.every(e => e.hp <= 0) || hero.hp <= 0 || flow.timesRemaining <= 0) {
+            this._flushPendingOrderedActions(ctx);   // 🟢 所有攻擊骰(含再攻擊)都結束後，PLAYER_FIRST的敵人才補上行動
+            ctx._flow = null;
+            return { type: 'DONE' };
+        }
 
-    flow.timesRemaining -= 1;
-    return this._rollAndProceed(ctx);
-},
+        flow.timesRemaining -= 1;
+        return this._rollAndProceed(ctx);
+    },
 
     // === resume() 加一個分支 ===
     resume(ctx, payload = {}) {
@@ -284,7 +287,7 @@ export const AttackFlowSystem = {
                 this._executePlayerDiceAction(ctx, actionDice, null);
             }
             enemies.forEach(enemy => {
-                if (enemy.hp > 0 && hero.hp > 0) this._executeEnemyAction(ctx, enemy);
+                if (enemy.hp > 0 && hero.hp > 0) this._executeEnemyActionOnce(ctx, enemy);   // 🟢 改用 Once 版本
             });
         } else if (scope === 'ALL_ENEMIES') {
             enemies.forEach(enemy => this._resolvePlayerVsEnemy(ctx, enemy, actionDice, repeatCount));
@@ -294,7 +297,7 @@ export const AttackFlowSystem = {
                 if (chosenTarget && enemy === chosenTarget) {
                     this._resolvePlayerVsEnemy(ctx, enemy, actionDice, repeatCount);
                 } else {
-                    this._executeEnemyAction(ctx, enemy);
+                    this._executeEnemyActionOnce(ctx, enemy);   // 🟢 改用 Once 版本
                 }
             });
         }
@@ -326,15 +329,23 @@ export const AttackFlowSystem = {
         const { hero } = ctx;
         if (enemy.hp <= 0 || hero.hp <= 0) return;
 
+        ctx._enemyActedSet = ctx._enemyActedSet || new Set();
+        const alreadyActed = ctx._enemyActedSet.has(enemy);   // 🟢 本回合這隻敵人是否已經行動過
+
         const order = CombatSystem.resolveTurnOrder(ctx.playerSpeedDice, enemy.speedDice);
 
         if (order === 'PLAYER_FIRST') {
             for (let r = 0; r < repeatCount; r++) {
                 if (hero.hp > 0 && enemy.hp > 0) this._executePlayerDiceAction(ctx, actionDice, enemy);
             }
-            if (enemy.hp > 0) this._executeEnemyAction(ctx, enemy);
+            if (!alreadyActed && enemy.hp > 0) {
+                ctx._pendingOrderedActions.add(enemy);   // 🟢 不立刻行動，先排隊
+            }
         } else if (order === 'ENEMY_FIRST') {
-            this._executeEnemyAction(ctx, enemy);
+            if (!alreadyActed) {
+                ctx._enemyActedSet.add(enemy);
+                this._executeEnemyAction(ctx, enemy);
+            }
             if (hero.hp > 0 && enemy.hp > 0) {
                 for (let r = 0; r < repeatCount; r++) {
                     if (hero.hp > 0 && enemy.hp > 0) this._executePlayerDiceAction(ctx, actionDice, enemy);
@@ -353,9 +364,12 @@ export const AttackFlowSystem = {
                     if (pSkill) pSkill.execute(hero, enemy, CombatSystem, (m) => pActionLog.push(m), ctx._flow, ctx.enemies);
                 }
             }
-            
-            const enemyIntent = CombatSystem.resolveEnemyIntent(enemy);
-            enemy.executeAction(enemy, enemyIntent, hero, CombatSystem, (m) => eActionLog.push(m), ctx.enemies);
+
+            if (!alreadyActed) {
+                ctx._enemyActedSet.add(enemy);
+                const enemyIntent = CombatSystem.resolveEnemyIntent(enemy);
+                enemy.executeAction(enemy, enemyIntent, hero, CombatSystem, (m) => eActionLog.push(m), ctx.enemies);
+            }
             CombatSystem.tickPoison(hero, (m) => pActionLog.push(m));
 
             ctx.log(pActionLog.join(' '), 'simultaneous', eActionLog.join(' '));
@@ -384,5 +398,25 @@ export const AttackFlowSystem = {
             const intent = CombatSystem.resolveEnemyIntent(enemy);
             enemy.executeAction(enemy, intent, ctx.hero, CombatSystem, (m) => ctx.log(m, 'enemy'), ctx.enemies);
         }
-    }
+    },
+
+    // 🟢 新增：包裝 _executeEnemyAction，確保同一隻敵人在本回合(含atkCount/再攻擊)只會真正行動一次
+    _executeEnemyActionOnce(ctx, enemy) {
+        ctx._enemyActedSet = ctx._enemyActedSet || new Set();
+        if (ctx._enemyActedSet.has(enemy)) return;
+        ctx._enemyActedSet.add(enemy);
+        this._executeEnemyAction(ctx, enemy);
+    },
+
+    _flushPendingOrderedActions(ctx) {
+        if (!ctx._pendingOrderedActions || ctx._pendingOrderedActions.size === 0) return;
+        ctx._pendingOrderedActions.forEach(enemy => {
+            if (!ctx._enemyActedSet.has(enemy) && enemy.hp > 0 && ctx.hero.hp > 0) {
+                ctx._enemyActedSet.add(enemy);
+                this._executeEnemyAction(ctx, enemy);
+            }
+        });
+        ctx._pendingOrderedActions.clear();
+    },
+
 };
