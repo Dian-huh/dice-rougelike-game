@@ -47,7 +47,7 @@ export const SWORDSMAN_DATA = {
     id: 'swordsman',
     name: '劍豪',
     description: '高風險高回報的雙型態角色，透過切換【收刀】/【拔刀】狀態與經營【劍意】資源，打出爆發連段。血量偏低，須謹慎運用閃避反擊。',
-    hp: 50, maxHp: 8,
+    hp: 8, maxHp: 8,
     atk: 5,
     critBonus: 2,
     battleCritBonus: 0,
