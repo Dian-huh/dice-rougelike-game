@@ -287,7 +287,7 @@ export const AttackFlowSystem = {
                 this._executePlayerDiceAction(ctx, actionDice, null);
             }
             enemies.forEach(enemy => {
-                if (enemy.hp > 0 && hero.hp > 0) this._executeEnemyActionOnce(ctx, enemy);   // 🟢 改用 Once 版本
+                if (enemy.hp > 0 && hero.hp > 0) this._resolveBystanderEnemy(ctx, enemy);   // 🟢 改用 Once 版本
             });
         } else if (scope === 'ALL_ENEMIES') {
             enemies.forEach(enemy => this._resolvePlayerVsEnemy(ctx, enemy, actionDice, repeatCount));
@@ -297,7 +297,7 @@ export const AttackFlowSystem = {
                 if (chosenTarget && enemy === chosenTarget) {
                     this._resolvePlayerVsEnemy(ctx, enemy, actionDice, repeatCount);
                 } else {
-                    this._executeEnemyActionOnce(ctx, enemy);   // 🟢 改用 Once 版本
+                    this._resolveBystanderEnemy(ctx, enemy);   // 🟢 改用 Once 版本
                 }
             });
         }
@@ -365,7 +365,7 @@ export const AttackFlowSystem = {
                 }
             }
 
-            if (!alreadyActed) {
+            if (!alreadyActed && enemy.hp > 0) {   // 🟢 補上 enemy.hp > 0，避免玩家已擊殺的敵人詐屍反擊
                 ctx._enemyActedSet.add(enemy);
                 const enemyIntent = CombatSystem.resolveEnemyIntent(enemy);
                 enemy.executeAction(enemy, enemyIntent, hero, CombatSystem, (m) => eActionLog.push(m), ctx.enemies);
@@ -408,9 +408,27 @@ export const AttackFlowSystem = {
         this._executeEnemyAction(ctx, enemy);
     },
 
+    // 🟢 新增：非本次骰選定目標的「路人」敵人，也要比速度決定立即行動或延後排隊
+    _resolveBystanderEnemy(ctx, enemy) {
+        const { hero } = ctx;
+        if (enemy.hp <= 0 || hero.hp <= 0) return;
+        ctx._enemyActedSet = ctx._enemyActedSet || new Set();
+        if (ctx._enemyActedSet.has(enemy)) return;
+
+        const order = CombatSystem.resolveTurnOrder(ctx.playerSpeedDice, enemy.speedDice);
+        if (order === 'PLAYER_FIRST') {
+            ctx._pendingOrderedActions.add(enemy);   // 延後到整段流程結束，統一排序後才行動
+        } else {
+            ctx._enemyActedSet.add(enemy);
+            this._executeEnemyAction(ctx, enemy);
+        }
+    },
+
     _flushPendingOrderedActions(ctx) {
         if (!ctx._pendingOrderedActions || ctx._pendingOrderedActions.size === 0) return;
-        ctx._pendingOrderedActions.forEach(enemy => {
+        const sorted = Array.from(ctx._pendingOrderedActions)
+            .sort((a, b) => (b.speedDice || 0) - (a.speedDice || 0));   // 🟢 速度快的敵人先補行動
+        sorted.forEach(enemy => {
             if (!ctx._enemyActedSet.has(enemy) && enemy.hp > 0 && ctx.hero.hp > 0) {
                 ctx._enemyActedSet.add(enemy);
                 this._executeEnemyAction(ctx, enemy);
