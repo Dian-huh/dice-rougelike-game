@@ -35,7 +35,7 @@ export const ENEMY_TEMPLATE = {
             this.od = Math.min(this.maxOd, this.od + 1);
             if (this.od >= this.maxOd) {
                 this.isOD = true;
-                safeLog(`🔥 ${this.name} 的 OD 槽已滿！進入【OD 狂暴狀態】(所有攻擊必定爆擊)！`);
+                //safeLog(`🔥 ${this.name} 的 OD 槽已滿！進入【OD 狂暴狀態】(所有攻擊必定爆擊)！`);
             }
         } 
         // OD 狀態受擊：OD -1
@@ -44,7 +44,7 @@ export const ENEMY_TEMPLATE = {
             if (this.od <= 0) {
                 this.isOD = false;
                 this.isBreak = true;
-                safeLog(`💫 ${this.name} 的 OD 被徹底清空！陷入【Break 癱瘓狀態】！`);
+                //safeLog(`💫 ${this.name} 的 OD 被徹底清空！陷入【Break 癱瘓狀態】！`);
             }
         }
     },

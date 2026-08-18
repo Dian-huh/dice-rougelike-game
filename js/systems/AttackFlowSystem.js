@@ -5,33 +5,46 @@ import { EffectEngine } from './EffectEngine.js';
 const ATTACK_DICE_IDS = [1, 3, 4, 6];
 
 export const AttackFlowSystem = {
-    // 入口：開始一次攻擊骰結算流程
     begin(ctx) {
-        const totalTimes = ctx.hero.atkCount;   // 🟢 先讀出來，不動 hero 本尊
+        const totalTimes = ctx.hero.atkCount;
         ctx._flow = { timesRemaining: totalTimes, pendingReattacks: 0, totalTimes };
         ctx._enemyActedSet = new Set();
         ctx._pendingOrderedActions = new Set();
         return this._startAction(ctx);
     },
 
-    // 恢復點：玩家對 NEED_REROLL_CONFIRM / NEED_TARGET / ACTION_UPDATE 做出回應後呼叫
     resume(ctx, payload = {}) {
         const flow = ctx._flow;
         if (!flow) return { type: 'DONE' };
 
         if (flow.stage === 'WAIT_REROLL') return this._afterRerollDecision(ctx, payload);
         if (flow.stage === 'WAIT_TARGET') return this._afterTargetChosen(ctx, payload);
+        if (flow.stage === 'WAIT_SOLO_TARGET' || flow.stage === 'WAIT_SOLO_REROLL') {
+            return this._handleEmbeddedSoloResult(ctx, this.resumeSolo(ctx, payload));
+        }
         if (flow.stage === 'WAIT_UPDATE') return this._startAction(ctx);
         return { type: 'DONE' };
     },
 
-    // === 對應原 runAttackPhaseStep 前半：擲骰、判斷是否可重骰 ===
+    _handleEmbeddedSoloResult(ctx, soloResult) {
+        const flow = ctx._flow;
+        if (soloResult.type === 'NEED_TARGET') {
+            flow.stage = 'WAIT_SOLO_TARGET';
+            return soloResult;
+        }
+        if (soloResult.type === 'NEED_REROLL_CONFIRM') {
+            flow.stage = 'WAIT_SOLO_REROLL';
+            return soloResult;
+        }
+        return this._finishActionSegment(ctx);
+    },
+
     _startAction(ctx) {
         const { hero, enemies } = ctx;
         const flow = ctx._flow;
 
         if (enemies.every(e => e.hp <= 0) || hero.hp <= 0 || flow.timesRemaining <= 0) {
-            this._flushPendingOrderedActions(ctx);   // 🟢 所有攻擊骰(含再攻擊)都結束後，PLAYER_FIRST的敵人才補上行動
+            this._flushPendingOrderedActions(ctx);
             ctx._flow = null;
             return { type: 'DONE' };
         }
@@ -40,46 +53,6 @@ export const AttackFlowSystem = {
         return this._rollAndProceed(ctx);
     },
 
-    // === resume() 加一個分支 ===
-    resume(ctx, payload = {}) {
-        const flow = ctx._flow;
-        if (!flow) return { type: 'DONE' };
-
-        if (flow.stage === 'WAIT_REROLL') return this._afterRerollDecision(ctx, payload);
-        if (flow.stage === 'WAIT_TARGET') return this._afterTargetChosen(ctx, payload);
-        if (flow.stage === 'WAIT_SOLO_TARGET') return this._afterSoloTargetInFlow(ctx, payload);  // 🟢新增
-        if (flow.stage === 'WAIT_UPDATE') return this._startAction(ctx);
-        return { type: 'DONE' };
-    },
-
-    _afterSoloTargetInFlow(ctx, payload) {
-        const soloResult = this.resumeSolo(ctx, payload);
-        if (soloResult.type === 'NEED_TARGET') {
-            ctx._flow.stage = 'WAIT_SOLO_TARGET';
-            return soloResult;
-        }
-        return this._finishActionSegment(ctx);
-    },
-
-    // === _finishActionSegment 改成呼叫 beginSolo ===
-    _finishActionSegment(ctx) {
-        const flow = ctx._flow;
-        if (flow.pendingReattacks > 0) {
-            flow.pendingReattacks -= 1;
-            const soloStep = this.beginSolo(ctx);   // 🟢 取代原本呼叫 _startReattack
-            if (soloStep.type === 'NEED_TARGET') {
-                flow.stage = 'WAIT_SOLO_TARGET';
-                return soloStep;
-            }
-            return this._finishActionSegment(ctx);  // solo同步結束了，繼續檢查還有沒有排隊中的再攻擊
-        }
-        flow.stage = 'WAIT_UPDATE';
-        return { type: 'ACTION_UPDATE' };
-    },
-
-    // ============================================================
-    // 🟢 新增：「偷打」流程本體 —— 獨立於主流程(ctx._flow)，用 ctx._solo 記狀態
-    // ============================================================
     beginSolo(ctx) {
         ctx._solo = { pendingReattacks: 0 };
         return this._soloRoll(ctx);
@@ -88,19 +61,66 @@ export const AttackFlowSystem = {
     resumeSolo(ctx, payload = {}) {
         const solo = ctx._solo;
         if (!solo) return { type: 'DONE' };
+        if (solo.stage === 'WAIT_REROLL') return this._soloAfterRerollDecision(ctx, payload);
         if (solo.stage === 'WAIT_TARGET') return this._soloAfterTarget(ctx, payload);
         return { type: 'DONE' };
     },
 
-    _soloRoll(ctx) {
+   _soloRoll(ctx) {
         const { hero, enemies } = ctx;
         if (enemies.every(e => e.hp <= 0) || hero.hp <= 0) {
             ctx._solo = null;
             return { type: 'DONE' };
         }
-        const actionDice = Phaser.Math.Between(1, 6);
+
+        let actionDice;
+        let allowReroll = true;
+        if (hero.isPressured) {
+            actionDice = 1;
+            hero.overrideDice = null;
+            hero.isPressured = false;
+            ctx.log(`😱 【威壓】效果發動，攻擊骰被強制鎖定為 1 點！`, 'system');
+            allowReroll = false;
+        } else if (hero.overrideDice !== null) {
+            actionDice = hero.overrideDice;
+            hero.overrideDice = null;
+            allowReroll = false;
+        } else {
+            actionDice = Phaser.Math.Between(1, 6);
+        }
         ctx.lastActionDice = actionDice;
+        ctx._solo.actionDice = actionDice;
+
+        // 🟢 新增：偷打流程也支援重骰攻擊骰
+        const rerollsLeft = EffectEngine.getCounterRemaining(hero, 'reroll_attack_dice');
+        if (allowReroll && rerollsLeft > 0) {
+            ctx._solo.stage = 'WAIT_REROLL';
+            return { type: 'NEED_REROLL_CONFIRM', actionDice, rerollsLeft };
+        }
+
         return this._soloContinue(ctx, actionDice);
+    },
+
+    _soloAfterRerollDecision(ctx, payload) {
+        const solo = ctx._solo;
+        if (!solo) return { type: 'DONE' };
+
+        if (payload && payload.reroll) {
+            EffectEngine.consumeCounter(ctx.hero, 'reroll_attack_dice');
+            const newDice = Phaser.Math.Between(1, 6);
+            ctx.lastActionDice = newDice;
+            solo.actionDice = newDice;
+            ctx.log(`🔄 重骰攻擊骰：新結果 [ ${newDice} ] 點`, 'system');
+
+            const stillLeft = EffectEngine.getCounterRemaining(ctx.hero, 'reroll_attack_dice');
+            if (stillLeft > 0) {
+                solo.stage = 'WAIT_REROLL';
+                return { type: 'NEED_REROLL_CONFIRM', actionDice: newDice, rerollsLeft: stillLeft };
+            }
+            return this._soloContinue(ctx, newDice);
+        }
+
+        return this._soloContinue(ctx, solo.actionDice);
     },
 
     _soloContinue(ctx, actionDice) {
@@ -126,7 +146,7 @@ export const AttackFlowSystem = {
 
     _soloExecute(ctx, actionDice, scope, chosenTarget) {
         const { hero, enemies } = ctx;
-        const repeatCount = CombatSystem.getRepeatCount(hero);   // 仍吃「連打算計」
+        const repeatCount = CombatSystem.getRepeatCount(hero);
 
         let firstStrikeBonus = 0;
         if (scope !== 'SELF' && !ctx.firstAttackTriggeredThisBattle && ATTACK_DICE_IDS.includes(actionDice)) {
@@ -161,13 +181,12 @@ export const AttackFlowSystem = {
 
         if (ctx._solo.pendingReattacks > 0) {
             ctx._solo.pendingReattacks -= 1;
-            return this._soloRoll(ctx);   // 連鎖再攻擊
+            return this._soloRoll(ctx);
         }
         ctx._solo = null;
         return { type: 'DONE' };
     },
 
-    // solo專用版：flowCtx傳ctx._solo（不是ctx._flow），讓技能3的再攻擊判斷落在solo自己的佇列裡
     _executePlayerDiceActionSolo(ctx, dice, targetEnemy) {
         const { hero } = ctx;
         const skill = hero.diceSkills[dice];
@@ -182,7 +201,6 @@ export const AttackFlowSystem = {
         CombatSystem.tickPoison(hero, (m) => ctx.log(m, 'player'));
     },
 
-    // 🟢 從原 _startAction 拆出來，一般攻擊與再攻擊共用同一套擲骰＋重骰判斷
     _rollAndProceed(ctx) {
         const { hero } = ctx;
         const flow = ctx._flow;
@@ -233,11 +251,9 @@ export const AttackFlowSystem = {
             return this._continueWithDice(ctx, newDice);
         }
 
-        // 玩家選擇「確定使用」
         return this._continueWithDice(ctx, flow.actionDice);
     },
 
-    // === 對應原 continueAttackPhaseStep：判斷是否需要跳目標選擇 ===
     _continueWithDice(ctx, actionDice) {
         const { hero, enemies } = ctx;
         const skill = hero.diceSkills[actionDice];
@@ -261,7 +277,6 @@ export const AttackFlowSystem = {
         return this._executeAction(ctx, flow.pendingDice, flow.pendingScope, target);
     },
 
-    // === 對應原 executeAttackPhaseAction ===
     _executeAction(ctx, actionDice, scope, chosenTarget) {
         const { hero, enemies } = ctx;
         const wasDouble = hero.doubleNextAction;
@@ -287,7 +302,7 @@ export const AttackFlowSystem = {
                 this._executePlayerDiceAction(ctx, actionDice, null);
             }
             enemies.forEach(enemy => {
-                if (enemy.hp > 0 && hero.hp > 0) this._resolveBystanderEnemy(ctx, enemy);   // 🟢 改用 Once 版本
+                if (enemy.hp > 0 && hero.hp > 0) this._resolveBystanderEnemy(ctx, enemy);
             });
         } else if (scope === 'ALL_ENEMIES') {
             enemies.forEach(enemy => this._resolvePlayerVsEnemy(ctx, enemy, actionDice, repeatCount));
@@ -297,7 +312,7 @@ export const AttackFlowSystem = {
                 if (chosenTarget && enemy === chosenTarget) {
                     this._resolvePlayerVsEnemy(ctx, enemy, actionDice, repeatCount);
                 } else {
-                    this._resolveBystanderEnemy(ctx, enemy);   // 🟢 改用 Once 版本
+                    this._resolveBystanderEnemy(ctx, enemy);
                 }
             });
         }
@@ -314,23 +329,31 @@ export const AttackFlowSystem = {
         if (flow.pendingReattacks > 0) {
             flow.pendingReattacks -= 1;
             const soloStep = this.beginSolo(ctx);
-            if (soloStep.type === 'NEED_TARGET') {
-                flow.stage = 'WAIT_SOLO_TARGET';
-                return soloStep;
-            }
-            return this._finishActionSegment(ctx);
+            return this._handleEmbeddedSoloResult(ctx, soloStep);
         }
         flow.stage = 'WAIT_UPDATE';
         return { type: 'ACTION_UPDATE' };
     },
 
-    // === 對應原 resolvePlayerVsEnemy ===
+    _handleEmbeddedSoloResult(ctx, soloResult) {
+        const flow = ctx._flow;
+        if (soloResult.type === 'NEED_TARGET') {
+            flow.stage = 'WAIT_SOLO_TARGET';
+            return soloResult;
+        }
+        if (soloResult.type === 'NEED_REROLL_CONFIRM') {
+            flow.stage = 'WAIT_SOLO_REROLL';
+            return soloResult;
+        }
+        return this._finishActionSegment(ctx);
+    },
+
     _resolvePlayerVsEnemy(ctx, enemy, actionDice, repeatCount) {
         const { hero } = ctx;
         if (enemy.hp <= 0 || hero.hp <= 0) return;
 
         ctx._enemyActedSet = ctx._enemyActedSet || new Set();
-        const alreadyActed = ctx._enemyActedSet.has(enemy);   // 🟢 本回合這隻敵人是否已經行動過
+        const alreadyActed = ctx._enemyActedSet.has(enemy);
 
         const order = CombatSystem.resolveTurnOrder(ctx.playerSpeedDice, enemy.speedDice);
 
@@ -339,7 +362,7 @@ export const AttackFlowSystem = {
                 if (hero.hp > 0 && enemy.hp > 0) this._executePlayerDiceAction(ctx, actionDice, enemy);
             }
             if (!alreadyActed && enemy.hp > 0) {
-                ctx._pendingOrderedActions.add(enemy);   // 🟢 不立刻行動，先排隊
+                ctx._pendingOrderedActions.add(enemy);
             }
         } else if (order === 'ENEMY_FIRST') {
             if (!alreadyActed) {
@@ -365,7 +388,7 @@ export const AttackFlowSystem = {
                 }
             }
 
-            if (!alreadyActed && enemy.hp > 0) {   // 🟢 補上 enemy.hp > 0，避免玩家已擊殺的敵人詐屍反擊
+            if (!alreadyActed && enemy.hp > 0) {
                 ctx._enemyActedSet.add(enemy);
                 const enemyIntent = CombatSystem.resolveEnemyIntent(enemy);
                 enemy.executeAction(enemy, enemyIntent, hero, CombatSystem, (m) => eActionLog.push(m), ctx.enemies);
@@ -376,7 +399,6 @@ export const AttackFlowSystem = {
         }
     },
 
-    // === 對應原 executePlayerDiceAction ===
     _executePlayerDiceAction(ctx, dice, targetEnemy) {
         const { hero } = ctx;
         const skill = hero.diceSkills[dice];
@@ -392,7 +414,6 @@ export const AttackFlowSystem = {
         CombatSystem.tickPoison(hero, (m) => ctx.log(m, 'player'));
     },
 
-    // === 對應原 executeEnemyAction ===
     _executeEnemyAction(ctx, enemy) {
         if (enemy && enemy.hp > 0) {
             const intent = CombatSystem.resolveEnemyIntent(enemy);
@@ -400,15 +421,10 @@ export const AttackFlowSystem = {
         }
     },
 
-    // 🟢 新增：包裝 _executeEnemyAction，確保同一隻敵人在本回合(含atkCount/再攻擊)只會真正行動一次
-    _executeEnemyActionOnce(ctx, enemy) {
-        ctx._enemyActedSet = ctx._enemyActedSet || new Set();
-        if (ctx._enemyActedSet.has(enemy)) return;
-        ctx._enemyActedSet.add(enemy);
-        this._executeEnemyAction(ctx, enemy);
-    },
 
-    // 🟢 新增：非本次骰選定目標的「路人」敵人，也要比速度決定立即行動或延後排隊
+    // 🟢 新增：非本次骰選定目標的「路人」敵人，也要比速度決定立即行動或延後排隊，
+    // 不能一律當成「立刻行動」，否則玩家對其他敵人明明比較快，卻因為牠只是路人身分
+    // 而搶先出手，造成行動順序交錯
     _resolveBystanderEnemy(ctx, enemy) {
         const { hero } = ctx;
         if (enemy.hp <= 0 || hero.hp <= 0) return;
@@ -417,7 +433,7 @@ export const AttackFlowSystem = {
 
         const order = CombatSystem.resolveTurnOrder(ctx.playerSpeedDice, enemy.speedDice);
         if (order === 'PLAYER_FIRST') {
-            ctx._pendingOrderedActions.add(enemy);   // 延後到整段流程結束，統一排序後才行動
+            ctx._pendingOrderedActions.add(enemy); // 延後到整段流程結束，統一排序後才行動
         } else {
             ctx._enemyActedSet.add(enemy);
             this._executeEnemyAction(ctx, enemy);
@@ -427,7 +443,7 @@ export const AttackFlowSystem = {
     _flushPendingOrderedActions(ctx) {
         if (!ctx._pendingOrderedActions || ctx._pendingOrderedActions.size === 0) return;
         const sorted = Array.from(ctx._pendingOrderedActions)
-            .sort((a, b) => (b.speedDice || 0) - (a.speedDice || 0));   // 🟢 速度快的敵人先補行動
+            .sort((a, b) => (b.speedDice || 0) - (a.speedDice || 0)); // 🟢 速度快的敵人先補行動
         sorted.forEach(enemy => {
             if (!ctx._enemyActedSet.has(enemy) && enemy.hp > 0 && ctx.hero.hp > 0) {
                 ctx._enemyActedSet.add(enemy);

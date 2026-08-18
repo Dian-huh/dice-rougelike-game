@@ -25,8 +25,10 @@ function consumeInsightBonus(hero, log) {
 // 只有「攻擊骰的普攻、爆擊」(點數1、3) 會呼叫這個 —— 對應設計稿「追擊」註解的限定範圍
 function applyPursuitBonus(hero, enemy, combatSys, log) {
     const pursuitStacks = Math.floor((hero.swordIntent || 0) / 5);
+    if (pursuitStacks <= 0) return;
     for (let i = 0; i < pursuitStacks; i++) {
         if (enemy.hp <= 0) break;
+        log(`🎯 [追擊] 對 ${enemy.name} 追加造成 1 點傷害`);
         combatSys.applyDamageToTarget(enemy, 1, log);
     }
 }
@@ -39,6 +41,7 @@ function applyDrawnStanceBonus(hero, enemies, combatSys, log) {
         const pool = (enemies || []).filter(e => e.hp > 0);
         if (pool.length === 0) break;
         const target = pool[Math.floor(Math.random() * pool.length)];
+        log(`🗡️ [被動:拔刀連斬] 對 ${target.name} 追加造成 1 點傷害`);
         combatSys.applyDamageToTarget(target, 1, log);
     }
 }
@@ -47,8 +50,8 @@ export const SWORDSMAN_DATA = {
     id: 'swordsman',
     name: '劍豪',
     description: '高風險高回報的雙型態角色，透過切換【收刀】/【拔刀】狀態與經營【劍意】資源，打出爆發連段。血量偏低，須謹慎運用閃避反擊。',
-    hp: 8, maxHp: 8,
-    atk: 5,
+    hp: 50, maxHp: 50,
+    atk: 2,
     critBonus: 2,
     battleCritBonus: 0,
     battleHealBonus: 0,
@@ -143,15 +146,21 @@ export const SWORDSMAN_DATA = {
                         combatSys.applyDamageToTarget(enemy, hero.swordIntent, log);
                     }
                 } else {
-                    // 千紫萬紅：劍意-3，造成單體爆擊傷害，再給予目標(劍意-3後的層數)次1點傷害
-                    addSwordIntent(hero, -3);
+                    // 千紫萬紅：造成單體爆擊傷害；劍意>=2時，劍意-2，再給予目標(劍意-2後層數)次1點傷害
                     const critDmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero) + insightBonus;
                     log(`💥 觸發 [技能1:千紫萬紅] 造成 ${critDmg} 點爆擊傷害`);
                     combatSys.applyDamageToTarget(enemy, critDmg, log);
-                    const hits = hero.swordIntent || 0;
-                    for (let i = 0; i < hits; i++) {
-                        if (enemy.hp <= 0) break;
-                        combatSys.applyDamageToTarget(enemy, 1, log);
+
+                    if ((hero.swordIntent || 0) >= 2) {
+                        addSwordIntent(hero, -2);
+                        const hits = hero.swordIntent || 0;
+                        log(`🗡️ 劍意-2 (現為 ${hero.swordIntent} 層)，追加 ${hits} 次 1 點傷害`);
+                        for (let i = 0; i < hits; i++) {
+                            if (enemy.hp <= 0) break;
+                            combatSys.applyDamageToTarget(enemy, 1, log);
+                        }
+                    } else {
+                        log(`🗡️ 劍意不足2層，未觸發【千紫萬紅】追加效果`);
                     }
                 }
                 applyDrawnStanceBonus(hero, enemies, combatSys, log);
@@ -183,21 +192,31 @@ export const SWORDSMAN_DATA = {
                     EffectEngine.addStacks(hero, 'swordsman_lonely_inaction', 3);   // 🟢 新增
                     log(`🌀 觸發 [技能2:寂寞無為] 獲得 3 次閃避，劍意+1，獲得【慧眼】(接下來3回合，閃避成功額外反擊5點)`);
                 } else {
-                    // 清風明月：劍意-3，全體爆擊傷害，敵全體CT-1，依CT被減少的敵人數獲得等量劍意
-                    addSwordIntent(hero, -1);
+                    // 清風明月：造成單體爆擊傷害，若劍意>=3則消耗3層升級為全體爆擊傷害；
+                    // 敵全體CT-1、依CT被減少的敵人數獲得等量劍意（此段無論是否升級都會觸發）
                     const insightBonus = consumeInsightBonus(hero, log);
                     const aliveEnemies = (enemies || []).filter(e => e.hp > 0);
+                    const dmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero) + insightBonus;
+
+                    if ((hero.swordIntent || 0) >= 3) {
+                        addSwordIntent(hero, -3);
+                        log(`💥 觸發 [技能2:清風明月] 劍意-3 (現為 ${hero.swordIntent} 層)，升級為對全體造成 ${dmg} 點爆擊傷害！`);
+                        aliveEnemies.forEach(en => combatSys.applyDamageToTarget(en, dmg, log));
+                    } else {
+                        const target = aliveEnemies[0];
+                        log(`💥 觸發 [技能2:清風明月] 劍意不足3層，僅對單體造成 ${dmg} 點爆擊傷害`);
+                        if (target) combatSys.applyDamageToTarget(target, dmg, log);
+                    }
+
                     let ctReducedCount = 0;
                     aliveEnemies.forEach(en => {
-                        const dmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero) + insightBonus;
-                        combatSys.applyDamageToTarget(en, dmg, log);
-                        if ((en.ct || 0) > 0) {
+                        if (en.hp > 0 && (en.ct || 0) > 0) {
                             en.ct = Math.max(0, en.ct - 1);
                             ctReducedCount += 1;
                         }
                     });
-                    addSwordIntent(hero, ctReducedCount);
-                    log(`💥 觸發 [技能2:清風明月] 對全體造成爆擊傷害，敵方CT各-1，劍意+${ctReducedCount}`);
+                    if (ctReducedCount > 0) addSwordIntent(hero, ctReducedCount);
+                    log(`🗡️ 敵方CT各-1 (共 ${ctReducedCount} 隻生效)，獲得 ${ctReducedCount} 層劍意`);
                     applyDrawnStanceBonus(hero, enemies, combatSys, log);
                 }
             }
@@ -225,6 +244,7 @@ export const SWORDSMAN_DATA = {
                     hero.insightStacks = Math.min(1, (hero.insightStacks || 0) + 1);
                     log(`🗡️ 切換至【拔刀】狀態，獲得【慧眼】`);
                     applyDrawnStanceBonus(hero, enemies, combatSys, log);
+                    log(`⚡ [技能3:蝴蝶刃・屠龍] 觸發【再攻擊】，即將自動擲一次攻擊骰！`);
                     flowCtx.pendingReattacks = (flowCtx.pendingReattacks || 0) + 1;
                 } else {
                     // 蝴蝶刃・萬華蝶：造成單體(劍意數)次攻擊力傷害，消耗全部劍意，
@@ -245,6 +265,7 @@ export const SWORDSMAN_DATA = {
                     hero.stance = 'SHEATHED';
                     log(`🗡️ 切換至【收刀】狀態`);
                     applyDrawnStanceBonus(hero, enemies, combatSys, log); // 此時已切回收刀，實際上不會觸發，保留呼叫是為了跟其他技能寫法一致
+                    log(`⚡ [技能3:蝴蝶刃・萬華蝶] 觸發【再攻擊】，即將自動擲一次攻擊骰！`);
                     flowCtx.pendingReattacks = (flowCtx.pendingReattacks || 0) + 1;
                 }
             }

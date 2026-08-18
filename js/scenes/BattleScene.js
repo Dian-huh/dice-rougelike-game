@@ -578,6 +578,10 @@ export class BattleScene extends Phaser.Scene {
             this.showEnemyTargetPicker(step.candidates, (target) => {
                 this.runSoloStep(AttackFlowSystem.resumeSolo(this.battleCtx, { target }));
             });
+        } else if (step.type === 'NEED_REROLL_CONFIRM') {
+            this.promptAttackDiceReroll(step.actionDice, step.rerollsLeft, (payload) => {
+                this.runSoloStep(AttackFlowSystem.resumeSolo(this.battleCtx, payload));
+            });
         } else {
             this.updateUI();
             this.checkBattleEnd();
@@ -612,8 +616,10 @@ export class BattleScene extends Phaser.Scene {
 
     // 🟢 重構：不再遞迴自己呼叫自己，每次只顯示「當下這顆骰」的確認框，
     // 玩家選完後透過 resume() 交還給 AttackFlowSystem 決定要不要再問一次
-    promptAttackDiceReroll(actionDice, rerollsLeft) {
+    promptAttackDiceReroll(actionDice, rerollsLeft, onResolved) {
         if (this.rerollPromptContainer) this.rerollPromptContainer.destroy();
+
+        const resolve = onResolved || ((payload) => this.runFlowStep(AttackFlowSystem.resume(this.battleCtx, payload)));
 
         const container = this.add.container(0, 0).setDepth(1500);
         const bg = this.add.rectangle(620, 200, 260, 90, 0x000000, 0.95).setStrokeStyle(2, 0x66ccff);
@@ -629,13 +635,13 @@ export class BattleScene extends Phaser.Scene {
         confirmBtn.on('pointerdown', () => {
             container.destroy();
             this.rerollPromptContainer = null;
-            this.runFlowStep(AttackFlowSystem.resume(this.battleCtx, { reroll: false }));
+            resolve({ reroll: false });
         });
 
         rerollBtn.on('pointerdown', () => {
             container.destroy();
             this.rerollPromptContainer = null;
-            this.runFlowStep(AttackFlowSystem.resume(this.battleCtx, { reroll: true }));
+            resolve({ reroll: true });
         });
     }
 
