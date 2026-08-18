@@ -198,10 +198,9 @@ export const AttackFlowSystem = {
 
         // 🟢 改進：只對基礎骰（1/3）檢查飛行狀態，技能骰（4/6）能穿過飛行狀態
         // 且使用保存的飛行狀態（在循環前確定），避免飛行狀態在多次攻擊中間被改變
-        const isBasicDice = [1, 3].includes(dice);
-        const checkFlyingState = savedFlyingState !== null ? savedFlyingState : targetEnemy.isFlying;
-        
-        if (isBasicDice && targetEnemy && checkFlyingState) {
+        const checkFlyingState = savedFlyingState !== null ? savedFlyingState : (targetEnemy ? targetEnemy.isFlying : false);
+
+        if (targetEnemy && checkFlyingState) {
             ctx.log(`💨 ${targetEnemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
             CombatSystem.tickPoison(hero, (m) => ctx.log(m, 'player'));
             return;
@@ -386,14 +385,13 @@ export const AttackFlowSystem = {
                 }
             }
         } else {
+            // 修改後
             let pActionLog = [];
             let eActionLog = [];
-            // 🟢 只對基礎骰（1/3）檢查飛行狀態，技能骰（4/6）能穿過飛行狀態
-            const isBasicDice = [1, 3].includes(actionDice);
 
             for (let r = 0; r < repeatCount; r++) {
                 if (hero.hp <= 0 || enemy.hp <= 0) break;
-                if (isBasicDice && wasFlying) {
+                if (wasFlying) {
                     pActionLog.push(`💨 ${enemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`);
                 } else {
                     const pSkill = hero.diceSkills[actionDice];
@@ -419,10 +417,9 @@ export const AttackFlowSystem = {
 
         // 🟢 改進：只對基礎骰（1/3）檢查飛行狀態，技能骰（4/6）能穿過飛行狀態
         // 且使用保存的飛行狀態（在循環前確定），避免飛行狀態在多次攻擊中間被改變
-        const isBasicDice = [1, 3].includes(dice);
-        const checkFlyingState = savedFlyingState !== null ? savedFlyingState : targetEnemy.isFlying;
-        
-        if (isBasicDice && targetEnemy && checkFlyingState) {
+        const checkFlyingState = savedFlyingState !== null ? savedFlyingState : (targetEnemy ? targetEnemy.isFlying : false);
+
+        if (targetEnemy && checkFlyingState) {
             ctx.log(`💨 ${targetEnemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
             CombatSystem.tickPoison(hero, (m) => ctx.log(m, 'player'));
             return;
