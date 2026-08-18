@@ -167,13 +167,17 @@ export const AttackFlowSystem = {
         } else if (scope === 'ALL_ENEMIES') {
             enemies.forEach(enemy => {
                 if (enemy.hp <= 0 || hero.hp <= 0) return;
+                // 🟢 保存敵人飛行狀態，確保多次攻擊時狀態一致
+                const wasFlying = enemy.isFlying;
                 for (let r = 0; r < repeatCount; r++) {
-                    if (hero.hp > 0 && enemy.hp > 0) this._executePlayerDiceActionSolo(ctx, actionDice, enemy);
+                    if (hero.hp > 0 && enemy.hp > 0) this._executePlayerDiceActionSolo(ctx, actionDice, enemy, wasFlying);
                 }
             });
         } else if (chosenTarget && chosenTarget.hp > 0) {
+            // 🟢 保存目標飛行狀態，確保多次攻擊時狀態一致
+            const wasFlying = chosenTarget.isFlying;
             for (let r = 0; r < repeatCount; r++) {
-                if (hero.hp > 0 && chosenTarget.hp > 0) this._executePlayerDiceActionSolo(ctx, actionDice, chosenTarget);
+                if (hero.hp > 0 && chosenTarget.hp > 0) this._executePlayerDiceActionSolo(ctx, actionDice, chosenTarget, wasFlying);
             }
         }
 
@@ -187,12 +191,17 @@ export const AttackFlowSystem = {
         return { type: 'DONE' };
     },
 
-    _executePlayerDiceActionSolo(ctx, dice, targetEnemy) {
+    _executePlayerDiceActionSolo(ctx, dice, targetEnemy, savedFlyingState = null) {
         const { hero } = ctx;
         const skill = hero.diceSkills[dice];
         if (!skill) return;
 
-        if (targetEnemy && targetEnemy.isFlying && ATTACK_DICE_IDS.includes(dice)) {
+        // 🟢 改進：只對基礎骰（1/3）檢查飛行狀態，技能骰（4/6）能穿過飛行狀態
+        // 且使用保存的飛行狀態（在循環前確定），避免飛行狀態在多次攻擊中間被改變
+        const isBasicDice = [1, 3].includes(dice);
+        const checkFlyingState = savedFlyingState !== null ? savedFlyingState : targetEnemy.isFlying;
+        
+        if (isBasicDice && targetEnemy && checkFlyingState) {
             ctx.log(`💨 ${targetEnemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
             CombatSystem.tickPoison(hero, (m) => ctx.log(m, 'player'));
             return;
@@ -356,10 +365,12 @@ export const AttackFlowSystem = {
         const alreadyActed = ctx._enemyActedSet.has(enemy);
 
         const order = CombatSystem.resolveTurnOrder(ctx.playerSpeedDice, enemy.speedDice);
+        // 🟢 新增：在攻擊前保存飛行狀態，確保多次攻擊時狀態一致
+        const wasFlying = enemy.isFlying;
 
         if (order === 'PLAYER_FIRST') {
             for (let r = 0; r < repeatCount; r++) {
-                if (hero.hp > 0 && enemy.hp > 0) this._executePlayerDiceAction(ctx, actionDice, enemy);
+                if (hero.hp > 0 && enemy.hp > 0) this._executePlayerDiceAction(ctx, actionDice, enemy, wasFlying);
             }
             if (!alreadyActed && enemy.hp > 0) {
                 ctx._pendingOrderedActions.add(enemy);
@@ -371,16 +382,18 @@ export const AttackFlowSystem = {
             }
             if (hero.hp > 0 && enemy.hp > 0) {
                 for (let r = 0; r < repeatCount; r++) {
-                    if (hero.hp > 0 && enemy.hp > 0) this._executePlayerDiceAction(ctx, actionDice, enemy);
+                    if (hero.hp > 0 && enemy.hp > 0) this._executePlayerDiceAction(ctx, actionDice, enemy, wasFlying);
                 }
             }
         } else {
             let pActionLog = [];
             let eActionLog = [];
+            // 🟢 只對基礎骰（1/3）檢查飛行狀態，技能骰（4/6）能穿過飛行狀態
+            const isBasicDice = [1, 3].includes(actionDice);
 
             for (let r = 0; r < repeatCount; r++) {
                 if (hero.hp <= 0 || enemy.hp <= 0) break;
-                if (enemy.isFlying && ATTACK_DICE_IDS.includes(actionDice)) {
+                if (isBasicDice && wasFlying) {
                     pActionLog.push(`💨 ${enemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`);
                 } else {
                     const pSkill = hero.diceSkills[actionDice];
@@ -399,12 +412,17 @@ export const AttackFlowSystem = {
         }
     },
 
-    _executePlayerDiceAction(ctx, dice, targetEnemy) {
+    _executePlayerDiceAction(ctx, dice, targetEnemy, savedFlyingState = null) {
         const { hero } = ctx;
         const skill = hero.diceSkills[dice];
         if (!skill) return;
 
-        if (targetEnemy && targetEnemy.isFlying && ATTACK_DICE_IDS.includes(dice)) {
+        // 🟢 改進：只對基礎骰（1/3）檢查飛行狀態，技能骰（4/6）能穿過飛行狀態
+        // 且使用保存的飛行狀態（在循環前確定），避免飛行狀態在多次攻擊中間被改變
+        const isBasicDice = [1, 3].includes(dice);
+        const checkFlyingState = savedFlyingState !== null ? savedFlyingState : targetEnemy.isFlying;
+        
+        if (isBasicDice && targetEnemy && checkFlyingState) {
             ctx.log(`💨 ${targetEnemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
             CombatSystem.tickPoison(hero, (m) => ctx.log(m, 'player'));
             return;

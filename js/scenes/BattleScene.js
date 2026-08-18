@@ -6,6 +6,9 @@ import { TurnSystem } from '../systems/TurnSystem.js';
 import { BattleSetup } from '../systems/BattleSetup.js';
 import { EffectEngine } from '../systems/EffectEngine.js';
 import { AttackFlowSystem } from '../systems/AttackFlowSystem.js';
+import { CardPlaySystem } from '../systems/CardPlaySystem.js';
+import { UIInteractionSystem } from '../systems/UIInteractionSystem.js';
+import { BattleFlowSystem } from '../systems/BattleFlowSystem.js';
 
 export class BattleScene extends Phaser.Scene {
     constructor() { 
@@ -346,19 +349,22 @@ export class BattleScene extends Phaser.Scene {
 
     toggleSkillPicker() {
         if (this.isPickingTarget || this.rerollPromptContainer) return;
-        if (this.hero.isPressured) {
-            this.appendLog(`⚠️ 受到【威壓】封印，本回合無法使用主動技能`, 'system');
+
+        // 第一步：检查是否可以使用主动技能
+        const checkResult = BattleFlowSystem.canUseActiveSkill(this.hero);
+        if (!checkResult.canUse) {
+            this.appendLog(checkResult.reason, 'system');
             return;
         }
-        if (this.hero.cdActiveSkill > 0) {
-            this.appendLog(`⚠️ 主動技能冷卻中！還需等待 ${this.hero.cdActiveSkill} 回合`, 'system');
-            return;
-        }
+
+        // 第二步：如果英雄有自定义的 useActiveSkill 方法，则调用
         if (typeof this.hero.useActiveSkill === 'function') {
             this.hero.useActiveSkill(CombatSystem, (m) => this.appendLog(m, 'player'));
             this.updateUI();
             return;
         }
+
+        // 第三步：否则显示骰子选择器
         if (this.pickerContainer.visible) {
             this.pickerContainer.setVisible(false);
         } else {
@@ -367,27 +373,22 @@ export class BattleScene extends Phaser.Scene {
     }
 
     startNewTurn() {
+        // 检查战斗是否已结束
         if (this.enemies.every(e => e.hp <= 0) || this.hero.hp <= 0) return;
 
         this.turnCount += 1;
-        const { playerSpeedDice } = TurnSystem.startTurn(
-            this.hero, this.enemies, this.turnCount,
+
+        // 委托给 BattleFlowSystem 处理回合初始化业务逻辑
+        BattleFlowSystem.initializeTurn(
+            this.hero,
+            this.enemies,
+            this.turnCount,
+            this.deckSys,
+            this.battleCtx,
             (m, sender) => this.appendLog(m, sender)
         );
-        this.battleCtx.playerSpeedDice = playerSpeedDice;
 
-        
-        this.deckSys.fillHandToMax(this.hero.maxMana);
-
-        // 🟢 修正：onBattleStart 統一在這裡呼叫一次，涵蓋 BLESSING(守護/渾身) + SPEEDRUN(戰鬥爆發)
-        if (this.turnCount === 1) {
-            EffectEngine.runHook('onBattleStart', this.hero, {
-                log: (m, sender) => this.appendLog(m, sender),
-                deckSys: this.deckSys
-            });
-        }
-
-        this.appendLog(`--- 第 ${this.turnCount} 回合開始 ---`, 'system');
+        // 更新 UI
         this.renderHandUI();
         this.renderSpeedRerollButton();
         this.updateUI();
@@ -396,7 +397,8 @@ export class BattleScene extends Phaser.Scene {
     renderSpeedRerollButton() {
         if (this.speedRerollBtn) { this.speedRerollBtn.destroy(); this.speedRerollBtn = null; }
 
-        const rerollsLeft = EffectEngine.getCounterRemaining(this.hero, 'reroll_speed_dice');
+        // 使用 BattleFlowSystem 获取剩余重骰次数
+        const rerollsLeft = BattleFlowSystem.getSpeedRerollsRemaining(this.hero);
         if (rerollsLeft <= 0) return;
 
         this.speedRerollBtn = this.add.text(500, 115, `[ 🔄 重骰速度骰 (剩餘${rerollsLeft}次) ]`, {
@@ -404,7 +406,7 @@ export class BattleScene extends Phaser.Scene {
         }).setInteractive({ useHandCursor: true })
         .on('pointerdown', () => {
             if (this.isPickingTarget || this.rerollPromptContainer) return;
-            EffectEngine.consumeCounter(this.hero, 'reroll_speed_dice');
+            BattleFlowSystem.consumeSpeedReroll(this.hero);
             this.battleCtx.playerSpeedDice = Phaser.Math.Between(1, 6) + CombatSystem.getEffectiveSpeedBonus(this.hero);
             this.appendLog(`🔄 重骰速度骰：新結果 [ ${this.battleCtx.playerSpeedDice} ]`, 'system');
             this.renderSpeedRerollButton();
@@ -432,7 +434,8 @@ export class BattleScene extends Phaser.Scene {
     }
 
     // ============================================================
-    // 🟢 目標選擇 UI：讓場上每隻敵人變成可獨立點擊的物件
+    // 🟢 目標選擇 UI：改用 UIInteractionSystem 處理
+    // 保留 showEnemyTargetPicker 作為 AttackFlowSystem 的適配器
     // ============================================================
 
     renderEnemyUI() {
@@ -465,24 +468,23 @@ export class BattleScene extends Phaser.Scene {
         });
     }
 
-    // 顯示目標選擇 UI：只有 aliveEnemies 內的敵人可以點擊，選定後呼叫 callback(target) 並復原顯示
     showEnemyTargetPicker(aliveEnemies, callback) {
         if (!this.enemyDisplays || this.enemyDisplays.length === 0) this.renderEnemyUI();
 
         this.isPickingTarget = true;
-        this.pendingTargetCallback = callback;
-        this.appendLog(`🎯 請點選要攻擊的敵人目標...`, 'system');
 
         this.enemyDisplays.forEach(display => {
             if (display.enemy.hp > 0 && aliveEnemies.includes(display.enemy)) {
                 display.bg.setFillStyle(0x333355, 0.35).setStrokeStyle(2, 0xffff00);
                 display.bg.setInteractive({ useHandCursor: true });
-                display.bg.on('pointerdown', () => this.onEnemyTargetChosen(display.enemy));
+                display.bg.on('pointerdown', () => this.onEnemyTargetChosen(display.enemy, callback));
             }
         });
+
+        this.appendLog(`🎯 請點選要攻擊的敵人目標...`, 'system');
     }
 
-    onEnemyTargetChosen(enemy) {
+    onEnemyTargetChosen(enemy, callback) {
         // 復原所有敵人顯示的可點擊狀態
         this.enemyDisplays.forEach(display => {
             display.bg.removeAllListeners('pointerdown');
@@ -491,16 +493,14 @@ export class BattleScene extends Phaser.Scene {
         });
 
         this.isPickingTarget = false;
-        const cb = this.pendingTargetCallback;
-        this.pendingTargetCallback = null;
-
         this.appendLog(`🎯 選定目標：${enemy.name}`, 'system');
 
-        if (cb) cb(enemy);
+        if (callback) callback(enemy);
     }
 
     // ============================================================
-    // 🟢 卡牌使用：依 scope 判斷是否需要目標選擇
+    // 🟢 卡牌使用：委托给 CardPlaySystem 处理业务逻辑，
+    // BattleScene 只负责显示目标选择 UI 并触发最终结算
     // ============================================================
 
     playCard(index) {
@@ -509,54 +509,54 @@ export class BattleScene extends Phaser.Scene {
         const card = this.deckSys.hand[index];
         if (!card) return;
 
-        const { cost: effCost } = CombatSystem.getDisplayCost(card, this.hero, this.battleCtx);
-
-        if (this.hero.mana < effCost) {
-            this.appendLog(`⚠️ 魔力不足，無法使用 [${card.name}]`, 'system');
+        // 第一步：验证卡牌是否可以使用（魔力、剑意等）
+        const validation = CardPlaySystem.canPlayCard(card, this.hero, this.battleCtx);
+        if (!validation.valid) {
+            this.appendLog(validation.reason, 'system');
             return;
         }
 
-         // 🟢 新增：卡片可宣告 minSwordIntent，劍意不足就擋下（目前僅劍豪卡片使用）
-        if (card.minSwordIntent && (this.hero.swordIntent || 0) < card.minSwordIntent) {
-            this.appendLog(`⚠️ 劍意不足 ${card.minSwordIntent}，無法使用 [${card.name}]`, 'system');
+        // 第二步：判断是否需要目标选择
+        const { needsTarget, aliveEnemies } = CardPlaySystem.analyzeCardScope(card, this.enemies);
+
+        if (needsTarget) {
+            // 显示目标选择 UI，选定后回调 finalizeCardPlay
+            const session = UIInteractionSystem.createTargetPickerSession(
+                this,
+                this.enemies,
+                aliveEnemies,
+                (target) => this.finalizeCardPlay(index, card, target, session)
+            );
+            this.uiTargetPickerSession = session;
+            session.show();
             return;
         }
 
-        const scope = card.scope || 'SELF';
-        const aliveEnemies = this.enemies.filter(e => e.hp > 0);
-
-        if (scope === 'SINGLE_ENEMY' && aliveEnemies.length > 1) {
-            this.showEnemyTargetPicker(aliveEnemies, (target) => {
-                this.finalizeCardPlay(index, card, target);
-            });
-            return;
-        }
-
-        const target = (scope === 'SINGLE_ENEMY') ? (aliveEnemies[0] || null) : null;
+        // 没有需要选择的目标，直接结算
+        const target = (card.scope === 'SINGLE_ENEMY') ? (aliveEnemies[0] || null) : null;
         this.finalizeCardPlay(index, card, target);
     }
 
-    finalizeCardPlay(index, card, target) {
-        const { cost: effCost, isFreeFirstCard } = CombatSystem.getDisplayCost(card, this.hero, this.battleCtx);
-
-        this.battleCtx.firstCardPlayedThisBattle = true;   // 🟢 判斷完就立刻標記，確保只有「這一張」吃得到免費
-
-        this.hero.mana -= effCost;
-        this.deckSys.playCard(index);
-        CombatSystem.tickPoison(this.hero, (m) => this.appendLog(m, 'player'));
-
-        if (isFreeFirstCard) {
-            this.appendLog(`🎴 使用卡牌 [${card.name}] (🏅收集被動：本場首張卡片0費！)`, 'player');
-        } else {
-            this.appendLog(`🃏 使用卡牌 [${card.name}] (-${effCost}費)`, 'player');
+    finalizeCardPlay(index, card, target, targetSession) {
+        // 如果使用了目标选择 UI，需要关闭它
+        if (targetSession) {
+            targetSession.destroy();
+            this.uiTargetPickerSession = null;
         }
 
-        if (card.onPlay) {
-            card.onPlay(this.hero, target, CombatSystem, this.deckSys, (m) => this.appendLog(m, 'player'), this);
-        }
+        // 调用 CardPlaySystem 的最终结算方法，传递 this 作为 scene 参数
+        CardPlaySystem.finalizeCardPlay(
+            this.deckSys,
+            this.hero,
+            card,
+            index,
+            target,
+            this.battleCtx,
+            (m, sender) => this.appendLog(m, sender),
+            this  // 🟢 新增：传递 scene 参数，以便卡片调用 UI 方法
+        );
 
-        this.hero.lastPlayedCard = card;
-
+        // 更新 UI
         this.renderHandUI();
         this.updateUI();
         this.checkBattleEnd();
@@ -646,19 +646,24 @@ export class BattleScene extends Phaser.Scene {
     }
 
     checkBattleEnd() {
-        const allDead = this.enemies.every(e => e.hp <= 0);
-        if (allDead) {
+        // 使用 BattleFlowSystem 检查战斗状态
+        const status = BattleFlowSystem.checkBattleStatus(this.hero, this.enemies);
+
+        if (status.status === 'victory') {
             this.appendLog(`🎉 區域內所有敵人已被全數擊敗！戰鬥獲勝！`, 'system');
 
-            CombatSystem.resetBattleScopedStats(this.hero);
+            // 清理战斗作用域的临时统计
+            BattleFlowSystem.resolveBattleEnd(this.hero, this.enemies);
 
+            // 销毁交互 UI
             if (this.handContainer) this.handContainer.destroy();
             if (this.actionBtn) this.actionBtn.destroy();
             if (this.skillBtn) this.skillBtn.destroy();
             if (this.speedRerollBtn) { this.speedRerollBtn.destroy(); this.speedRerollBtn = null; }
             if (this.rerollPromptContainer) { this.rerollPromptContainer.destroy(); this.rerollPromptContainer = null; }
+            if (this.uiTargetPickerSession) { this.uiTargetPickerSession.destroy(); this.uiTargetPickerSession = null; }
 
-            // 🟢 分流：最終樓層 Boss 戰勝利 → 遊戲通關結算；一般戰鬥勝利 → 照舊進入獎勵選擇
+            // 分流：最終樓層 Boss 戰勝利 → 遊戲通關結算；一般戰鬥勝利 → 獎勵選擇
             if (this.isFinalBoss) {
                 this.time.delayedCall(600, () => {
                     this.showVictoryUI();
@@ -670,13 +675,15 @@ export class BattleScene extends Phaser.Scene {
             }
             return true;
         }
-        if (this.hero.hp <= 0) {
+
+        if (status.status === 'defeat') {
             this.appendLog(`💀 勇者倒下了... 遊戲結束！`, 'system');
             this.time.delayedCall(600, () => {
                 this.showGameOverUI();
             });
             return true;
         }
+
         return false;
     }
 
