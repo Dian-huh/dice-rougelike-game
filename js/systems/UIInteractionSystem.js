@@ -36,7 +36,6 @@ export class UIInteractionSystem {
                 this.isActive = true;
                 scene.appendLog(`🎯 請點選要攻擊的敵人目標...`, 'system');
 
-                // 使所有活着的敌人变成可点击状态
                 this.enemyDisplays.forEach(display => {
                     if (display.enemy.hp > 0 && this.aliveEnemies.includes(display.enemy)) {
                         display.bg.setFillStyle(0x333355, 0.35).setStrokeStyle(2, 0xffff00);
@@ -49,7 +48,6 @@ export class UIInteractionSystem {
             hide() {
                 if (!this.isActive) return;
 
-                // 恢复所有敌人显示的可点击状态
                 this.enemyDisplays.forEach(display => {
                     display.bg.removeAllListeners('pointerdown');
                     display.bg.disableInteractive();
@@ -73,14 +71,16 @@ export class UIInteractionSystem {
                 }
                 this.enemyDisplays = [];
 
-                this.enemies.forEach((enemy, idx) => {
+                const aliveEnemies = this.enemies.filter(e => e.hp > 0);   // 🟢 只列出存活敵人
+
+                aliveEnemies.forEach((enemy, idx) => {
                     const x = 450;
                     const y = 20 + idx * 100;
                     const container = scene.add.container(x, y);
 
                     const bg = scene.add.rectangle(150, 35, 320, 80, 0x000000, 0).setStrokeStyle(0);
 
-                    const status = enemy.hp <= 0 ? '💀 (已擊倒)' : `HP: ${enemy.hp}/${enemy.maxHp}`;
+                    const status = `HP: ${enemy.hp}/${enemy.maxHp}`;
                     const extraStatusLine = enemy.getStatusLine ? enemy.getStatusLine() : '';
                     const text = scene.add.text(
                         0, 0,

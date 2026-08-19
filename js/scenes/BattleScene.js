@@ -445,16 +445,18 @@ export class BattleScene extends Phaser.Scene {
         }
         this.enemyDisplays = [];
 
-        this.enemies.forEach((enemy, idx) => {
+        // 🟢 只顯示存活的敵人，死亡的直接消失、不佔版面
+        const aliveEnemies = this.enemies.filter(e => e.hp > 0);
+
+        aliveEnemies.forEach((enemy, idx) => {
             const x = 450;
             const y = 20 + idx * 100;
             const container = this.add.container(x, y);
 
-            // 高亮/可點擊用的背景框，平常透明無邊框，只有在選擇目標時才會顯示
             const bg = this.add.rectangle(150, 35, 320, 80, 0x000000, 0)
                 .setStrokeStyle(0);
 
-            const status = enemy.hp <= 0 ? '💀 (已擊倒)' : `HP: ${enemy.hp}/${enemy.maxHp}`;
+            const status = `HP: ${enemy.hp}/${enemy.maxHp}`;   // 存活才會被列進來，不用再判斷已擊倒
             const extraStatusLine = enemy.getStatusLine ? enemy.getStatusLine() : '';
             const text = this.add.text(0, 0,
                 `[ 😈 ${enemy.name} #${idx + 1} ] (${status})\n` +

@@ -79,17 +79,19 @@ export class CombatSystem {
         if (intent.type === 'SPECIAL' && intent.id === 'SUMMON') {
             safeLog(`📢 ${attacker.name} 大聲呼叫，召喚了同伴支援！`);
 
+            // 改成
             if (enemies && Array.isArray(enemies)) {
-                // 🟢 檢查場上敵人數量是否低於上限 (最大 4 個)
-                if (enemies.length < 4) {
+                // 🟢 改為檢查「存活」敵人數量是否低於上限 (最大 4 個)，死亡敵人不再佔用召喚名額
+                const aliveCount = enemies.filter(e => e.hp > 0).length;
+                if (aliveCount < 4) {
                     const newGoblin = createEnemyInstance('goblin');
                     if (newGoblin) {
                         enemies.push(newGoblin);
-                        safeLog(`👺 新的哥布林加入了戰場！(當前數量: ${enemies.length}/4)`);
+                        safeLog(`👺 新的哥布林加入了戰場！(當前存活數量: ${aliveCount + 1}/4)`);
                     }
                 } else {
                     // 🟢 場滿提示
-                    safeLog(`⚠️ 場上敵人數量已達上限 (4/4)，無法召喚更多同伴！`);
+                    safeLog(`⚠️ 場上存活敵人數量已達上限 (4/4)，無法召喚更多同伴！`);
                 }
             } else {
                 console.warn('⚠️ 召喚失敗：無法取得 enemies 陣列');
