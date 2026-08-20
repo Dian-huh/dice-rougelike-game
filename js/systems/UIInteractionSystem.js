@@ -25,18 +25,19 @@ export class UIInteractionSystem {
             enemies: enemies,
             aliveEnemies: aliveEnemies,
             onTargetChosen: onTargetChosen,
-            enemyDisplays: null,
             isActive: false,
 
+            // 🔧 改為操作 scene.enemyDisplays（BattleScene 的持久清單），
+            // 不再自行渲染一份獨立副本，避免畫面上出現重複的敵人資訊
             show() {
-                if (!this.enemyDisplays || this.enemyDisplays.length === 0) {
-                    this._renderEnemyUI();
+                if (!scene.enemyDisplays || scene.enemyDisplays.length === 0) {
+                    scene.renderEnemyUI();
                 }
 
                 this.isActive = true;
                 scene.appendLog(`🎯 請點選要攻擊的敵人目標...`, 'system');
 
-                this.enemyDisplays.forEach(display => {
+                scene.enemyDisplays.forEach(display => {
                     if (display.enemy.hp > 0 && this.aliveEnemies.includes(display.enemy)) {
                         display.bg.setFillStyle(0x333355, 0.35).setStrokeStyle(2, 0xffff00);
                         display.bg.setInteractive({ useHandCursor: true });
@@ -46,9 +47,9 @@ export class UIInteractionSystem {
             },
 
             hide() {
-                if (!this.isActive) return;
+                if (!this.isActive || !scene.enemyDisplays) return;
 
-                this.enemyDisplays.forEach(display => {
+                scene.enemyDisplays.forEach(display => {
                     display.bg.removeAllListeners('pointerdown');
                     display.bg.disableInteractive();
                     display.bg.setFillStyle(0x000000, 0).setStrokeStyle(0);
@@ -57,42 +58,9 @@ export class UIInteractionSystem {
                 this.isActive = false;
             },
 
+            // 🔧 不再銷毀 enemyDisplays，那是 scene 的持久狀態，session 只負責解除互動
             destroy() {
                 this.hide();
-                if (this.enemyDisplays) {
-                    this.enemyDisplays.forEach(d => d.container.destroy());
-                    this.enemyDisplays = null;
-                }
-            },
-
-            _renderEnemyUI() {
-                if (this.enemyDisplays) {
-                    this.enemyDisplays.forEach(d => d.container.destroy());
-                }
-                this.enemyDisplays = [];
-
-                const aliveEnemies = this.enemies.filter(e => e.hp > 0);   // 🟢 只列出存活敵人
-
-                aliveEnemies.forEach((enemy, idx) => {
-                    const x = 450;
-                    const y = 20 + idx * 100;
-                    const container = scene.add.container(x, y);
-
-                    const bg = scene.add.rectangle(150, 35, 320, 80, 0x000000, 0).setStrokeStyle(0);
-
-                    const status = `HP: ${enemy.hp}/${enemy.maxHp}`;
-                    const extraStatusLine = enemy.getStatusLine ? enemy.getStatusLine() : '';
-                    const text = scene.add.text(
-                        0, 0,
-                        `[ 😈 ${enemy.name} #${idx + 1} ] (${status})\n` +
-                        `  格擋: ${enemy.block || 0} | 攻: ${enemy.atk} | ${extraStatusLine}\n` +
-                        `  速度: [ ${enemy.speedDice || 0} ] | 預告意圖: ${enemy.currentIntent ? enemy.currentIntent.desc : '無'}`,
-                        { fontSize: '14px', fill: '#ff5555', lineSpacing: 4 }
-                    );
-
-                    container.add([bg, text]);
-                    this.enemyDisplays.push({ enemy, container, bg, text });
-                });
             },
 
             _onTargetChosen(enemy) {

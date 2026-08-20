@@ -50,12 +50,27 @@ export class BattleScene extends Phaser.Scene {
         this.diceBoardText = this.add.text(280, 140, '', { fontSize: '15px', fill: '#00ffff', align: 'center', backgroundColor: '#222', padding: { x: 10, y: 8 } });
 
         this.createChatLogUI();
-
-        // 按鈕區
+         // 按鈕區
         this.actionBtn = this.createButton(620, 360, '🎲 擲攻擊骰並結算', () => this.resolveAttackPhase());
         this.skillBtn = this.createButton(40, 360, '✨ 主動技能 (定骰)', () => this.toggleSkillPicker());
 
-        this.createSkillPickerUI();
+        this._dicePickerOnChosen = null;
+        this.dicePickerSession = UIInteractionSystem.createDicePickerSession(
+            this,
+            '請選擇下一次攻擊骰的指定數字 (1~6):',
+            (i) => {
+                const cb = this._dicePickerOnChosen;
+                this._dicePickerOnChosen = null;   // 🔴 一定要在呼叫cb之前先清空，避免殘留
+                if (cb) {
+                    cb(i);
+                } else {
+                    this.hero.overrideDice = i;
+                    this.hero.cdActiveSkill = 3;
+                    this.appendLog(`✨ [主動技能] 指定下次攻擊骰為【 ${i} 】點`, 'player');
+                    this.updateUI();
+                }
+            }
+        );
 
         // 🟢 新增：常駐「查看教學」按鈕，玩家隨時可重看，不受 localStorage 旗標影響
         this.tutorialBtn = this.createButton(700, 5, '📖 教學', () => this.openTutorial());
@@ -314,37 +329,10 @@ export class BattleScene extends Phaser.Scene {
             .setInteractive({ useHandCursor: true }).on('pointerdown', callback);
     }
 
-    createSkillPickerUI() {
-        this.pickerContainer = this.add.container(200, 160);
-        let bg = this.add.rectangle(180, 40, 420, 90, 0x000000, 0.95).setStrokeStyle(2, 0xffcc00);
-        this.pickerTitleText = this.add.text(10, 5, '請選擇下一次攻擊骰的指定數字 (1~6):', { fontSize: '14px', fill: '#ffcc00' });
-        this.pickerContainer.add([bg, this.pickerTitleText]);
-
-        for (let i = 1; i <= 6; i++) {
-            let btn = this.add.text((i - 1) * 65 + 15, 35, `[ ${i} ]`, { fontSize: '20px', fill: '#ffffff', backgroundColor: '#333' })
-                .setInteractive({ useHandCursor: true })
-                .on('pointerdown', () => {
-                    this.pickerContainer.setVisible(false);
-                    const cb = this._dicePickerOnChosen;
-                    this._dicePickerOnChosen = null;   // 🔴 一定要在呼叫cb「之前」先清空，避免殘留
-                    if (cb) {
-                        cb(i);
-                    } else {
-                        this.hero.overrideDice = i;
-                        this.hero.cdActiveSkill = 3;
-                        this.appendLog(`✨ [主動技能] 指定下次攻擊骰為【 ${i} 】點`, 'player');
-                        this.updateUI();
-                    }
-                });
-            this.pickerContainer.add(btn);
-        }
-        this.pickerContainer.setDepth(100).setVisible(false);
-    }
-
     openDicePicker(title, onChosen) {
-        if (this.pickerTitleText) this.pickerTitleText.setText(title);
-        this._dicePickerOnChosen = onChosen;   // 🔴 必須在 setVisible(true) 之前設定好
-        this.pickerContainer.setVisible(true);
+        this._dicePickerOnChosen = onChosen;
+        this.dicePickerSession.setTitle(title);
+        this.dicePickerSession.show();
     }
 
     toggleSkillPicker() {
@@ -364,9 +352,10 @@ export class BattleScene extends Phaser.Scene {
             return;
         }
 
-        // 第三步：否则显示骰子选择器
-        if (this.pickerContainer.visible) {
-            this.pickerContainer.setVisible(false);
+         // 第三步：否则显示骰子选择器
+        const pickerVisible = this.dicePickerSession.container && this.dicePickerSession.container.visible;
+        if (pickerVisible) {
+            this.dicePickerSession.hide();
         } else {
             this.openDicePicker('請選擇下一次攻擊骰的指定數字 (1~6):', null);
         }
@@ -470,36 +459,6 @@ export class BattleScene extends Phaser.Scene {
         });
     }
 
-    showEnemyTargetPicker(aliveEnemies, callback) {
-        if (!this.enemyDisplays || this.enemyDisplays.length === 0) this.renderEnemyUI();
-
-        this.isPickingTarget = true;
-
-        this.enemyDisplays.forEach(display => {
-            if (display.enemy.hp > 0 && aliveEnemies.includes(display.enemy)) {
-                display.bg.setFillStyle(0x333355, 0.35).setStrokeStyle(2, 0xffff00);
-                display.bg.setInteractive({ useHandCursor: true });
-                display.bg.on('pointerdown', () => this.onEnemyTargetChosen(display.enemy, callback));
-            }
-        });
-
-        this.appendLog(`🎯 請點選要攻擊的敵人目標...`, 'system');
-    }
-
-    onEnemyTargetChosen(enemy, callback) {
-        // 復原所有敵人顯示的可點擊狀態
-        this.enemyDisplays.forEach(display => {
-            display.bg.removeAllListeners('pointerdown');
-            display.bg.disableInteractive();
-            display.bg.setFillStyle(0x000000, 0).setStrokeStyle(0);
-        });
-
-        this.isPickingTarget = false;
-        this.appendLog(`🎯 選定目標：${enemy.name}`, 'system');
-
-        if (callback) callback(enemy);
-    }
-
     // ============================================================
     // 🟢 卡牌使用：委托给 CardPlaySystem 处理业务逻辑，
     // BattleScene 只负责显示目标选择 UI 并触发最终结算
@@ -577,9 +536,11 @@ export class BattleScene extends Phaser.Scene {
 
     runSoloStep(step) {
         if (step.type === 'NEED_TARGET') {
-            this.showEnemyTargetPicker(step.candidates, (target) => {
-                this.runSoloStep(AttackFlowSystem.resumeSolo(this.battleCtx, { target }));
-            });
+            const session = UIInteractionSystem.createTargetPickerSession(
+                this, this.enemies, step.candidates,
+                (target) => this.runSoloStep(AttackFlowSystem.resumeSolo(this.battleCtx, { target }))
+            );
+            session.show();
         } else if (step.type === 'NEED_REROLL_CONFIRM') {
             this.promptAttackDiceReroll(step.actionDice, step.rerollsLeft, (payload) => {
                 this.runSoloStep(AttackFlowSystem.resumeSolo(this.battleCtx, payload));
@@ -597,12 +558,13 @@ export class BattleScene extends Phaser.Scene {
         this.runFlowStep(AttackFlowSystem.begin(this.battleCtx));
     }
 
-    // 統一收 AttackFlowSystem 回傳的 step，依 type 分派
     runFlowStep(step) {
         if (step.type === 'NEED_TARGET') {
-            this.showEnemyTargetPicker(step.candidates, (target) => {
-                this.runFlowStep(AttackFlowSystem.resume(this.battleCtx, { target }));
-            });
+            const session = UIInteractionSystem.createTargetPickerSession(
+                this, this.enemies, step.candidates,
+                (target) => this.runFlowStep(AttackFlowSystem.resume(this.battleCtx, { target }))
+            );
+            session.show();
         } else if (step.type === 'NEED_REROLL_CONFIRM') {
             this.promptAttackDiceReroll(step.actionDice, step.rerollsLeft);
         } else if (step.type === 'ACTION_UPDATE') {
@@ -619,32 +581,16 @@ export class BattleScene extends Phaser.Scene {
     // 🟢 重構：不再遞迴自己呼叫自己，每次只顯示「當下這顆骰」的確認框，
     // 玩家選完後透過 resume() 交還給 AttackFlowSystem 決定要不要再問一次
     promptAttackDiceReroll(actionDice, rerollsLeft, onResolved) {
-        if (this.rerollPromptContainer) this.rerollPromptContainer.destroy();
+        if (this.rerollPromptContainer) { this.rerollPromptContainer.destroy(); this.rerollPromptContainer = null; }
 
         const resolve = onResolved || ((payload) => this.runFlowStep(AttackFlowSystem.resume(this.battleCtx, payload)));
 
-        const container = this.add.container(0, 0).setDepth(1500);
-        const bg = this.add.rectangle(620, 200, 260, 90, 0x000000, 0.95).setStrokeStyle(2, 0x66ccff);
-        const text = this.add.text(500, 165, `🎲 攻擊骰結果：[ ${actionDice} ] 點`, { fontSize: '15px', fill: '#ffffff' });
-        const confirmBtn = this.add.text(500, 200, '[ ✅ 確定使用 ]', { fontSize: '14px', fill: '#00ffaa' })
-            .setInteractive({ useHandCursor: true });
-        const rerollBtn = this.add.text(500, 230, `[ 🔄 重骰 (剩餘${rerollsLeft}次) ]`, { fontSize: '14px', fill: '#66ccff' })
-            .setInteractive({ useHandCursor: true });
-
-        container.add([bg, text, confirmBtn, rerollBtn]);
-        this.rerollPromptContainer = container;
-
-        confirmBtn.on('pointerdown', () => {
-            container.destroy();
+        const session = UIInteractionSystem.createRerollConfirmSession(this, actionDice, rerollsLeft, (payload) => {
             this.rerollPromptContainer = null;
-            resolve({ reroll: false });
+            resolve(payload);
         });
-
-        rerollBtn.on('pointerdown', () => {
-            container.destroy();
-            this.rerollPromptContainer = null;
-            resolve({ reroll: true });
-        });
+        session.show();
+        this.rerollPromptContainer = session.container;
     }
 
     checkBattleEnd() {
@@ -702,7 +648,7 @@ export class BattleScene extends Phaser.Scene {
         if (this.handContainer) this.handContainer.destroy();
         if (this.actionBtn) this.actionBtn.destroy();
         if (this.skillBtn) this.skillBtn.destroy();
-        if (this.pickerContainer) this.pickerContainer.setVisible(false);
+        if (this.dicePickerSession) this.dicePickerSession.hide();
 
         this.add.rectangle(425, 275, 850, 550, 0x000000, 0.92).setDepth(3000);
         this.add.text(425, 220, '💀 遊戲結束', { fontSize: '32px', fill: '#ff4444' }).setOrigin(0.5).setDepth(3001);
