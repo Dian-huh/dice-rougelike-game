@@ -50,6 +50,7 @@ export const AttackFlowSystem = {
         }
 
         flow.timesRemaining -= 1;
+        flow.actionIndex = flow.totalTimes - flow.timesRemaining;   // 🟢 新增：1=第1次行動，2=第2次...
         return this._rollAndProceed(ctx);
     },
 
@@ -64,6 +65,25 @@ export const AttackFlowSystem = {
         if (solo.stage === 'WAIT_REROLL') return this._soloAfterRerollDecision(ctx, payload);
         if (solo.stage === 'WAIT_TARGET') return this._soloAfterTarget(ctx, payload);
         return { type: 'DONE' };
+    },
+
+        // 🟢 加權版本：可依需求調整每個骰值的相對權重
+    _rollMainActionDice(actionIndex) {
+        if (actionIndex > 1) {
+            const weightedPool = [
+                { value: 1, weight: 3 },   // 普攻，權重2
+                { value: 3, weight: 2 },   // 爆擊
+                { value: 5, weight: 1 }    // 閃避
+            ];
+            const totalWeight = weightedPool.reduce((sum, e) => sum + e.weight, 0);
+            let r = Math.random() * totalWeight;
+            for (const entry of weightedPool) {
+                r -= entry.weight;
+                if (r <= 0) return entry.value;
+            }
+            return weightedPool[weightedPool.length - 1].value;
+        }
+        return Phaser.Math.Between(1, 6);
     },
 
    _soloRoll(ctx) {
@@ -226,7 +246,7 @@ export const AttackFlowSystem = {
             hero.overrideDice = null;
             allowReroll = false;
         } else {
-            actionDice = Phaser.Math.Between(1, 6);
+            actionDice = this._rollMainActionDice(flow.actionIndex);   // 🔧 原本是 Phaser.Math.Between(1, 6)
         }
         ctx.lastActionDice = actionDice;
         flow.actionDice = actionDice;
@@ -246,7 +266,7 @@ export const AttackFlowSystem = {
 
         if (payload && payload.reroll) {
             EffectEngine.consumeCounter(ctx.hero, 'reroll_attack_dice');
-            const newDice = Phaser.Math.Between(1, 6);
+            const newDice = this._rollMainActionDice(flow.actionIndex);
             ctx.lastActionDice = newDice;
             flow.actionDice = newDice;
             ctx.log(`🔄 重骰攻擊骰：新結果 [ ${newDice} ] 點`, 'system');

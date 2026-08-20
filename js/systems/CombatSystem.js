@@ -1,5 +1,6 @@
 import { createEnemyInstance } from '../data/enemyData.js';
 import { EffectEngine } from './EffectEngine.js';
+import { EFFECT_REGISTRY } from '../data/effectRegistry.js';
 // js/systems/CombatSystem.js
 export class CombatSystem {
 
@@ -295,6 +296,15 @@ export class CombatSystem {
             hero.insightStacks = 0;
             hero.turnCritBonus = 0;
             hero.forceCritThisTurn = false;
+        }
+
+        // 🟢 新增：清除單場戰鬥限定的卡片效果 (CARD_EFFECT 類，如寂寞無為/槿花泡影/盾反)，
+        // 避免尚未倒數完的剩餘回合數被帶進下一場戰鬥
+        if (hero.activeEffects && hero.activeEffects.length > 0) {
+            hero.activeEffects = hero.activeEffects.filter(entry => {
+                const def = EFFECT_REGISTRY[entry.id];
+                return !(def && def.category === 'CARD_EFFECT');
+            });
         }
 
         // 🟢 欄位生命週期稽核補上：以下 6 個欄位理論上會在戰鬥流程中被消耗歸零，

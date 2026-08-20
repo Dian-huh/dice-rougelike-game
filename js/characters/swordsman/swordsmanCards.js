@@ -74,7 +74,7 @@ const SWORDSMAN_CARD_DEFS = [
 
 // 🟢 方法B：數量表跟卡片定義分開，之後要調張數只改這裡
 const SWORDSMAN_CARD_COUNTS = {
-    KG_01: 3, KG_02: 1, KG_03: 2, KG_04: 1, KG_05: 1, KG_06: 2
+    KG_01: 3, KG_02: 1, KG_03: 1, KG_04: 2, KG_05: 1, KG_06: 2
 };
 
 export const SWORDSMAN_DECK = SWORDSMAN_CARD_DEFS.flatMap(def =>
