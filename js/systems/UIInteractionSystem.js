@@ -35,6 +35,7 @@ export class UIInteractionSystem {
                 }
 
                 this.isActive = true;
+                scene.isPickingTarget = true;   // 🟢 新增：讓 renderEnemyUI() 的防呆真正生效
                 scene.appendLog(`🎯 請點選要攻擊的敵人目標...`, 'system');
 
                 scene.enemyDisplays.forEach(display => {
@@ -56,6 +57,7 @@ export class UIInteractionSystem {
                 });
 
                 this.isActive = false;
+                scene.isPickingTarget = false;   // 🟢 新增：解除防呆，恢復正常重繪
             },
 
             // 🔧 不再銷毀 enemyDisplays，那是 scene 的持久狀態，session 只負責解除互動
