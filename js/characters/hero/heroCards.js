@@ -1,15 +1,15 @@
 // js/characters/hero/heroCards.js
 
-const HERO_CARD_DEFS = [
+export const HERO_CARD_DEFS = [
     { 
-        id: 'YS_01', name: '重擊', cost: 2, desc: '造成 4 點傷害',
+        id: 'YS_01', name: '重擊', cost: 2, desc: '造成 4 點傷害',theme: '戰技',
         scope: 'SINGLE_ENEMY', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
             combatSys.applyDamageToTarget(enemy, 4, log);
         }
     },
     { 
-        id: 'YS_02', name: '戰術思考', cost: 0, desc: '抽 2 張牌',
+        id: 'YS_02', name: '戰術思考', cost: 0, desc: '抽 2 張牌',theme: '戰技',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
             deckSys.drawCard();
@@ -18,7 +18,7 @@ const HERO_CARD_DEFS = [
         }
     },
     { 
-        id: 'YS_03', name: '聖痕印記', cost: 1, desc: '給敵方 1 層聖痕',
+        id: 'YS_03', name: '聖痕印記', cost: 1, desc: '給敵方 1 層聖痕',theme: '聖騎士',
         scope: 'SELF', tags: ['聖痕'],
         onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
             hero.stigma += 1;
@@ -26,14 +26,14 @@ const HERO_CARD_DEFS = [
         }
     },
     { 
-        id: 'YS_04', name: '光芒治癒', cost: 1, desc: '回復 3 基礎血量',
+        id: 'YS_04', name: '光芒治癒', cost: 1, desc: '回復 3 基礎血量',theme: '主教',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
             combatSys.applyHealToHero(hero, 3, log);
         }
     },
     { 
-        id: 'YS_05', name: '連打算計', cost: 3, desc: '下一次攻擊骰行動執行 2 次',
+        id: 'YS_05', name: '連打算計', cost: 3, desc: '下一次攻擊骰行動執行 2 次',theme: '特殊',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
             hero.doubleNextAction = true;
@@ -41,7 +41,7 @@ const HERO_CARD_DEFS = [
         }
     },
     { 
-        id: 'YS_06', name: '堅定防禦', cost: 1, desc: '獲得 3 點格擋',
+        id: 'YS_06', name: '堅定防禦', cost: 1, desc: '獲得 3 點格擋',theme: '戰技',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
             hero.block += 3;

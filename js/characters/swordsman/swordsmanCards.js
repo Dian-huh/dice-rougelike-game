@@ -1,6 +1,6 @@
 // js/characters/swordsman/swordsmanCards.js
 
-const SWORDSMAN_CARD_DEFS = [
+export const SWORDSMAN_CARD_DEFS = [
     {
         id: 'KG_01', name: '型態切換', cost: 0, desc: '切換收刀/拔刀狀態，抽1張牌，劍意+1',
         scope: 'SELF', tags: [],
@@ -12,7 +12,7 @@ const SWORDSMAN_CARD_DEFS = [
         }
     },
     {
-        id: 'KG_02', name: '槿花泡影', cost: 2, desc: '接下來3T內，速度+1，回合開始時獲得慧眼',
+        id: 'KG_02', name: '槿花泡影', cost: 2, desc: '接下來3T內，速度+1，回合開始時獲得慧眼', theme: '戰技',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             hero.activeEffects = hero.activeEffects || [];
@@ -23,7 +23,7 @@ const SWORDSMAN_CARD_DEFS = [
         }
     },
     {
-        id: 'KG_03', name: '花風・薄紅舞', cost: 1, desc: '此回合爆擊增益+2、必定爆擊',
+        id: 'KG_03', name: '花風・薄紅舞', cost: 1, desc: '此回合爆擊增益+2、必定爆擊', theme: '戰技',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             hero.turnCritBonus = (hero.turnCritBonus || 0) + 2;

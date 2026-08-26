@@ -294,9 +294,11 @@ export class CombatSystem {
             hero.stance = 'SHEATHED';
             hero.swordIntent = 0;
             hero.insightStacks = 0;
-            hero.turnCritBonus = 0;
-            hero.forceCritThisTurn = false;
         }
+
+        // 🟢 獨立於角色判斷：turnCritBonus/forceCritThisTurn 現在任何角色都可能透過抽卡(KG_03)取得
+        hero.turnCritBonus = 0;
+        hero.forceCritThisTurn = false;
 
         // 🟢 新增：清除單場戰鬥限定的卡片效果 (CARD_EFFECT 類，如寂寞無為/槿花泡影/盾反)，
         // 避免尚未倒數完的剩餘回合數被帶進下一場戰鬥

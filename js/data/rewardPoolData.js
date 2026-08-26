@@ -1,4 +1,6 @@
 import { EffectEngine } from '../systems/EffectEngine.js';
+import { HERO_CARD_DEFS } from '../characters/hero/heroCards.js';
+import { SWORDSMAN_CARD_DEFS } from '../characters/swordsman/swordsmanCards.js';
 // js/data/rewardPoolData.js
 //
 // 🟢 獎勵池資料層（第 1 階段：只定義資料結構與盡量單純的 apply()，
@@ -236,9 +238,9 @@ export const BLESSING_POOL = [
 //    ⚠️ apply() 只有簡單卡片先寫實作，複雜卡片（需要引擎擴充）先標記 TODO，
 //    於第 5 階段補上，並在 executeAttackPhaseAction / CombatSystem 等處掛勾。
 // ====================================================================
-export const REWARD_CARD_POOL = [
+const BASE_REWARD_CARDS = [
     {
-        id: 'card_gold_bomb',
+        id: 'card_gold_bomb',theme: '富豪',
         name: '大撒幣',
         cost: 3,
         scope: 'SELF',   // 🟢 Stage 5-3：改為 SELF，不需要玩家選目標，引擎內部隨機挑
@@ -267,7 +269,7 @@ export const REWARD_CARD_POOL = [
         }
     },
     {
-        id: 'card_treasure',
+        id: 'card_treasure',theme: '富豪',
         name: '祕寶',
         cost: 0,
         scope: 'SELF',
@@ -281,7 +283,7 @@ export const REWARD_CARD_POOL = [
         }
     },
     {
-        id: 'card_prayer',
+        id: 'card_prayer',theme: '主教',
         name: '祈禱',
         cost: 1,
         scope: 'SELF',
@@ -295,7 +297,7 @@ export const REWARD_CARD_POOL = [
         }
     },
     {
-        id: 'card_double_dice',
+        id: 'card_double_dice',theme: '特殊',
         name: '雙骰',
         cost: 3,
         scope: 'SELF',
@@ -308,7 +310,7 @@ export const REWARD_CARD_POOL = [
         }
     },
     {
-        id: 'card_holy_guidance',
+        id: 'card_holy_guidance',theme: '聖騎士',
         name: '神聖的導引',
         cost: 0,
         scope: 'SELF',
@@ -328,7 +330,7 @@ export const REWARD_CARD_POOL = [
         }
     },
     {
-        id: 'card_sweet_rain',
+        id: 'card_sweet_rain',theme: '聖騎士',
         name: '甘霖',
         cost: 2,
         scope: 'SELF',
@@ -354,7 +356,7 @@ export const REWARD_CARD_POOL = [
         }
     },
     {
-        id: 'card_divine_punishment',
+        id: 'card_divine_punishment',theme: '聖騎士',
         name: '天罰',
         cost: 5,
         scope: 'ALL_ENEMIES',
@@ -370,7 +372,7 @@ export const REWARD_CARD_POOL = [
         }
     },
     {
-        id: 'card_counterfeit',
+        id: 'card_counterfeit',theme: '特殊',
         name: '贗品',
         cost: 2,
         scope: 'SELF',
@@ -406,7 +408,7 @@ export const REWARD_CARD_POOL = [
         }
     },
     {
-        id: 'card_berserk',
+        id: 'card_berserk',theme: '惡魔交易',
         name: '暴走',
         cost: 1,
         scope: 'SELF',
@@ -426,7 +428,7 @@ export const REWARD_CARD_POOL = [
         }
     },
     {
-        id: 'card_dragon_slash',
+        id: 'card_dragon_slash',theme: '特殊',
         name: '獵龍斬擊',
         cost: 2,
         scope: 'SINGLE_ENEMY',
@@ -457,7 +459,7 @@ export const REWARD_CARD_POOL = [
         }
     },
     {
-        id: 'card_goblin_slayer',
+        id: 'card_goblin_slayer',theme: '特殊',
         name: '哥布林殺手',
         cost: 5,
         scope: 'SELF',   // 🟢 Stage 5-5：改為 SELF，效果是全場掃描而非對單一目標結算
@@ -479,7 +481,7 @@ export const REWARD_CARD_POOL = [
         }
     },
     {
-        id: 'card_shield_counter',
+        id: 'card_shield_counter',theme: '技巧',
         name: '盾反',
         cost: 1,
         scope: 'SELF',
@@ -493,6 +495,22 @@ export const REWARD_CARD_POOL = [
         }
     },
 ];
+
+export const REWARD_CARD_POOL = [
+    ...BASE_REWARD_CARDS,
+    ...HERO_CARD_DEFS.filter(c => c.theme),
+    ...SWORDSMAN_CARD_DEFS.filter(c => c.theme)
+];
+
+// 供未來選池 UI 使用的主題顯示名稱對照表
+export const CARD_THEMES = {
+    '聖騎士': '⚜️ 聖騎士',
+    '富豪': '💰 富豪',
+    '戰技': '⚔️ 戰技',
+    '惡魔交易': '😈 惡魔交易',
+    '主教': '🙏 主教',
+    '特殊': '✨ 特殊'
+};
 
 // ====================================================================
 // 4. 骰子類獎勵 (DICE) —— 皆可疊加
