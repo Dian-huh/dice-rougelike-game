@@ -264,10 +264,10 @@ export class CombatSystem {
 
     // 🟢 中途被打進Break時，作廢原本鎖定的非一般意圖，改成當下的一般行動
     // Break分支邏輯不依賴 turnCount/speedDice，帶入安全值 0 即可正確走到 generalPool
-    static resolveEnemyIntent(enemy) {
-        if (enemy.isBreak && !enemy._intentLockedInBreak) {
+    static resolveEnemyIntent(enemy, force = false) {
+        if ((force || (enemy.isBreak && !enemy._intentLockedInBreak)) && typeof enemy.getIntent === 'function') {
             enemy.currentIntent = enemy.getIntent(0, enemy.speedDice, enemy);
-            enemy._intentLockedInBreak = true;
+            if (enemy.isBreak) enemy._intentLockedInBreak = true;
         }
         return enemy.currentIntent;
     }

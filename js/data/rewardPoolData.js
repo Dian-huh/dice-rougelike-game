@@ -646,7 +646,11 @@ const BASE_REWARD_CARDS = [
         implemented: true,
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             const before = enemy.ct || 0;
+            const lockedIntent = enemy.currentIntent;
             enemy.ct = Math.max(0, before - 2);
+            if (lockedIntent?.consumeCt > enemy.ct && typeof combatSys.resolveEnemyIntent === 'function') {
+                combatSys.resolveEnemyIntent(enemy, true);
+            }
             log(`😩 效果發動：${enemy.name} CT-2 (${before} → ${enemy.ct})`);
         }
     },
