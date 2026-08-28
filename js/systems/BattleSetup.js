@@ -1,7 +1,8 @@
 import { getCharacterData, getCharacterDeck } from '../characters/characterRegistry.js';
 import { DeckSystem } from './DeckSystem.js';
 import { getStageData } from '../data/stageData.js';
-import { EffectEngine } from './EffectEngine.js';   // 新增
+import { EffectEngine } from './EffectEngine.js';
+import { CombatSystem } from './CombatSystem.js';
 
 export class BattleSetup {
     static resolve(data, gameState) {
@@ -38,6 +39,8 @@ export class BattleSetup {
         //    改成呼叫 onEnemiesGenerated，效果內部會自行檢查 nodeType 與消耗充能
         EffectEngine.runHook('onEnemiesGenerated', hero, { nodeType, enemies });
 
+        CombatSystem.setActiveHero(hero);   // 🟢 懸賞機制：登記本場戰鬥的 hero 參照
+        
         return { hero, deckSys, currentStage, enemies, isFinalBoss };
     }
 }

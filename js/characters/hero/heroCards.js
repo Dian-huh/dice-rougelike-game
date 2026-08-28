@@ -9,7 +9,7 @@ export const HERO_CARD_DEFS = [
         }
     },
     { 
-        id: 'YS_02', name: '戰術思考', cost: 0, desc: '抽 2 張牌',theme: '戰技',
+        id: 'YS_02', name: '戰術思考', cost: 0, desc: '抽 2 張牌',theme: '特殊',
         scope: 'SELF', tags: [],
         onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
             deckSys.drawCard();

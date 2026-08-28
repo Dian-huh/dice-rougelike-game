@@ -72,7 +72,7 @@ export const SWORDSMAN_DATA = {
     cdActiveSkill: 0,
     overrideDice: null,
     battleAtkBonus: 0,
-    deckCapacity: 10,
+    deckCapacity: 15,
     activeEffects: [],
     lastPlayedCard: null,
     startBlock: 0,
@@ -86,6 +86,10 @@ export const SWORDSMAN_DATA = {
     insightStacks: 0,          // 慧眼，上限1
     turnCritBonus: 0,          // 花風・薄紅舞用：單回合暴擊增益，每回合開始由 TurnSystem 重置
     forceCritThisTurn: false,  // 花風・薄紅舞用：單回合必定爆擊旗標，每回合開始由 TurnSystem 重置
+
+    turnSpeedBonus: 0,
+    freeGoldCardsThisTurn: false,
+    nextStigmaCardDiscount: 0,
 
     // 🟢 被動：收刀狀態下閃避成功，對隨機目標反擊5點傷害、回復3
     // 由 CombatSystem.applyDamageToTarget 在閃避成功時呼叫（見上方共用系統改動）

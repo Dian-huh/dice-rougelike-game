@@ -6,7 +6,8 @@ export class TurnSystem {
         hero.mana = hero.maxMana;
         if (hero.cdActiveSkill > 0) hero.cdActiveSkill--;
         if (hero.isVulnerable) { hero.isVulnerable = false; hero.armorHits = 0; }
-
+        hero.turnSpeedBonus = 0;   // 🟢 賄絡用：本回合速度加成，每回合開始重置
+        hero.freeGoldCardsThisTurn = false;
         if (turnCount === 1 && hero.startBlock > 0) {
             hero.block += hero.startBlock;
             log(`🛡️ [開局被動發動] 獲得 ${hero.startBlock} 點格擋！`, 'system');

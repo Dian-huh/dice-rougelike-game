@@ -244,7 +244,7 @@ const BASE_REWARD_CARDS = [
         name: '大撒幣',
         cost: 3,
         scope: 'SELF',   // 🟢 Stage 5-3：改為 SELF，不需要玩家選目標，引擎內部隨機挑
-        tags: [],
+        tags: ['金幣'],
         desc: '消耗金幣，每 50 塊對隨機單體造成一次 5 點傷害 (最多消耗 500 金幣)',
         implemented: true,   // 🟢 Stage 5-3
         onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
@@ -273,7 +273,7 @@ const BASE_REWARD_CARDS = [
         name: '祕寶',
         cost: 0,
         scope: 'SELF',
-        tags: [],
+        tags: ['金幣'],
         desc: '獲得 50 金幣，抽 1 張牌',
         implemented: true,
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
@@ -492,6 +492,189 @@ const BASE_REWARD_CARDS = [
             hero.block += 5;
             const entry = EffectEngine.addStacks(hero, 'shield_counter', 2);
             log(`🛡️ 效果發動：獲得 5 點格擋，並取得【盾反】效果 (剩餘 ${entry.stacks} 回合)！`);
+        }
+    },
+    {
+        id: 'card_holy_mark', theme: '聖騎士',
+        name: '聖輝印記', cost: 1, scope: 'SELF', tags: ['聖痕'],
+        desc: '給予敵方1層聖痕 (若聖痕層數>5，則變為給予2層)',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            const gain = hero.stigma > 5 ? 2 : 1;
+            hero.stigma += gain;
+            log(`🔱 效果發動：敵方附加 ${gain} 層聖痕 (現為 ${hero.stigma} 層)`);
+        }
+    },
+    {
+        id: 'card_holy_barrier', theme: '聖騎士',
+        name: '光之護封劍', cost: 2, scope: 'SELF', tags: ['聖痕'],
+        desc: '每2層聖痕，獲得1點格擋',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            const block = Math.floor((hero.stigma || 0) / 2);
+            hero.block += block;
+            log(`🛡️ 效果發動：依聖痕層數獲得 ${block} 點格擋 (現為 ${hero.block})`);
+        }
+    },
+    {
+        id: 'card_judgment_blade', theme: '聖騎士',
+        name: '審判之劍', cost: 0, scope: 'SINGLE_ENEMY', tags: ['聖痕'],
+        desc: '造成單體 (聖痕層數*2) 點傷害，聖痕層數歸零',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            const dmg = (hero.stigma || 0) * 2;
+            log(`⚔️ 效果發動：造成 ${dmg} 點傷害，聖痕層數歸零`);
+            combatSys.applyDamageToTarget(enemy, dmg, log);
+            hero.stigma = 0;
+        }
+    },
+    {
+        id: 'card_divine_advent', theme: '聖騎士',
+        name: '神聖降臨', cost: 3, scope: 'ALL_ENEMIES', tags: ['聖痕'],
+        desc: '造成全體爆擊傷害，給予3層聖痕',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
+            const dmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero);
+            const aliveEnemies = scene.enemies.filter(e => e.hp > 0);
+            log(`💥 效果發動：對敵方全體造成 ${dmg} 點爆擊傷害！`);
+            aliveEnemies.forEach(en => combatSys.applyDamageToTarget(en, dmg, log));
+            hero.stigma += 3;
+            log(`🔱 敵方附加 3 層聖痕 (現為 ${hero.stigma} 層)`);
+        }
+    },
+    {
+        id: 'card_borrowed_power', theme: '聖騎士',
+        name: '借用神力', cost: 2, scope: 'SELF', tags: ['聖痕'],
+        desc: '給予2層聖痕，下一張帶「聖痕」詞條的卡片費用-2',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            hero.stigma += 2;
+            hero.nextStigmaCardDiscount = (hero.nextStigmaCardDiscount || 0) + 2;
+            log(`🔱 效果發動：敵方附加 2 層聖痕，下一張聖痕卡費用 -2`);
+        }
+    },
+    {
+        id: 'card_bribery', theme: '富豪', tags: ['金幣'],
+        name: '賄絡', cost: 0, scope: 'SELF',
+        desc: '消耗40金幣，本回合速度+10',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            if ((hero.gold || 0) < 40) {
+                log(`💸 效果發動：金幣不足40，賄絡失敗`);
+                return;
+            }
+            hero.gold -= 40;
+            hero.turnSpeedBonus = (hero.turnSpeedBonus || 0) + 10;
+            log(`💰 效果發動：花費40金幣，本回合速度+10`);
+        }
+    },
+    {
+        id: 'card_golden_armor', theme: '富豪', tags: ['金幣'],
+        name: '黃金甲冑', cost: 2, scope: 'SELF',
+        desc: '獲得當前金幣量10%的格擋',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            const block = Math.floor((hero.gold || 0) * 0.1);
+            hero.block += block;
+            log(`🛡️ 效果發動：依當前金幣獲得 ${block} 點格擋`);
+        }
+    },
+    {
+        id: 'card_quad_slash', theme: '戰技',
+        name: '垂直四方斬', cost: 1, scope: 'SINGLE_ENEMY', tags: [],
+        desc: '造成單體4次1點傷害',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            log(`⚔️ 效果發動：造成4次1點傷害`);
+            for (let i = 0; i < 4; i++) {
+                if (enemy.hp <= 0) break;
+                combatSys.applyDamageToTarget(enemy, 1, log);
+            }
+        }
+    },
+    {
+        id: 'card_blood_ritual', theme: '惡魔交易',
+        name: '血祭', cost: 0, scope: 'SELF', tags: [],
+        desc: '扣除3點血量，獲得3點魔力',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            hero.hp = Math.max(1, hero.hp - 3);
+            hero.mana += 3;
+            log(`🩸 效果發動：扣除3點血量，獲得3點魔力`);
+        }
+    },
+    {
+        id: 'card_desperate_strike', theme: '惡魔交易',
+        name: '背水一擊', cost: 1, scope: 'SINGLE_ENEMY', tags: [],
+        desc: '造成單體 3*(1+已損生命值%) 點傷害',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            const missingPct = Math.max(0, (hero.maxHp - hero.hp) / hero.maxHp);
+            const dmg = Math.round(3 * (1 + missingPct));
+            log(`⚔️ 效果發動：造成 ${dmg} 點傷害 (已損血量 ${Math.round(missingPct * 100)}%)`);
+            combatSys.applyDamageToTarget(enemy, dmg, log);
+        }
+    },
+    {
+        id: 'card_equal_exchange', theme: '惡魔交易',
+        name: '等價交換', cost: 0, scope: 'SELF', tags: [],
+        desc: '扣除3點血量，抽2，獲得1點魔力',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            hero.hp = Math.max(1, hero.hp - 3);
+            deckSys.drawCard();
+            deckSys.drawCard();
+            hero.mana += 1;
+            log(`⚖️ 效果發動：扣除3點血量，抽2張牌，獲得1點魔力`);
+        }
+    },
+    {
+        id: 'card_blessing_heal', theme: '主教',
+        name: '祝福', cost: 1, scope: 'SELF', tags: [],
+        desc: '回復3，獲得3點格擋',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            combatSys.applyHealToHero(hero, 3, log);
+            hero.block += 3;
+            log(`🛡️ 效果發動：獲得3點格擋 (現為 ${hero.block})`);
+        }
+    },
+    {
+        id: 'card_morale_break', theme: '特殊',
+        name: '戰意喪失', cost: 1, scope: 'SINGLE_ENEMY', tags: [],
+        desc: '敵人單體CT-2',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            const before = enemy.ct || 0;
+            enemy.ct = Math.max(0, before - 2);
+            log(`😩 效果發動：${enemy.name} CT-2 (${before} → ${enemy.ct})`);
+        }
+    },
+    {
+        id: 'card_compound_interest', theme: '富豪', tags: ['金幣'],
+        name: '利滾利', cost: 1, scope: 'SELF',
+        desc: '消耗所有金幣，抽取所有帶「金幣」詞條的卡片，並使其本回合變為0費，此回合每使用一張金幣卡獲得20金幣',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            const spent = hero.gold || 0;
+            hero.gold = 0;
+            hero.freeGoldCardsThisTurn = true;
+            let drawnCount = 0, card;
+            while ((card = deckSys.drawCardByTag('金幣'))) {
+                drawnCount += 1;
+                if (drawnCount > 30) break; // 防呆
+            }
+            log(`💰 效果發動：消耗 ${spent} 金幣，抽到 ${drawnCount} 張金幣詞條卡片，本回合金幣詞條卡片皆變為0費！`);
+        }
+    },
+    {
+        id: 'card_bounty', theme: '富豪',
+        name: '重金懸賞', cost: 0, scope: 'SINGLE_ENEMY', tags: [],
+        desc: '給予敵單體1層懸賞 (帶有懸賞的敵人死亡時，玩家獲得 50*懸賞層數 的金幣)',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            enemy.bountyStacks = (enemy.bountyStacks || 0) + 1;
+            log(`💰 效果發動：對 ${enemy.name} 施加懸賞 (現為 ${enemy.bountyStacks} 層)`);
         }
     },
 ];

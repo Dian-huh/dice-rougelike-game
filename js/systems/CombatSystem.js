@@ -4,6 +4,10 @@ import { EFFECT_REGISTRY } from '../data/effectRegistry.js';
 // js/systems/CombatSystem.js
 export class CombatSystem {
 
+    static setActiveHero(hero) {
+        this._activeHero = hero;
+    }
+
     // 🟢 通用敵人意圖解析器 (資料驅動核心)
     static executeEnemyIntent(attacker, intent, target, logCallback, enemies) {
         const safeLog = typeof logCallback === 'function' ? logCallback : console.log;
@@ -233,9 +237,17 @@ export class CombatSystem {
 
         // 5. 扣除 HP 與 受傷次數判定
         if (finalDmg > 0) {
+            const wasAliveBefore = target.hp > 0;
             target.hp = Math.max(0, target.hp - finalDmg);
             let detailStr = logDetails.length > 0 ? ` (${logDetails.join(', ')})` : '';
             if (logCallback) logCallback(`💥 造成 ${finalDmg} 點傷害${detailStr} (剩餘 ${target.hp}/${target.maxHp} HP)`);
+
+            // 🟢 懸賞：帶有懸賞標記的目標死亡時，玩家獲得50*該目標身上懸賞層數的金幣
+            if (wasAliveBefore && target.hp <= 0 && target.bounty && target.bounty > 0) {
+                const bountyGold = 50 * target.bountyStacks;
+                this._activeHero.gold = (this._activeHero.gold || 0) + bountyGold;
+                if (logCallback) logCallback(`🏆 ${target.name} 死亡，獲得懸賞金 ${bountyGold} 金幣！`);
+            }
 
             if (target.armorMax && target.armorMax > 0) {
                 target.armorHits = (target.armorHits || 0) + 1;
@@ -299,6 +311,7 @@ export class CombatSystem {
         // 🟢 獨立於角色判斷：turnCritBonus/forceCritThisTurn 現在任何角色都可能透過抽卡(KG_03)取得
         hero.turnCritBonus = 0;
         hero.forceCritThisTurn = false;
+        hero.nextStigmaCardDiscount = 0;
 
         // 🟢 新增：清除單場戰鬥限定的卡片效果 (CARD_EFFECT 類，如寂寞無為/槿花泡影/盾反)，
         // 避免尚未倒數完的剩餘回合數被帶進下一場戰鬥
@@ -339,7 +352,7 @@ export class CombatSystem {
     }
 
     static getEffectiveSpeedBonus(hero) {
-        return (hero.speedBonus || 0) + EffectEngine.getLiveStatBonus(hero, 'speed');
+        return (hero.speedBonus || 0) + (hero.turnSpeedBonus || 0) + EffectEngine.getLiveStatBonus(hero, 'speed');
     }
 
     static getEffectiveArmorMax(entity) {
@@ -349,8 +362,16 @@ export class CombatSystem {
     // 🟢 Stage 5-1 新增：卡片動態費用計算
     static getEffectiveCost(card, hero) {
         const base = (typeof card.getCost === 'function') ? card.getCost(hero) : (card.cost || 0);
-        const globalReduction = EffectEngine.getLiveStatBonus(hero, 'cardCost');
-        return Math.max(0, base + globalReduction);
+        if (card.tags && card.tags.includes('金幣') && hero.freeGoldCardsThisTurn) {
+            return 0;
+        }
+        let discounted = base;
+        if (card.tags && card.tags.includes('聖痕') && hero.nextStigmaCardDiscount > 0) {
+            discounted = Math.max(0, base - hero.nextStigmaCardDiscount);
+        }
+         const globalReduction = EffectEngine.getLiveStatBonus(hero, 'cardCost');
+
+        return Math.max(0, discounted + globalReduction);
     }
 
     // 🟢 新增：統一計算「顯示/實際扣款用」的最終費用，把「首張卡片免費」被動也一併算進去

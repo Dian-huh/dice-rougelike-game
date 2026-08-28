@@ -66,6 +66,17 @@ export class CardPlaySystem {
         hero.mana -= effCost;
         deckSys.playCard(index);
 
+        // 🟢 利滾利效果生效中：每使用一張金幣詞條卡額外獲得20金幣
+        if (hero.freeGoldCardsThisTurn && card.tags && card.tags.includes('金幣')) {
+            hero.gold = (hero.gold || 0) + 20;
+            appendLogFn(`💰 [利滾利] 使用金幣卡，額外獲得 20 金幣！`, 'player');
+        }
+
+        // 🟢 借用神力：折扣是一次性的，用在一張聖痕卡後即消耗
+        if (card.tags && card.tags.includes('聖痕') && hero.nextStigmaCardDiscount > 0) {
+           hero.nextStigmaCardDiscount = 0;
+        }
+
         // 处理中毒效果
         CombatSystem.tickPoison(hero, (m) => appendLogFn(m, 'player'));
 

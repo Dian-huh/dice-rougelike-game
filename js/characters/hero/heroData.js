@@ -24,7 +24,7 @@ export const HERO_DATA = {
     cdActiveSkill: 0,  
     overrideDice: null,
     battleAtkBonus: 0,
-    deckCapacity: 10,
+    deckCapacity: 15,
     activeEffects: [],
     lastPlayedCard: null,
 
@@ -33,6 +33,9 @@ export const HERO_DATA = {
     rewardCounts: { STAT: 0, BLESSING: 0, CARD: 0 },   // 🟢 補上：獎勵選擇次數計數，供收集類里程碑判斷
     firstCardFreeEachBattle: false,                    // 🟢 補上：卡片類收集x2的里程碑旗標（目前尚未接上實際生效邏輯，Stage 6待補）
     
+    turnSpeedBonus: 0,
+    freeGoldCardsThisTurn: false,
+    nextStigmaCardDiscount: 0,
 
     // 🟢 新增：scope 標籤，供 BattleScene 判斷是否需要跳出目標選擇 UI
     //   SINGLE_ENEMY -> 需要指定敵方目標（若場上僅剩1隻敵人則自動選定，不用多點一次）
