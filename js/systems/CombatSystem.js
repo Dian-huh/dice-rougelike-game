@@ -59,7 +59,7 @@ export class CombatSystem {
                 safeLog(`⚡ ${attacker.name} 使用【${intent.desc}】，造成 ${baseDmg} 點無視防禦與閃避的真實傷害！`);
             } else {
                 // 一般結算 (經由 applyDamageToTarget)
-                this.applyDamageToTarget(target, baseDmg, safeLog, enemies);   // 🟢 Stage 5-6：補上 enemies
+                this.applyDamageToTarget(target, baseDmg, safeLog, enemies, attacker);   // 🟢 傳遞 attacker 以支持 onGetHit hook
             }
         }
 
@@ -188,7 +188,7 @@ export class CombatSystem {
     }
 
 
-    static applyDamageToTarget(target, rawDmg, logCallback, enemies) {   // 🟢 Stage 5-6：新增 enemies 參數
+    static applyDamageToTarget(target, rawDmg, logCallback, enemies, attacker = null) {   // 🟢 Stage 5-6：新增 enemies / attacker 參數
         // 1. 🌀 閃避判定
         // 1. 🌀 閃避判定
         if (target.dodgeCount && target.dodgeCount > 0) {
@@ -203,7 +203,9 @@ export class CombatSystem {
         }
 
         // 🟢 新增：受擊 hook —— 不論後續格擋/傷害計算結果，只要沒被閃避就觸發（反擊層數用）
-        EffectEngine.runHook('onGetHit', target, { attacker, enemies, log: logCallback, combatSys: this });
+        const hookCtx = { enemies, log: logCallback, combatSys: this };
+        if (attacker) hookCtx.attacker = attacker;  // 只在 attacker 存在時才傳遞
+        EffectEngine.runHook('onGetHit', target, hookCtx);
 
         // 改成
         // 2. 觸發受擊 OD / Break 增減 (適用於敵人)
