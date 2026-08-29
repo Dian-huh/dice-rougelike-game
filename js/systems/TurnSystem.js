@@ -23,6 +23,7 @@ export class TurnSystem {
             if (turnCount > 1 && typeof enemy.onTurnEnd === 'function') {
                 enemy.onTurnEnd((m) => log(m, 'system'));
             }
+            EffectEngine.runHook('onTurnStart', enemy, { log: (m) => log(m, 'system') });   // 🟢 新增
             enemy.speedDice = Phaser.Math.Between(1, enemy.speedDiceSides || 6) + (enemy.speedBonus || 0);
             enemy.currentIntent = enemy.getIntent(turnCount, enemy.speedDice, enemy);
             enemy._intentLockedInBreak = enemy.isBreak;

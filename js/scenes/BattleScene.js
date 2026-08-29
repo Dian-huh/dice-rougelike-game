@@ -67,6 +67,7 @@ export class BattleScene extends Phaser.Scene {
                     this.hero.overrideDice = i;
                     this.hero.cdActiveSkill = 3;
                     this.appendLog(`✨ [主動技能] 指定下次攻擊骰為【 ${i} 】點`, 'player');
+                    CombatSystem.tickActionDOT(this.hero, (m) => this.appendLog(m, 'player'));   // 🟢 新增
                     this.updateUI();
                 }
             }
@@ -348,6 +349,7 @@ export class BattleScene extends Phaser.Scene {
         // 第二步：如果英雄有自定义的 useActiveSkill 方法，则调用
         if (typeof this.hero.useActiveSkill === 'function') {
             this.hero.useActiveSkill(CombatSystem, (m) => this.appendLog(m, 'player'));
+            CombatSystem.tickActionDOT(this.hero, (m) => this.appendLog(m, 'player'));
             this.updateUI();
             return;
         }

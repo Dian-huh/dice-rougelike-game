@@ -8,6 +8,21 @@
 export const EFFECT_REGISTRY = {
 
     // ================= BLESSING =================
+    sage_blessing: {
+        category: 'DEBUFF_LIKE',
+        displayName: '賢者加護',
+        getStatusText: (entry) => `賢者加護 (剩餘 ${entry.stacks} 回合，全屬性+1，CT額外+1)`,
+        liveStatModifier: (entity, entry, statName) => ['atk','speed','crit','armor'].includes(statName) ? 1 : 0,
+        onCtRegenQuery: (entity, entry, ctx) => { ctx.bonus += 1; },
+        onTurnStart: (entity, entry, ctx) => {
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
+                ctx.log(`✨ [賢者加護] 效果已結束`);
+            }
+        }
+    },
+
     blessing_stigma_sovereign: {
         category: 'BLESSING',
         displayName: '聖痕君臨',
@@ -148,6 +163,42 @@ export const EFFECT_REGISTRY = {
             hero.swordIntent = Math.max(0, Math.min(10, (hero.swordIntent || 0) + 1));
             hero.insightStacks = Math.min(1, (hero.insightStacks || 0) + 1);
             ctx.log(`🗡️ [寂寞無為] 劍意+1，獲得【慧眼】`, 'system');
+        }
+    },
+
+    counter_stack: {
+        category: 'DEBUFF_LIKE',   // 通用敵方機制類別，不分角色/敵人皆可掛
+        displayName: '反擊',
+        getStatusText: (entry) => `反擊 x${entry.stacks} (受到攻擊時反擊等量傷害)`,
+        onGetHit: (self, entry, ctx) => {
+            if (!ctx.attacker || ctx.attacker.hp <= 0) return;
+            const dmg = CombatSystem_ref.getEffectiveEnemyAtk(self) * entry.stacks;   // 見第9項
+            ctx.log(`🔁 [反擊] ${self.name} 對 ${ctx.attacker.name} 造成 ${dmg} 點反擊傷害！`);
+            ctx.combatSys.applyDamageToTarget(ctx.attacker, dmg, ctx.log, ctx.enemies, self);
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                self.activeEffects = self.activeEffects.filter(e => e !== entry);
+            }
+        }
+    },
+
+    taunt: {
+        category: 'DEBUFF_LIKE',
+        displayName: '嘲諷',
+        getStatusText: () => `嘲諷 (敵方攻擊被強制鎖定至此)`
+        // 無 hook：純粹供 AttackFlowSystem 查詢是否存在
+    },
+
+    debuff_stun: {
+        category: 'DEBUFF_LIKE',
+        displayName: '暈眩',
+        getStatusText: (entry) => `暈眩 (剩餘 ${entry.stacks} 回合，無法出卡)`,
+        onTurnStart: (hero, entry, ctx) => {
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                hero.activeEffects = hero.activeEffects.filter(e => e !== entry);
+                ctx.log(`💫 [暈眩] 效果已結束`, 'system');
+            }
         }
     },
 

@@ -1,5 +1,5 @@
 // js/data/enemyTemplate.js
-
+import { EffectEngine } from '../systems/EffectEngine.js';
 /**
  * 所有怪物的基礎契約範本 (Enemy Base Interface)
  */
@@ -23,6 +23,7 @@ export const ENEMY_TEMPLATE = {
     isOD: false,    // 是否處於 OD 狂暴狀態 (攻擊 100% 暴擊)
     isBreak: false, // 是否處於 Break 癱瘓狀態 (僅能使用一般行動)
     isFlying: false,
+    activeEffects: [],
     chargeTurns: 0,   // 🟢 新增：衝鋒效果剩餘回合數（0 = 未生效）
     heroicTurns: 0,   // 🟢 新增：英勇效果剩餘回合數（0 = 未生效）
 
@@ -54,7 +55,10 @@ export const ENEMY_TEMPLATE = {
         const safeLog = typeof log === 'function' ? log : console.log;
 
         // CT 每回合自動 +1
-        this.ct = Math.min(this.maxCt, this.ct + 1);
+        // 🟢 CT恢復改為可配置：預設+1，賢者加護等效果可透過 onCtRegenQuery 疊加額外值
+        const ctx = { bonus: 0 };
+        EffectEngine.runHook('onCtRegenQuery', this, ctx);
+        this.ct = Math.min(this.maxCt, this.ct + 1 + ctx.bonus);
 
         // Break 狀態下，若 CT 達到最大值，消耗所有 CT 自動解除 Break
         if (this.isBreak && this.ct >= this.maxCt) {

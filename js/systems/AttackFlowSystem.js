@@ -149,12 +149,20 @@ export const AttackFlowSystem = {
         const scope = (skill && skill.scope) || 'SINGLE_ENEMY';
         const aliveEnemies = enemies.filter(e => e.hp > 0);
 
-        if (scope === 'SINGLE_ENEMY' && aliveEnemies.length > 1) {
-            ctx._solo.stage = 'WAIT_TARGET';
-            ctx._solo.pendingScope = scope;
-            ctx._solo.pendingDice = actionDice;
-            return { type: 'NEED_TARGET', candidates: aliveEnemies };
+        // 🟢 新增：SINGLE_ENEMY 情況下，若有敵人正在嘲諷，強制鎖定為目標，跳過選擇UI
+        if (scope === 'SINGLE_ENEMY') {
+            const tauntTarget = CombatSystem.getTauntTarget(aliveEnemies);
+            if (tauntTarget) {
+                return this._soloExecute(ctx, actionDice, scope, tauntTarget);
+            }
+            if (aliveEnemies.length > 1) {
+                ctx._solo.stage = 'WAIT_TARGET';
+                ctx._solo.pendingScope = scope;
+                ctx._solo.pendingDice = actionDice;
+                return { type: 'NEED_TARGET', candidates: aliveEnemies };
+            }
         }
+
         const target = aliveEnemies.length > 0 ? aliveEnemies[0] : null;
         return this._soloExecute(ctx, actionDice, scope, target);
     },
@@ -222,11 +230,11 @@ export const AttackFlowSystem = {
 
         if (targetEnemy && checkFlyingState) {
             ctx.log(`💨 ${targetEnemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
-            CombatSystem.tickPoison(hero, (m) => ctx.log(m, 'player'));
+            CombatSystem.tickActionDOT(hero, (m) => ctx.log(m, 'player'));
             return;
         }
         skill.execute(hero, targetEnemy, CombatSystem, (m) => ctx.log(m, 'player'), ctx._solo, ctx.enemies);
-        CombatSystem.tickPoison(hero, (m) => ctx.log(m, 'player'));
+        CombatSystem.tickActionDOT(hero, (m) => ctx.log(m, 'player'));
     },
 
     _rollAndProceed(ctx) {
@@ -288,11 +296,18 @@ export const AttackFlowSystem = {
         const scope = (skill && skill.scope) || 'SINGLE_ENEMY';
         const aliveEnemies = enemies.filter(e => e.hp > 0);
 
-        if (scope === 'SINGLE_ENEMY' && aliveEnemies.length > 1) {
-            ctx._flow.stage = 'WAIT_TARGET';
-            ctx._flow.pendingScope = scope;
-            ctx._flow.pendingDice = actionDice;
-            return { type: 'NEED_TARGET', candidates: aliveEnemies };
+        // 🟢 新增：SINGLE_ENEMY 情況下，若有敵人正在嘲諷，強制鎖定為目標，跳過選擇UI
+        if (scope === 'SINGLE_ENEMY') {
+            const tauntTarget = CombatSystem.getTauntTarget(aliveEnemies);
+            if (tauntTarget) {
+                return this._executeAction(ctx, actionDice, scope, tauntTarget);
+            }
+            if (aliveEnemies.length > 1) {
+                ctx._flow.stage = 'WAIT_TARGET';
+                ctx._flow.pendingScope = scope;
+                ctx._flow.pendingDice = actionDice;
+                return { type: 'NEED_TARGET', candidates: aliveEnemies };
+            }
         }
 
         const target = aliveEnemies.length > 0 ? aliveEnemies[0] : null;
@@ -424,7 +439,7 @@ export const AttackFlowSystem = {
                 const enemyIntent = CombatSystem.resolveEnemyIntent(enemy);
                 enemy.executeAction(enemy, enemyIntent, hero, CombatSystem, (m) => eActionLog.push(m), ctx.enemies);
             }
-            CombatSystem.tickPoison(hero, (m) => pActionLog.push(m));
+            CombatSystem.tickActionDOT(hero, (m) => pActionLog.push(m));
 
             ctx.log(pActionLog.join(' '), 'simultaneous', eActionLog.join(' '));
         }
@@ -441,12 +456,12 @@ export const AttackFlowSystem = {
 
         if (targetEnemy && checkFlyingState) {
             ctx.log(`💨 ${targetEnemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
-            CombatSystem.tickPoison(hero, (m) => ctx.log(m, 'player'));
+            CombatSystem.tickActionDOT(hero, (m) => ctx.log(m, 'player'));
             return;
         }
 
         skill.execute(hero, targetEnemy, CombatSystem, (m) => ctx.log(m, 'player'), ctx._flow, ctx.enemies);
-        CombatSystem.tickPoison(hero, (m) => ctx.log(m, 'player'));
+        CombatSystem.tickActionDOT(hero, (m) => ctx.log(m, 'player'));
     },
 
     _executeEnemyAction(ctx, enemy) {

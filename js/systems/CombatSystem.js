@@ -1,6 +1,7 @@
 import { createEnemyInstance } from '../data/enemyData.js';
 import { EffectEngine } from './EffectEngine.js';
 import { EFFECT_REGISTRY } from '../data/effectRegistry.js';
+import { DOT_TYPES } from '../data/dotRegistry.js'; 
 // js/systems/CombatSystem.js
 export class CombatSystem {
 
@@ -154,6 +155,19 @@ export class CombatSystem {
                 safeLog(logMsg);
                 break;
             }
+            case 'RANDOM_SELF_BLOCK': {
+                attacker.block = (attacker.block || 0) + intent.value;
+                let msg = `🛡️ ${attacker.name} 發動【${intent.desc}】，自己獲得 ${intent.value} 點格擋`;
+                if (otherAllies.length > 0) {
+                    const randomAlly = otherAllies[Math.floor(Math.random() * otherAllies.length)];
+                    randomAlly.block = (randomAlly.block || 0) + intent.value;
+                    msg += `，並讓 ${randomAlly.name} 一同獲得 ${intent.value} 點格擋！`;
+                } else {
+                    msg += `！（沒有其他友軍可分享效果）`;
+                }
+                safeLog(msg);
+                break;
+            }
             default:
                 safeLog(`⚠️ 未知的友軍增益效果類型: ${intent.effect}`);
         }
@@ -187,6 +201,9 @@ export class CombatSystem {
             EffectEngine.runHook('onDodgeSuccess', target, { enemies, log: logCallback, combatSys: this });
             return;
         }
+
+        // 🟢 新增：受擊 hook —— 不論後續格擋/傷害計算結果，只要沒被閃避就觸發（反擊層數用）
+        EffectEngine.runHook('onGetHit', target, { attacker, enemies, log: logCallback, combatSys: this });
 
         // 改成
         // 2. 觸發受擊 OD / Break 增減 (適用於敵人)
@@ -279,12 +296,21 @@ export class CombatSystem {
         if (logCallback) logCallback(`💚 回復 ${actualHeal} 點 HP (現有 ${hero.hp}/${hero.maxHp})`);
     }
 
-    static tickPoison(entity, log) {
-        if (entity.poisonTurns > 0) {
-            entity.hp = Math.max(0, entity.hp - 1);
-            entity.poisonTurns -= 1;
-            log(`🤢 【劇毒】發作，${entity.name} 受到 1 點傷害 (剩餘 ${entity.poisonTurns} 回合)`);
-        }
+    static tickActionDOT(entity, log) {
+        Object.values(DOT_TYPES).forEach(dot => {
+            const stacks = entity[dot.stacksField] || 0;
+            if (stacks <= 0) return;
+            const dmg = dot.getDamage(entity);
+            entity.hp = Math.max(0, entity.hp - dmg);
+            entity[dot.stacksField] -= 1;
+            log(`${dot.icon} 【${dot.label}】發作，${entity.name} 受到 ${dmg} 點傷害 (剩餘 ${entity[dot.stacksField]} 回合)`);
+        });
+    }
+
+    static getLowestHpPercentAlly(allies) {
+        const alive = (allies || []).filter(e => e.hp > 0);
+        if (alive.length === 0) return null;
+        return alive.reduce((lowest, e) => (e.hp / e.maxHp) < (lowest.hp / lowest.maxHp) ? e : lowest);
     }
 
     // 修改後
@@ -342,6 +368,18 @@ export class CombatSystem {
     // === 即時計算 Helper（方案A：不存欄位，每次讀取當下 HP 現算）===
 
 
+
+    static getEffectiveEnemyAtk(enemy) {
+        return (enemy.atk || 0) + EffectEngine.getLiveStatBonus(enemy, 'atk');
+    }
+
+    static getEffectiveEnemySpeedBonus(enemy) {
+        return (enemy.speedBonus || 0) + EffectEngine.getLiveStatBonus(enemy, 'speed');
+    }
+    
+    static getTauntTarget(aliveEnemies) {
+        return aliveEnemies.find(e => EffectEngine.getEntry(e, 'taunt')) || null;
+    }
 
     static getEffectiveAtk(hero) {
         return (hero.atk || 0) + (hero.battleAtkBonus || 0) + EffectEngine.getLiveStatBonus(hero, 'atk');

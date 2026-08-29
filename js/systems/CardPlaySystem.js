@@ -8,7 +8,7 @@
  * 
  * 不处理：UI 显示、用户交互（交给 UIInteractionSystem）
  */
-
+import { EffectEngine } from './EffectEngine.js';
 import { CombatSystem } from './CombatSystem.js';
 
 export class CardPlaySystem {
@@ -18,6 +18,10 @@ export class CardPlaySystem {
      */
     static canPlayCard(card, hero, battleCtx) {
         if (!card) return { valid: false, reason: '卡牌不存在' };
+
+        if (EffectEngine.getEntry(hero, 'debuff_stun')) {   // 🟢 新增
+            return { valid: false, reason: `⚠️ 處於【暈眩】狀態，無法使用卡牌` };
+        }
 
         const { cost: effCost } = CombatSystem.getDisplayCost(card, hero, battleCtx);
 
@@ -78,7 +82,7 @@ export class CardPlaySystem {
         }
 
         // 处理中毒效果
-        CombatSystem.tickPoison(hero, (m) => appendLogFn(m, 'player'));
+        CombatSystem.tickActionDOT(hero, (m) => appendLogFn(m, 'player'));
 
         // 记录日志
         if (isFreeFirstCard) {
