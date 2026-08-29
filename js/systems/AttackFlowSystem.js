@@ -384,10 +384,10 @@ export const AttackFlowSystem = {
         const alreadyActed = ctx._enemyActedSet.has(enemy);
 
         const order = CombatSystem.resolveTurnOrder(ctx.playerSpeedDice, enemy.speedDice);
-        // 🟢 新增：在攻擊前保存飛行狀態，確保多次攻擊時狀態一致
-        const wasFlying = enemy.isFlying;
 
         if (order === 'PLAYER_FIRST') {
+            // 🟢 新增：在攻擊前保存飛行狀態，確保多次攻擊時狀態一致
+            const wasFlying = enemy.isFlying;
             for (let r = 0; r < repeatCount; r++) {
                 if (hero.hp > 0 && enemy.hp > 0) this._executePlayerDiceAction(ctx, actionDice, enemy, wasFlying);
             }
@@ -401,14 +401,14 @@ export const AttackFlowSystem = {
             }
             if (hero.hp > 0 && enemy.hp > 0) {
                 for (let r = 0; r < repeatCount; r++) {
-                    if (hero.hp > 0 && enemy.hp > 0) this._executePlayerDiceAction(ctx, actionDice, enemy, wasFlying);
+                    if (hero.hp > 0 && enemy.hp > 0) this._executePlayerDiceAction(ctx, actionDice, enemy, enemy.isFlying);
                 }
             }
         } else {
             // 修改後
             let pActionLog = [];
             let eActionLog = [];
-
+            const wasFlying = enemy.isFlying;
             for (let r = 0; r < repeatCount; r++) {
                 if (hero.hp <= 0 || enemy.hp <= 0) break;
                 if (wasFlying) {
