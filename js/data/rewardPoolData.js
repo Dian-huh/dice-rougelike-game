@@ -401,7 +401,9 @@ const BASE_REWARD_CARDS = [
 
             let effectiveTarget = enemy;
             if (!effectiveTarget && source.scope === 'SINGLE_ENEMY') {
-                effectiveTarget = scene.enemies.find(e => e.hp > 0) || null;
+                const aliveEnemies = scene.enemies.filter(e => e.hp > 0);
+                const tauntTarget = CombatSystem.getTauntTarget(aliveEnemies);
+                effectiveTarget = tauntTarget || aliveEnemies[0] || null;
             }
 
             source.onPlay(hero, effectiveTarget, combatSys, deckSys, log, scene);
@@ -679,6 +681,39 @@ const BASE_REWARD_CARDS = [
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             enemy.bountyStacks = (enemy.bountyStacks || 0) + 1;
             log(`💰 效果發動：對 ${enemy.name} 施加懸賞 (現為 ${enemy.bountyStacks} 層)`);
+        }
+    },
+    {
+        id: 'card_void_slash', theme: '戰技',
+        name: '絕空', cost: 2, scope: 'SINGLE_ENEMY', tags: [],
+        desc: '造成單體8點傷害並給予3層流血',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            log(`⚔️ 效果發動：造成 8 點傷害並施加 3 層流血`);
+            combatSys.applyDamageToTarget(enemy, 8, log);
+            if (enemy.hp > 0) {
+                enemy.bleedStacks = (enemy.bleedStacks || 0) + 3;
+                log(`🩸 ${enemy.name} 附加 3 層【流血】！`);
+            }
+        }
+    },
+    {
+        id: 'card_shield_bash', theme: '戰技',
+        name: '盾擊', cost: 0, scope: 'SINGLE_ENEMY', tags: [],
+        desc: '造成單體(自己格擋層數)點傷害，並施加暈眩2回合',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log) => {
+            const dmg = hero.block || 0;
+            if (dmg > 0) {
+                log(`🛡️ 效果發動：依自身格擋 ${dmg} 點造成傷害`);
+                combatSys.applyDamageToTarget(enemy, dmg, log);
+            } else {
+                log(`🛡️ 目前沒有格擋，盾擊未造成傷害`);
+            }
+            if (enemy.hp > 0) {
+                log(`💫 ${enemy.name} 陷入【暈眩】(2回合)！`);
+                combatSys.applyStun(enemy, 2, log);
+            }
         }
     },
 ];

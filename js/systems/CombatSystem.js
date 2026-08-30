@@ -14,7 +14,24 @@ export class CombatSystem {
         const safeLog = typeof logCallback === 'function' ? logCallback : console.log;
         if (!intent) return;
 
-            // 🟢 新增：友軍增益型招式（薩滿的加護/部落英雄）
+        // 🟢 新增：暈眩狀態直接跳過行動（滿CT特殊技已在 applyStunOverride 排除，不會走到這裡）
+        if (intent.type === 'STUNNED') {
+            safeLog(`💫 ${attacker.name} 處於【暈眩】狀態，無法行動！`);
+            return;
+        }
+
+        // 🟢 新增：真正發動「消耗全部CT」的滿CT技時，強制解除自己身上會導致無法行動的負面效果
+        // （暈眩此時已在 applyStunOverride 被豁免、不會擋這招，但招式一旦真的打出來，殘留的暈眩層數應一併清除，
+        //   否則下回合暈眩還沒歸零，又會擋住下一次行動，觀感上像「明明剛才還能動，怎麼又動不了」）
+        if (attacker.maxCt > 0 && intent.consumeCt === attacker.maxCt) {
+            const stunEntry = EffectEngine.getEntry(attacker, 'debuff_stun');
+            if (stunEntry && stunEntry.stacks > 0) {
+                attacker.activeEffects = attacker.activeEffects.filter(e => e !== stunEntry);
+                safeLog(`✨ ${attacker.name} 發動滿CT技，強行掙脫【暈眩】狀態！`);
+            }
+        }
+
+        //友軍增益型招式（薩滿的加護/部落英雄）
         if (intent.type === 'ALLY_BUFF') {
             this.applyAllyBuff(attacker, intent, enemies, safeLog);
             if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
@@ -42,8 +59,8 @@ export class CombatSystem {
                 this.applyDamageToTarget(target, intent.value, safeLog, enemies, attacker);
                 if (target.hp > 0) {
                     const stunTurns = (intent.statusEffect && intent.statusEffect.turns) || 2;
-                    EffectEngine.addStacks(target, 'debuff_stun', stunTurns);
                     safeLog(`💫 ${target.name} 陷入【暈眩】(${stunTurns} 回合)！`);
+                    this.applyStun(target, stunTurns, safeLog);
                 }
             }
             if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
@@ -421,6 +438,7 @@ export class CombatSystem {
     static resolveEnemyIntent(enemy, force = false) {
         if ((force || (enemy.isBreak && !enemy._intentLockedInBreak)) && typeof enemy.getIntent === 'function') {
             enemy.currentIntent = enemy.getIntent(0, enemy.speedDice, enemy);
+            enemy.currentIntent = this.applyStunOverride(enemy, enemy.currentIntent);
             if (enemy.isBreak) enemy._intentLockedInBreak = true;
         }
         return enemy.currentIntent;
@@ -516,6 +534,32 @@ export class CombatSystem {
     
     static getTauntTarget(aliveEnemies) {
         return aliveEnemies.find(e => EffectEngine.getEntry(e, 'taunt')) || null;
+    }
+
+    // 🟢 新增：暈眩覆蓋判定。有暈眩層數 & 意圖不是「消耗全部CT的滿CT特殊技」時，強制覆蓋成無行動
+    static applyStunOverride(enemy, intent) {
+        const stunEntry = EffectEngine.getEntry(enemy, 'debuff_stun');
+        if (!stunEntry || !(stunEntry.stacks > 0)) return intent;
+
+        const isFullCtUltimate = intent && enemy.maxCt > 0 && intent.consumeCt === enemy.maxCt;
+        if (isFullCtUltimate) return intent;
+
+        return { id: 'STUNNED', type: 'STUNNED', desc: '💫 暈眩中，無法行動' };
+    }
+
+    // 🟢 新增：統一的「施加暈眩」入口。除了疊加層數，若目標是「本回合意圖已經決定的敵人」，
+    // 立刻中斷、覆蓋成暈眩狀態，不用等到下一次 getIntent() 才生效
+    static applyStun(target, turns, logCallback) {
+        const safeLog = typeof logCallback === 'function' ? logCallback : console.log;
+        EffectEngine.addStacks(target, 'debuff_stun', turns);
+
+        if (typeof target.getIntent === 'function' && target.currentIntent) {
+            const overridden = this.applyStunOverride(target, target.currentIntent);
+            if (overridden !== target.currentIntent) {
+                target.currentIntent = overridden;
+                safeLog(`💫 ${target.name} 的行動被【暈眩】強制中斷！`);
+            }
+        }
     }
 
     static getEffectiveAtk(hero) {

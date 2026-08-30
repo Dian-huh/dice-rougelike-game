@@ -2,6 +2,7 @@ import { gameState } from '../data/gameState.js';
 import { createEnemyInstance, ENEMY_DATABASE } from '../data/enemyData.js';
 import { getCharacterData, getCharacterDeck, getAllCharacterIds } from '../characters/characterRegistry.js';
 import { DeckSystem } from './DeckSystem.js';
+import { REWARD_CARD_POOL } from '../data/rewardPoolData.js';
 
 export const DebugSystem = {
     _game: null,
@@ -15,13 +16,15 @@ export const DebugSystem = {
         console.log('可用角色 id：', getAllCharacterIds());
     },
 
+    // 🟢 新增：查詢可用卡片（含起始牌組+獎池，因為 REWARD_CARD_POOL 已涵蓋所有帶 theme 的角色卡）
+    listCards() {
+        console.table(REWARD_CARD_POOL.map(c => ({
+            id: c.id, name: c.name, theme: c.theme || '(base)', cost: c.cost, implemented: c.implemented !== false
+        })));
+    },
+
     /**
      * 啟動測試戰鬥
-     * @param {object} opts
-     *   characterId: 'hero' | 'swordsman'（預設 'hero'）
-     *   enemies: ['goblin','goblin_shaman', ...]（預設 ['goblin']）
-     *   hp / maxHp / mana / maxMana / atk / critBonus / speedBonus / atkCount / armorMax / deckCapacity / gold
-     *     -> 全部可選，不填就用角色預設值
      */
     startTestBattle(opts = {}) {
         if (!this._game) { console.error('⚠️ DebugSystem 尚未初始化'); return; }
@@ -73,6 +76,15 @@ export const DebugSystem = {
             gameState.currentFloor = 1;
         }
 
+        // 🟢 修正：game.scene.start() 不會自動停掉其他場景，
+        // 需要明確 stop 掉 MapScene / 舊的 BattleScene，避免底下畫面殘留、按鈕仍可互動
+        ['MapScene', 'BattleScene'].forEach(key => {
+            const sc = this._game.scene.getScene(key);
+            if (sc && sc.scene.isActive()) {
+                this._game.scene.stop(key);
+            }
+        });
+
         this._game.scene.start('BattleScene', {
             hero,
             deckSys,
@@ -81,5 +93,51 @@ export const DebugSystem = {
         });
 
         console.log(`🧪 測試關卡啟動：角色[${characterId}] 敵人[${enemyIds.join(', ')}]`, hero);
+    },
+
+    // 🟢 新增：獲得指定卡片，用來測試新卡效果
+    // opts.count：張數（預設1）
+    giveCard(cardId, opts = {}) {
+        const cardDef = REWARD_CARD_POOL.find(c => c.id === cardId);
+        if (!cardDef) {
+            console.error(`⚠️ 找不到卡片 id=${cardId}，可用 DEBUG.listCards() 查詢`);
+            return;
+        }
+
+        const count = opts.count || 1;
+        const battleScene = this._game.scene.getScene('BattleScene');
+        const isBattleRunning = battleScene && battleScene.scene.isActive();
+        const targetDeckSys = isBattleRunning ? battleScene.deckSys : gameState.deckSys;
+
+        if (!targetDeckSys) {
+            console.error('⚠️ 目前沒有可用的牌組（未在戰鬥中，也沒有 gameState.deckSys），請先 DEBUG.startTestBattle(...)');
+            return;
+        }
+
+        for (let i = 0; i < count; i++) {
+            const newCard = {
+                id: `reward_${cardDef.id}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                name: cardDef.name,
+                cost: cardDef.cost,
+                getCost: cardDef.getCost,
+                tags: cardDef.tags || [],
+                desc: cardDef.desc,
+                scope: cardDef.scope,
+                onPlay: cardDef.onPlay,
+                __source: 'reward',
+                __defId: cardDef.id
+            };
+            targetDeckSys.originalDeck.push(newCard);
+            if (isBattleRunning) {
+                targetDeckSys.hand.push(newCard); // 🟢 戰鬥中直接塞進手牌，立刻可打
+            }
+        }
+
+        if (isBattleRunning) {
+            battleScene.renderHandUI();
+            battleScene.updateUI();
+        }
+
+        console.log(`🧪 已獲得卡片 [${cardDef.name}] x${count}${isBattleRunning ? '（已直接放入手牌）' : '（已加入牌組收藏，下次抽牌可能抽到）'}`);
     }
 };
