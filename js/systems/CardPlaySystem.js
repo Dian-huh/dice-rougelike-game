@@ -40,12 +40,20 @@ export class CardPlaySystem {
      * 判断卡牌是否需要目标选择
      * @returns { needsTarget: boolean, aliveEnemies: array }
      */
+    // 改成：
     static analyzeCardScope(card, enemies) {
         const scope = card.scope || 'SELF';
         const aliveEnemies = enemies.filter(e => e.hp > 0);
 
-        if (scope === 'SINGLE_ENEMY' && aliveEnemies.length > 1) {
-            return { needsTarget: true, aliveEnemies };
+        if (scope === 'SINGLE_ENEMY') {
+            // 🟢 有敵人正在嘲諷時，強制鎖定為唯一候選目標，跳過選擇UI
+            const tauntTarget = CombatSystem.getTauntTarget(aliveEnemies);
+            if (tauntTarget) {
+                return { needsTarget: false, aliveEnemies: [tauntTarget] };
+            }
+            if (aliveEnemies.length > 1) {
+                return { needsTarget: true, aliveEnemies };
+            }
         }
 
         return { needsTarget: false, aliveEnemies };

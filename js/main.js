@@ -1,5 +1,6 @@
 import { MapScene } from './scenes/MapScene.js';
 import { BattleScene } from './scenes/BattleScene.js';
+import { DebugSystem } from './systems/DebugSystem.js';
 
 const config = {
     type: Phaser.AUTO,
@@ -11,3 +12,6 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
+
+DebugSystem.init(game);
+window.DEBUG = DebugSystem;

@@ -21,6 +21,126 @@ export class CombatSystem {
             return;
         }
 
+        // 🟢 盾之守衛專屬 SPECIAL 招式
+        if (intent.type === 'SPECIAL' && intent.id === 'FULL_GUARD') {
+            const allAllies = Array.isArray(enemies) ? enemies.filter(e => e.hp > 0) : [];
+            allAllies.forEach(ally => { ally.block = (ally.block || 0) + 10; });
+            attacker.activeEffects = attacker.activeEffects || [];
+            attacker.activeEffects.push({ id: 'taunt', clearOnBlockZero: true });
+            attacker.activeEffects.push({ id: 'guardian_counter', clearOnBlockZero: true });
+            safeLog(`🛡️ ${attacker.name} 發動【全體保護】！己方全體獲得 10 點格擋，自己獲得【嘲諷】與【盾反】(直到格擋歸零)！`);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
+        if (intent.type === 'SPECIAL' && intent.id === 'SHIELD_BASH') {
+            if ((attacker.block || 0) < (intent.selfBlockCost || 0)) {
+                safeLog(`🛡️ ${attacker.name} 格擋不足，【盾擊】發動失敗！`);
+            } else {
+                attacker.block -= intent.selfBlockCost;
+                safeLog(`🛡️ ${attacker.name} 消耗 ${intent.selfBlockCost} 點格擋，發動【盾擊】！`);
+                this.applyDamageToTarget(target, intent.value, safeLog, enemies, attacker);
+                if (target.hp > 0) {
+                    const stunTurns = (intent.statusEffect && intent.statusEffect.turns) || 2;
+                    EffectEngine.addStacks(target, 'debuff_stun', stunTurns);
+                    safeLog(`💫 ${target.name} 陷入【暈眩】(${stunTurns} 回合)！`);
+                }
+            }
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+        //劍之守衛特殊技
+        if (intent.type === 'SPECIAL' && intent.id === 'GAIN_COUNTER') {
+            EffectEngine.addStacks(attacker, 'counter_stack', 1);
+            safeLog(`🛡️ ${attacker.name} 獲得 1 層【反擊】！`);
+            return;
+        }
+
+        if (intent.type === 'SPECIAL' && intent.id === 'FOCUS') {
+            attacker.atk = (attacker.atk || 0) + 1;
+            attacker.critChance = (attacker.critChance || 0.15) + 0.05;
+            safeLog(`🎯 ${attacker.name} 發動【專注】，攻擊力+1、爆擊率+5%（永久生效）`);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+        //杖之守衛特殊技
+        if (intent.type === 'SPECIAL' && intent.id === 'HEAL_LOWEST') {
+            const target2 = this.getLowestHpPercentAlly(enemies);
+            if (target2) {
+                target2.hp = Math.min(target2.maxHp, target2.hp + 5);
+                safeLog(`💚 ${attacker.name} 治療 ${target2.name}，回復 5 點HP！`);
+            }
+            return;
+        }
+
+        if (intent.type === 'SPECIAL' && intent.id === 'AREA_HEAL_CAST') {
+            attacker.pendingDelayedHeal = true;
+            safeLog(`✨ ${attacker.name} 詠唱【範圍治療】，將在下次行動時發動！`);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
+        if (intent.type === 'SPECIAL' && intent.id === 'DELAYED_HEAL_RESOLVE') {
+            const allAllies = (enemies || []).filter(e => e.hp > 0);
+            const lowest = this.getLowestHpPercentAlly(allAllies);
+            allAllies.forEach(ally => {
+                const heal = (ally === lowest) ? 5 : 2;
+                ally.hp = Math.min(ally.maxHp, ally.hp + heal);
+            });
+            safeLog(`✨ ${attacker.name} 的【範圍治療】發動！${lowest ? lowest.name + '回復5' : ''}，其餘我方回復2`);
+            return;
+        }
+
+        if (intent.type === 'SPECIAL' && intent.id === 'SAGE_BLESS') {
+            const others = (enemies || []).filter(e => e.hp > 0 && e !== attacker);
+            others.forEach(ally => EffectEngine.addStacks(ally, 'sage_blessing', 2));
+            safeLog(`🔮 ${attacker.name} 發動【賢者加護】，其他友軍獲得加護2回合！`);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
+        if (intent.type === 'SPECIAL' && intent.id === 'BLAST_MAGIC') {
+            safeLog(`💥 ${attacker.name} 發動【爆破魔法】，對 ${target.name} 造成 ${intent.value} 點傷害！`);
+            this.applyDamageToTarget(target, intent.value, safeLog, enemies, attacker);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
+        if (intent.type === 'SPECIAL' && intent.id === 'FREEZE') {
+            EffectEngine.addStacks(target, 'debuff_freeze', 2);
+            safeLog(`❄️ ${target.name} 被施加【冰結】(2回合)！`);
+            this.applyDamageToTarget(target, intent.value, safeLog, enemies, attacker);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
+        // 弩之守衛特殊技
+        if (intent.type === 'SPECIAL' && intent.id === 'DODGE') {
+            attacker.dodgeCount = (attacker.dodgeCount || 0) + 1;
+            safeLog(`🌀 ${attacker.name} 準備【閃避】！`);
+            return;
+        }
+
+        if (intent.type === 'SPECIAL' && intent.id === 'RESUPPLY') {
+            attacker.nextDamageBonus = (attacker.nextDamageBonus || 0) + 2;
+            safeLog(`🎯 ${attacker.name} 【補充箭矢】，下次造成傷害提升2點！`);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
+        if (intent.type === 'SPECIAL' && intent.id === 'ARMOR_PIERCE') {
+            target.armorHits = target.armorMax || 0;
+            target.isVulnerable = true;
+            safeLog(`🎯 ${attacker.name} 發動【破甲箭】！${target.name} 護甲值歸零並進入【破防】狀態！`);
+            this.applyDamageToTarget(target, intent.value, safeLog, enemies, attacker);
+            if (target.hp > 0) {
+                target.bleedStacks = (target.bleedStacks || 0) + 2;
+                safeLog(`🩸 ${target.name} 附加2層【流血】！`);
+            }
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
         // 1. 處理 Buff / Debuff / 特殊機制 (如蓄力、飛翔、威壓)
         if (intent.type === 'BUFF' || intent.type === 'DEBUFF') {
             if (intent.id === 'CHARGE') {
@@ -45,6 +165,10 @@ export class CombatSystem {
             if (target.hp <= 0) break;
 
             let baseDmg = intent.value || attacker.atk || 0;
+            if (attacker.nextDamageBonus) {
+                baseDmg += attacker.nextDamageBonus;
+                attacker.nextDamageBonus = 0;
+            }
 
             // 判斷暴擊
             const isCrit = attacker.isOD || (intent.canCrit && typeof attacker.rollCrit === 'function' && attacker.rollCrit());
@@ -251,7 +375,18 @@ export class CombatSystem {
         // 🟢 Stage 5-6：格擋有實際吸收傷害時，觸發 onBlockedDamage hook（盾反等效果掛在這裡）
         // combatSys: this 讓 registry 不用 import CombatSystem，避免循環依賴
         if (blockedAmount > 0) {
-            EffectEngine.runHook('onBlockedDamage', target, { blockedAmount, enemies, log: logCallback, combatSys: this });
+            EffectEngine.runHook('onBlockedDamage', target, { blockedAmount, enemies, log: logCallback, combatSys: this, attacker });
+        }
+
+        // 🟢 門衛四天王：格擋歸零時解除標記為 clearOnBlockZero 的效果（嘲諷/盾之守衛盾反）
+        // 用「實例層級flag」而非改動 taunt/guardian_counter 本身的既有解除邏輯，
+        // 避免動到玩家「盾反」卡片原本靠回合倒數解除的行為
+        if (blockedAmount > 0 && target.block <= 0 && target.activeEffects && target.activeEffects.length > 0) {
+            const hadFlag = target.activeEffects.some(e => e.clearOnBlockZero);
+            if (hadFlag) {
+                target.activeEffects = target.activeEffects.filter(e => !e.clearOnBlockZero);
+                if (logCallback) logCallback(`🛡️ ${target.name} 的格擋已耗盡，【嘲諷】與【盾反】效果解除！`);
+            }
         }
 
         // 5. 扣除 HP 與 受傷次數判定

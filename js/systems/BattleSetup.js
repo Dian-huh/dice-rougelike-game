@@ -6,6 +6,21 @@ import { CombatSystem } from './CombatSystem.js';
 
 export class BattleSetup {
     static resolve(data, gameState) {
+
+        // 🟢 測試關卡：完全跳過樓層/地圖判斷，敵人直接用 debug 指定的清單
+        if (data && data.__debugOverride) {
+            const hero = data.hero;
+            const deckSys = data.deckSys;
+            CombatSystem.setActiveHero(hero);
+            return {
+                hero,
+                deckSys,
+                currentStage: { name: '🧪 測試關卡', enemies: data.__debugOverride.enemies, rewardConfig: { baseGold: 0 } },
+                enemies: data.__debugOverride.enemies,
+                isFinalBoss: false
+            };
+        }
+
         const currentFloor = (gameState && gameState.currentFloor) ? gameState.currentFloor : 1;
         const currentStageId = `1-${currentFloor}`;
         const nodeType = (data && data.node && data.node.type) ? data.node.type : 'BATTLE';

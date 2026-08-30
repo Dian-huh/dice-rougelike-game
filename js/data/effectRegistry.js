@@ -172,7 +172,7 @@ export const EFFECT_REGISTRY = {
         getStatusText: (entry) => `反擊 x${entry.stacks} (受到攻擊時反擊等量傷害)`,
         onGetHit: (self, entry, ctx) => {
             if (!ctx.attacker || ctx.attacker.hp <= 0) return;
-            const dmg = CombatSystem_ref.getEffectiveEnemyAtk(self) * entry.stacks;   // 見第9項
+            const dmg = ctx.combatSys.getEffectiveEnemyAtk(self) * entry.stacks;
             ctx.log(`🔁 [反擊] ${self.name} 對 ${ctx.attacker.name} 造成 ${dmg} 點反擊傷害！`);
             ctx.combatSys.applyDamageToTarget(ctx.attacker, dmg, ctx.log, ctx.enemies, self);
             entry.stacks -= 1;
@@ -187,6 +187,33 @@ export const EFFECT_REGISTRY = {
         displayName: '嘲諷',
         getStatusText: () => `嘲諷 (敵方攻擊被強制鎖定至此)`
         // 無 hook：純粹供 AttackFlowSystem 查詢是否存在
+    },
+
+        // 🟢 門衛四天王：盾之守衛「全體保護」專用盾反，跟玩家的 shield_counter 分開
+    // （解除時機不同：這個是格擋歸零時解除，不是回合倒數）
+    guardian_counter: {
+        category: 'DEBUFF_LIKE',
+        displayName: '盾反(守衛)',
+        getStatusText: () => `盾反 (格擋下的傷害會等量反擊攻擊者，格擋歸零時解除)`,
+        onBlockedDamage: (self, entry, ctx) => {
+            if (!(ctx.blockedAmount > 0) || !ctx.attacker || ctx.attacker.hp <= 0) return;
+            ctx.log(`🔁 [盾反] ${self.name} 對 ${ctx.attacker.name} 反擊 ${ctx.blockedAmount} 點傷害！`);
+            ctx.combatSys.applyDamageToTarget(ctx.attacker, ctx.blockedAmount, ctx.log, ctx.enemies);
+        }
+    },
+
+    debuff_freeze: {
+        category: 'DEBUFF_LIKE',
+        displayName: '冰結',
+        getStatusText: (entry) => `冰結 (剩餘 ${entry.stacks} 回合，速度-2、攻擊力-2)`,
+        liveStatModifier: (entity, entry, statName) => ['atk', 'speed'].includes(statName) ? -2 : 0,
+        onTurnStart: (entity, entry, ctx) => {
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
+                ctx.log(`❄️ [冰結] 效果已結束`);
+            }
+        }
     },
 
     debuff_stun: {
