@@ -158,6 +158,98 @@ export class CombatSystem {
             return;
         }
 
+        // 🟢 境界衛士：祈求加護（回復14，過量治療轉格擋，1:1比例）
+        if (intent.type === 'SPECIAL' && intent.id === 'PRAYER_BLESSING') {
+            const before = attacker.hp;
+            const healed = Math.min(attacker.maxHp - before, 14);
+            const overflow = 14 - healed;
+            attacker.hp += healed;
+            safeLog(`🙏 ${attacker.name} 發動【祈求加護】，回復 ${healed} 點HP！`);
+            if (overflow > 0) {
+                attacker.block = (attacker.block || 0) + overflow;
+                safeLog(`🛡️ 過量治療 ${overflow} 點轉換為格擋！`);
+            }
+            return;
+        }
+
+        // 🟢 境界衛士：連續刺擊（護甲歸零+流血3，若已有流血則追加2次1點傷害）
+        if (intent.type === 'SPECIAL' && intent.id === 'CONTINUOUS_THRUST') {
+            const hadBleedBefore = (target.bleedStacks || 0) > 0;
+            target.armorHits = target.armorMax || 0;
+            target.isVulnerable = true;
+            target.bleedStacks = (target.bleedStacks || 0) + 3;
+            safeLog(`🗡️ ${attacker.name} 發動【連續刺擊】！${target.name} 護甲歸零、進入【破防】，附加3層【流血】！`);
+            if (hadBleedBefore) {
+                safeLog(`🩸 ${target.name} 已有流血在身，追加造成2次1點傷害！`);
+                for (let i = 0; i < 2; i++) {
+                    if (target.hp <= 0) break;
+                    this.applyDamageToTarget(target, 1, safeLog, enemies, attacker);
+                }
+            }
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            this.applyBossHealOnSpecial(attacker, target, safeLog);
+            return;
+        }
+
+        // 🟢 境界衛士：裂地擊（滿CT，全體暈眩+7點傷害，自己+7格擋）
+        if (intent.type === 'SPECIAL' && intent.id === 'GROUND_SLAM') {
+            safeLog(`💥 ${attacker.name} 發動【裂地擊】！`);
+            this.applyStun(target, 2, safeLog);
+            this.applyDamageToTarget(target, 7, safeLog, enemies, attacker);
+            attacker.block = (attacker.block || 0) + 7;
+            safeLog(`🛡️ ${attacker.name} 獲得 7 點格擋！`);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            this.applyBossHealOnSpecial(attacker, target, safeLog);
+            return;
+        }
+
+        // 🟢 境界衛士(二階)：引雷槍
+        if (intent.type === 'SPECIAL' && intent.id === 'LIGHTNING_SPEAR') {
+            const hadBleed = (target.bleedStacks || 0) > 0;
+            safeLog(`⚡ ${attacker.name} 發動【引雷槍】！`);
+            this.applyDamageToTarget(target, 7, safeLog, enemies, attacker);
+            EffectEngine.addStacks(target, 'debuff_shock', 2);
+            safeLog(`⚡ ${target.name} 附加 2 層【電擊】！`);
+            if (hadBleed && target.hp > 0) {
+                safeLog(`🩸 ${target.name} 已有流血，追加施加【暈眩】(2回合)！`);
+                this.applyStun(target, 2, safeLog);
+            }
+            attacker.nextDamageBonus = (attacker.nextDamageBonus || 0) + 2;
+            attacker.pendingLightningRecall = true;
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            this.applyBossHealOnSpecial(attacker, target, safeLog);
+            return;
+        }
+
+        // 🟢 境界衛士(二階)：憾地洛雷（滿CT，解除飛行，全體暈眩+電擊，單體10點傷害）
+        if (intent.type === 'SPECIAL' && intent.id === 'GROUND_THUNDER') {
+            attacker.isFlying = false;
+            safeLog(`⚡ ${attacker.name} 發動【憾地洛雷】！`);
+            this.applyStun(target, 2, safeLog);
+            target.bleedStacks = (target.bleedStacks || 0) + 2;
+            EffectEngine.addStacks(target, 'debuff_shock', 2);
+            safeLog(`⚡ ${target.name} 附加 2 層【電擊】！`);
+            this.applyDamageToTarget(target, 10, safeLog, enemies, attacker);
+            attacker.lockedBeforeGroundThunder = false;   // 解鎖：發動過後恢復正常選招
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            this.applyBossHealOnSpecial(attacker, target, safeLog);
+            return;
+        }
+
+        // 🟢 境界衛士(二階)：天雷突刺（傷害=6+目標流血層數+電擊層數）
+        if (intent.type === 'SPECIAL' && intent.id === 'THUNDER_THRUST') {
+            const bleedLayers = target.bleedStacks || 0;
+            const shockEntry = EffectEngine.getEntry(target, 'debuff_shock');
+            const shockLayers = shockEntry ? shockEntry.stacks : 0;
+            target.bleedStacks = (target.bleedStacks || 0) + 3;
+            const dmg = 6 + bleedLayers + shockLayers;
+            safeLog(`⚡ ${attacker.name} 發動【天雷突刺】，給予3層流血並造成 ${dmg} 點傷害！`);
+            this.applyDamageToTarget(target, dmg, safeLog, enemies, attacker);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            this.applyBossHealOnSpecial(attacker, target, safeLog);
+            return;
+        }
+
         // 1. 處理 Buff / Debuff / 特殊機制 (如蓄力、飛翔、威壓)
         if (intent.type === 'BUFF' || intent.type === 'DEBUFF') {
             if (intent.id === 'CHARGE') {
@@ -167,6 +259,9 @@ export class CombatSystem {
             } else if (intent.id === 'FLY') {
                 attacker.isFlying = true;
                 safeLog(`🐉 ${attacker.name} 振翅升空進入【飛翔】狀態！`);
+            } else if (intent.id === 'ASCEND') {   // 🟢 新增：境界衛士的展翼，效果與FLY相同，用不同id方便log/未來差異化
+                attacker.isFlying = true;
+                safeLog(`🦅 ${attacker.name} 振翅升空進入【飛翔】狀態！`);
             } else if (intent.id === 'PRESSURE') {
                 target.isPressured = true;
                 attacker.pressureUsedThisOD = true;
@@ -209,11 +304,18 @@ export class CombatSystem {
             if (intent.statusEffect.type === 'poison') {
                 target.poisonTurns = intent.statusEffect.turns || 3;
                 safeLog(`☠️ ${target.name} 中了【劇毒】(持續 ${target.poisonTurns} 回合)！`);
+            } else if (intent.statusEffect.type === 'bleed') {
+                const stacks = intent.statusEffect.stacks || 1;
+                target.bleedStacks = (target.bleedStacks || 0) + stacks;
+                safeLog(`🩸 ${target.name} 附加 ${stacks} 層【流血】！`);
             }
         }
 
         // 4. 招式後的資源消耗 (如：吐息耗 1CT、制裁耗 3CT、墜擊解除飛行)
-        if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+        if (intent.consumeCt) {
+            attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            this.applyBossHealOnSpecial(attacker, target, safeLog);   // 🟢 新增：純ATTACK型特動(如舞花)在此觸發回血
+        }
         if (intent.id === 'DIVE') attacker.isFlying = false;
 
         // js/systems/CombatSystem.js 的 executeEnemyIntent 補上：
@@ -359,6 +461,7 @@ export class CombatSystem {
         if (target.isBreak && typeof target.getIntent === 'function') {
             this.resolveEnemyIntent(target);
         }
+        this.checkPhaseTransition(target, logCallback);
 
         let finalDmg = rawDmg;
         let logDetails = [];
@@ -431,6 +534,32 @@ export class CombatSystem {
         } else {
             if (logCallback) logCallback(`🛡️ 傷害被完全抵銷！`);
         }
+    }
+
+    // 🟢 通用：血量門檻多階段轉換判定
+    static checkPhaseTransition(target, logCallback) {
+        if (!target.phaseThresholds || target.phaseThresholds.length === 0) return;
+        const idx = (target.phase || 1) - 1;
+        const threshold = target.phaseThresholds[idx];
+        if (threshold === undefined) return;
+        if (target.hp / target.maxHp <= threshold) {
+            target.phase = (target.phase || 1) + 1;
+            if (typeof target.onPhaseTransition === 'function') {
+                target.onPhaseTransition(target.phase, logCallback);
+            }
+        }
+    }
+
+    
+    static applyBossHealOnSpecial(attacker, target, logCallback) {
+        if (!attacker.healOnSpecialUse || !target) return;
+        const bleedLayers = target.bleedStacks || 0;
+        const shockEntry = EffectEngine.getEntry(target, 'debuff_shock');
+        const shockLayers = shockEntry ? shockEntry.stacks : 0;
+        const healAmount = bleedLayers + shockLayers;
+        if (healAmount <= 0) return;
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + healAmount);
+        logCallback(`🩸⚡ ${attacker.name} 汲取流血與電擊之力，回復 ${healAmount} 點HP！`);
     }
 
     // 🟢 中途被打進Break時，作廢原本鎖定的非一般意圖，改成當下的一般行動
@@ -521,6 +650,7 @@ export class CombatSystem {
     }
 
     // === 即時計算 Helper（方案A：不存欄位，每次讀取當下 HP 現算）===
+
 
 
 

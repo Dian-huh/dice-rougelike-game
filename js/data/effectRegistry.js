@@ -216,6 +216,33 @@ export const EFFECT_REGISTRY = {
         }
     },
 
+    debuff_shock: {
+        category: 'DEBUFF_LIKE',
+        displayName: '電擊',
+        getStatusText: (entry) => `電擊 x${entry.stacks} (回合開始受${entry.stacks * 1}點傷害，魔力/CT-${entry.stacks})`,
+        onTurnStart: (entity, entry, ctx) => {
+            const dmg = entry.stacks * 1;
+            entity.hp = Math.max(0, entity.hp - dmg);
+            ctx.log(`⚡ [電擊] ${entity.name} 受到 ${dmg} 點傷害！`, 'system');
+
+            if (entity.mana !== undefined) {
+                const before = entity.mana;
+                entity.mana = Math.max(0, entity.mana - entry.stacks);
+                ctx.log(`⚡ [電擊] 魔力 -${entry.stacks} (${before} → ${entity.mana})`, 'system');
+            } else if (entity.maxCt > 0) {
+                const before = entity.ct || 0;
+                entity.ct = Math.max(0, before - entry.stacks);
+                ctx.log(`⚡ [電擊] CT -${entry.stacks} (${before} → ${entity.ct})`, 'system');
+            }
+
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
+                ctx.log(`⚡ [電擊] 效果已結束`, 'system');
+            }
+        }
+    },
+
     debuff_stun: {
         category: 'DEBUFF_LIKE',
         displayName: '暈眩',

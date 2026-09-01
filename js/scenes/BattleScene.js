@@ -713,6 +713,9 @@ export class BattleScene extends Phaser.Scene {
         if (this.hero.poisonTurns > 0) statusText += ` 🤢[劇毒x${this.hero.poisonTurns}]`;
         if (this.hero.isPressured) statusText += ` 😱[威壓中]`;
         if (this.hero.stigma > 0) statusText += ` 🔱[聖痕x${this.hero.stigma}]`; 
+        if (this.hero.bleedStacks > 0) statusText += ` 🩸[流血x${this.hero.bleedStacks}]`;
+        const heroShock = EffectEngine.getEntry(this.hero, 'debuff_shock');
+        if (heroShock) statusText += ` ⚡[電擊x${heroShock.stacks}]`;
 
         if (this.hero.stance !== undefined) {
             statusText += this.hero.stance === 'DRAWN' ? ` 🗡️[拔刀]` : ` 🛡️[收刀]`;

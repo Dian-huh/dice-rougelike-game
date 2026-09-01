@@ -24,6 +24,12 @@ export const ENEMY_TEMPLATE = {
     isBreak: false, // 是否處於 Break 癱瘓狀態 (僅能使用一般行動)
     isFlying: false,
     activeEffects: [],
+    phase: 1,
+    phaseThresholds: [],     // 例: [0.5] 代表 phase1→2 的HP百分比門檻
+    selfDamagePerTurn: 0,    // 通用：每回合結束自減血量（預設0，其他敵人不受影響）
+    healOnSpecialUse: false, // 通用：發動特殊技(SPECIAL)後，依目標流血+電擊層數回血
+    onPhaseTransition(newPhase, log) { /* 各boss自行override，預設無行為 */ },
+    bonusCtRegen: 0,
     chargeTurns: 0,   // 🟢 新增：衝鋒效果剩餘回合數（0 = 未生效）
     heroicTurns: 0,   // 🟢 新增：英勇效果剩餘回合數（0 = 未生效）
 
@@ -58,7 +64,7 @@ export const ENEMY_TEMPLATE = {
         // 🟢 CT恢復改為可配置：預設+1，賢者加護等效果可透過 onCtRegenQuery 疊加額外值
         const ctx = { bonus: 0 };
         EffectEngine.runHook('onCtRegenQuery', this, ctx);
-        this.ct = Math.min(this.maxCt, this.ct + 1 + ctx.bonus);
+        this.ct = Math.min(this.maxCt, this.ct + 1 + ctx.bonus + (this.bonusCtRegen || 0));
 
         // Break 狀態下，若 CT 達到最大值，消耗所有 CT 自動解除 Break
         if (this.isBreak && this.ct >= this.maxCt) {
@@ -85,6 +91,12 @@ export const ENEMY_TEMPLATE = {
             safeLog(`🔥 ${this.name} 的【英勇】效果發動：回復 3 點HP、獲得 2 點格擋`);
             this.heroicTurns -= 1;
         }
+
+        // 🟢 新增：通用自減血量（預設0無影響，boss可設定製造時間壓力）
+        if (this.selfDamagePerTurn > 0) {
+            this.hp = Math.max(1, this.hp - this.selfDamagePerTurn);   // 不因自傷致死，避免卡死
+            safeLog(`💢 ${this.name} 因【自身異變】流失 ${this.selfDamagePerTurn} 點HP`);
+        }
     },
 
     // === 6. 通用 UI 狀態資訊列 ===
@@ -92,13 +104,16 @@ export const ENEMY_TEMPLATE = {
         const parts = [];
         if (this.maxCt > 0) parts.push(`CT: ${this.ct}/${this.maxCt}`);
         if (this.maxOd > 0) parts.push(`OD: ${this.od}/${this.maxOd}`);
+        if (this.bleedStacks > 0) parts.push(`🩸流血x${this.bleedStacks}`);
+        const shockEntry = (this.activeEffects || []).find(e => e.id === 'debuff_shock');
+        if (shockEntry) parts.push(`⚡電擊x${shockEntry.stacks}`);
         
         const tags = [];
         if (this.isOD) tags.push('🔥[OD狂暴]');
         if (this.isBreak) tags.push('💫[Break癱瘓]');
         if (this.isFlying) tags.push('🦅[飛行]');
-        if (this.chargeTurns > 0) tags.push(`⚡[衝鋒x${this.chargeTurns}]`);   // 🟢 新增
-        if (this.heroicTurns > 0) tags.push(`🌟[英勇x${this.heroicTurns}]`); // 🟢 新增
+        if (this.chargeTurns > 0) tags.push(`⚡[衝鋒x${this.chargeTurns}]`); 
+        if (this.heroicTurns > 0) tags.push(`🌟[英勇x${this.heroicTurns}]`); 
         if (tags.length > 0) parts.push(`狀態: ${tags.join(' ')}`);
 
         return parts.length > 0 ? `\n  ${parts.join(' | ')}` : '';

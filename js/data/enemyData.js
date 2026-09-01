@@ -116,6 +116,7 @@ export const BLACK_DRAGON_DATA = Object.assign(Object.create(BASE_ENEMY), {
 
 // 🟢 3. 一般怪物資料庫 (套用資料驅動)
 export const ENEMY_DATABASE = {
+    //一般怪物區
     // 🟢 哥布林
     'goblin': Object.assign(Object.create(BASE_ENEMY), {
         id: 'goblin',
@@ -361,13 +362,123 @@ export const ENEMY_DATABASE = {
             }
             return Phaser.Utils.Array.GetRandom(pool);
         }
-    })
+    }),
+    //---------------------------------------------------------------------
+    //boss 區域
+    //---------------------------------------------------------------------
+
+
+    //黑龍
+    'black_dragon': BLACK_DRAGON_DATA,
+
+    //境界衛士
+    'boundary_guardian': Object.assign(Object.create(BASE_ENEMY), {
+        id: 'boundary_guardian',
+        name: '⚔️ 境界衛士',
+        maxHp: 150, hp: 150, atk: 4, critBonus: 3, critChance: 0.15,
+        ct: 0, maxCt: 3, od: 0, maxOd: 10, speedDiceSides: 8,
+
+        phase: 1,
+        phaseThresholds: [0.6],
+        selfDamagePerTurn: 0,
+        healOnSpecialUse: true,
+        lockedBeforeGroundThunder: false,
+        pendingLightningRecall: false,
+
+        rollCrit() {
+            if (this.isOD) return true;
+            return Math.random() < (this.critChance || 0.15);
+        },
+
+        onPhaseTransition(newPhase, log) {
+            const safeLog = typeof log === 'function' ? log : console.log;
+            if (newPhase === 2) {
+                this.isOD = true;
+                this.od = this.maxOd;
+                this.ct = Math.min(this.maxCt, this.ct + 1);
+                this.lockedBeforeGroundThunder = true;
+                this.selfDamagePerTurn = 3;
+                this.maxOd = 10;
+                this.maxCt = 4;
+                this.bonusCtRegen = 1;
+                this.atk += 2;
+                this.critChance += 0.3; 
+                safeLog(`🌀 ${this.name} 進入【二階段】！強制進入OD狀態，CT+1，直到發動【憾地洛雷】前不會使用其他特殊技！`);
+            }
+        },
+
+        getIntent(turnCount, speedDice, self) {
+            if (this.pendingLightningRecall) {
+                this.pendingLightningRecall = false;
+                return { id: 'LIGHTNING_RECALL', type: 'ATTACK', value: this.atk, canCrit: true, desc: '⚡ 回收雷槍 (延遲傷害+2)' };
+            }
+
+            if (this.isBreak) {
+                return { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
+            }
+
+            // 🟢 新增：飛行狀態下，特動只會選擇憾地洛雷（不論CT是否滿，一律等待CT滿才發動；未滿CT只能一般行動）
+            if (this.isFlying) {
+                if (this.ct >= this.maxCt) {
+                    return { id: 'GROUND_THUNDER', type: 'SPECIAL', consumeCt: this.maxCt, desc: '⚡ 憾地洛雷 (消耗全部CT，解除飛行，全體暈眩+電擊，單體10點傷害)' };
+                }
+                const flyingGeneralPool = [
+                    { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
+                    { id: 'SWEEP', type: 'ATTACK', value: 4, canCrit: true, desc: '💫 橫掃 (造成4點傷害)' }
+                ];
+                return Phaser.Utils.Array.GetRandom(flyingGeneralPool);
+            }
+
+            if (this.phase === 2 && this.lockedBeforeGroundThunder) {
+                if (this.ct >= this.maxCt) {
+                    return { id: 'GROUND_THUNDER', type: 'SPECIAL', consumeCt: this.maxCt, desc: '⚡ 憾地洛雷 (消耗全部CT，解除飛行，全體暈眩+電擊，單體10點傷害)' };
+                }
+                const generalPool = [
+                    { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
+                    { id: 'PRAYER_BLESSING', type: 'SPECIAL', desc: '🙏 祈求加護 (回復14，過量轉格擋)' },
+                    { id: 'THRUST', type: 'ATTACK', value: 4, canCrit: true, statusEffect: { type: 'bleed', stacks: 2 }, desc: '🗡️ 突刺 (造成4點傷害並給予流血2)' },
+                    { id: 'SWEEP', type: 'ATTACK', value: 4, canCrit: true, desc: '💫 橫掃 (造成4點傷害)' }
+                ];
+                return Phaser.Utils.Array.GetRandom(generalPool);
+            }
+
+            const generalPool = [
+                { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
+                { id: 'PRAYER_BLESSING', type: 'SPECIAL', desc: '🙏 祈求加護 (回復14，過量轉格擋)' },
+                { id: 'THRUST', type: 'ATTACK', value: 4, canCrit: true, statusEffect: { type: 'bleed', stacks: 2 }, desc: '🗡️ 突刺 (造成4點傷害並給予流血2)' },
+                { id: 'SWEEP', type: 'ATTACK', value: 4, canCrit: true, desc: '💫 橫掃 (造成4點傷害)' }
+            ];
+
+            if (this.phase === 1) {
+                if (this.ct >= this.maxCt) {
+                    generalPool.push({ id: 'GROUND_SLAM', type: 'SPECIAL', consumeCt: this.maxCt, desc: '💥 裂地擊 (消耗全部CT，全體暈眩+7點傷害，自己+7格擋)' });
+                }
+                if (this.ct >= 2) {
+                    generalPool.push({ id: 'DANCE_FLOWER', type: 'ATTACK', value: 2, hits: 4, canCrit: true, consumeCt: 2, desc: '🌸 舞花 (造成4次2點傷害)' });
+                    generalPool.push({ id: 'CONTINUOUS_THRUST', type: 'SPECIAL', consumeCt: 2, desc: '🗡️ 連續刺擊 (護甲歸零+流血3，若已有流血則追加2次1點傷害)' });
+                }
+            } else {
+                if (this.ct >= this.maxCt) {
+                    generalPool.push({ id: 'GROUND_THUNDER', type: 'SPECIAL', consumeCt: this.maxCt, desc: '⚡ 憾地洛雷 (消耗全部CT，解除飛行，全體暈眩+電擊，單體10點傷害)' });
+                }
+                if (this.ct >= 3) {
+                    generalPool.push({ id: 'LIGHTNING_SPEAR', type: 'SPECIAL', consumeCt: 3, desc: '⚡ 引雷槍 (7點傷害+電擊，若目標有流血則追加暈眩)' });
+                }
+                if (this.ct >= 1) {
+                    generalPool.push({ id: 'THUNDER_THRUST', type: 'SPECIAL', consumeCt: 1, desc: '⚡ 天雷突刺 (傷害=4+流血層數+電擊層數)' });
+                }
+                generalPool.push({ id: 'ASCEND', type: 'BUFF', desc: '🦅 展翼 (進入飛行狀態)' });   // 🟢 新增：二階特動池新增飛行
+            }
+
+            return Phaser.Utils.Array.GetRandom(generalPool);
+        }
+    }),
 
 };
 
 // 🟢 4. 乾淨工廠函式 (保留防呆契約檢查)
 export function createEnemyInstance(enemyId) {
-    const config = enemyId === 'black_dragon' ? BLACK_DRAGON_DATA : ENEMY_DATABASE[enemyId];
+    const config = ENEMY_DATABASE[enemyId];
     if (!config) {
         console.error(`⚠️ 找不到敵人配置 ID: ${enemyId}`);
         return null;
