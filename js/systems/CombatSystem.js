@@ -555,7 +555,7 @@ export class CombatSystem {
         const bleedLayers = target.bleedStacks || 0;
         const shockEntry = EffectEngine.getEntry(target, 'debuff_shock');
         const shockLayers = shockEntry ? shockEntry.stacks : 0;
-        const healAmount = bleedLayers + shockLayers;
+        const healAmount = (bleedLayers + shockLayers)*4;
         if (healAmount <= 0) return;
         attacker.hp = Math.min(attacker.maxHp, attacker.hp + healAmount);
         logCallback(`🩸⚡ ${attacker.name} 汲取流血與電擊之力，回復 ${healAmount} 點HP！`);
