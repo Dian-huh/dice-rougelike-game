@@ -461,7 +461,6 @@ export class CombatSystem {
         if (target.isBreak && typeof target.getIntent === 'function') {
             this.resolveEnemyIntent(target);
         }
-        this.checkPhaseTransition(target, logCallback);
 
         let finalDmg = rawDmg;
         let logDetails = [];
@@ -515,7 +514,7 @@ export class CombatSystem {
             target.hp = Math.max(0, target.hp - finalDmg);
             let detailStr = logDetails.length > 0 ? ` (${logDetails.join(', ')})` : '';
             if (logCallback) logCallback(`💥 造成 ${finalDmg} 點傷害${detailStr} (剩餘 ${target.hp}/${target.maxHp} HP)`);
-
+            this.checkPhaseTransition(target, logCallback);
             // 🟢 懸賞：帶有懸賞標記的目標死亡時，玩家獲得50*該目標身上懸賞層數的金幣
             if (wasAliveBefore && target.hp <= 0 && target.bounty && target.bounty > 0) {
                 const bountyGold = 50 * target.bountyStacks;
