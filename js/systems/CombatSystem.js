@@ -603,6 +603,7 @@ export class CombatSystem {
         hero.battleCritBonus = 0;
         hero.battleHealBonus = 0;
         hero.battleAtkBonus = 0;
+        hero._iaidoConsumedStacks = 0;
         // 🟢 閃避次數與護甲受擊狀態同屬「單場戰鬥內臨時狀態」，
         // 上一場戰鬥結束時沒清空的話，玩家還沒開打就帶著上一場的閃避次數／破防倒數進場
         hero.dodgeCount = 0;

@@ -1,3 +1,4 @@
+import { DeckSystem } from './DeckSystem.js';
 import {
     REWARD_POOL_DATA,
     REWARD_CATEGORY_NAMES,
@@ -168,18 +169,7 @@ export class RewardSystem {
                 : `(${displayCost}費)`;
 
             // 修改後
-        const newCard = {   // 🟢 提前建立，供牌組已滿時的替換流程共用
-            id: `reward_${cardDef.id}_${Date.now()}`,
-            name: cardDef.name,
-            cost: cardDef.cost,
-            getCost: cardDef.getCost,
-            tags: cardDef.tags || [],
-            desc: cardDef.desc,
-            scope: cardDef.scope,
-            onPlay: cardDef.onPlay,
-            __source: 'reward',      // 🟢 存檔用：標記此卡片來源類別
-            __defId: cardDef.id      // 🟢 存檔用：對應 REWARD_CARD_POOL 中的定義 id
-        };
+            const newCard = DeckSystem.instantiateCardDef(cardDef);   // 🟢 提前建立，供牌組已滿時的替換流程共用
 
             return {
                 category,
@@ -403,5 +393,5 @@ export class RewardSystem {
 // 內部工具：過濾出「已實作」的卡片獎勵（implemented !== false）
 // ----------------------------------------------------------------
 function REWARD_CARD_POOL_SAFE_FILTER() {
-    return REWARD_CARD_POOL.filter(c => c.implemented !== false);
+    return REWARD_CARD_POOL.filter(c => c.implemented !== false && !c.hidden);
 }

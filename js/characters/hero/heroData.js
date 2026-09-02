@@ -20,7 +20,7 @@ export const HERO_DATA = {
     poisonTurns: 0,
     isPressured: false,
     stigma: 0,   
-    gold: 0,      
+    gold: 50,      
     cdActiveSkill: 0,  
     overrideDice: null,
     battleAtkBonus: 0,

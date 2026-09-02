@@ -117,6 +117,73 @@ export class UIInteractionSystem {
     }
 
     /**
+     * 🟢 階段4新增：法典專用的棄牌選擇會話
+     * 點一張立刻棄置，達 minCount 後可按「完成」，達 maxCount 自動結束
+     */
+    static createDiscardPickerSession(scene, deckSys, minCount, maxCount, onComplete) {
+        return {
+            discardedCount: 0,
+            container: null,
+
+            show() {
+                this.render();
+            },
+
+            render() {
+                if (this.container) this.container.destroy();
+                this.container = scene.add.container(0, 0).setDepth(1900);
+                const overlay = scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.92).setInteractive();
+                const title = scene.add.text(425, 40,
+                    `🗑️ 法典：請選擇要棄置的卡片 (已棄 ${this.discardedCount}/${maxCount}，至少 ${minCount} 張)`,
+                    { fontSize: '15px', fill: '#ffcc00' }).setOrigin(0.5);
+                this.container.add([overlay, title]);
+
+                deckSys.hand.forEach((card, idx) => {
+                    const col = idx % 5, row = Math.floor(idx / 5);
+                    const x = 90 + col * 150, y = 100 + row * 90;
+                    const cardBg = scene.add.rectangle(x, y, 130, 70, 0x222233)
+                        .setStrokeStyle(2, 0xff6666)
+                        .setInteractive({ useHandCursor: true });
+                    const nameText = scene.add.text(x - 60, y - 30, card.name, {
+                        fontSize: '12px', fill: '#fff', wordWrap: { width: 120 }
+                    });
+                    cardBg.on('pointerdown', () => this._onDiscard(idx));
+                    this.container.add([cardBg, nameText]);
+                });
+
+                if (this.discardedCount >= minCount) {
+                    const doneBtn = scene.add.text(425, 480, '[ ✅ 完成選擇 ]', {
+                        fontSize: '15px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 12, y: 6 }
+                    }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+                      .on('pointerdown', () => this._finish());
+                    this.container.add(doneBtn);
+                }
+            },
+
+            _onDiscard(idx) {
+                const [card] = deckSys.hand.splice(idx, 1);
+                deckSys.discardPile.push(card);
+                this.discardedCount += 1;
+                scene.appendLog(`🗑️ 棄置了 [${card.name}]`, 'system');
+                if (this.discardedCount >= maxCount) {
+                    this._finish();
+                } else {
+                    this.render();
+                }
+            },
+
+            _finish() {
+                if (this.container) { this.container.destroy(); this.container = null; }
+                onComplete(this.discardedCount);
+            },
+
+            destroy() {
+                if (this.container) { this.container.destroy(); this.container = null; }
+            }
+        };
+    }
+
+    /**
      * 创建一个骰子选择器 UI 会话
      */
     static createDicePickerSession(scene, title, onChosen) {

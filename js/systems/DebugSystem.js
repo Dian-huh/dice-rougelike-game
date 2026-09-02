@@ -115,18 +115,7 @@ export const DebugSystem = {
         }
 
         for (let i = 0; i < count; i++) {
-            const newCard = {
-                id: `reward_${cardDef.id}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                name: cardDef.name,
-                cost: cardDef.cost,
-                getCost: cardDef.getCost,
-                tags: cardDef.tags || [],
-                desc: cardDef.desc,
-                scope: cardDef.scope,
-                onPlay: cardDef.onPlay,
-                __source: 'reward',
-                __defId: cardDef.id
-            };
+            const newCard = DeckSystem.instantiateCardDef(cardDef);
             targetDeckSys.originalDeck.push(newCard);
             if (isBattleRunning) {
                 targetDeckSys.hand.push(newCard); // 🟢 戰鬥中直接塞進手牌，立刻可打

@@ -1,6 +1,8 @@
 import { EffectEngine } from '../systems/EffectEngine.js';
 import { HERO_CARD_DEFS } from '../characters/hero/heroCards.js';
 import { SWORDSMAN_CARD_DEFS } from '../characters/swordsman/swordsmanCards.js';
+import { DeckSystem } from '../systems/DeckSystem.js';
+import { UIInteractionSystem } from '../systems/UIInteractionSystem.js';
 // js/data/rewardPoolData.js
 //
 // 🟢 獎勵池資料層（第 1 階段：只定義資料結構與盡量單純的 apply()，
@@ -238,6 +240,85 @@ export const BLESSING_POOL = [
 //    ⚠️ apply() 只有簡單卡片先寫實作，複雜卡片（需要引擎擴充）先標記 TODO，
 //    於第 5 階段補上，並在 executeAttackPhaseAction / CombatSystem 等處掛勾。
 // ====================================================================
+
+// ====================================================================
+// 🟢 階段4：拔刀術連鎖卡片鏈
+// 只有 CARD_IAIDO_1 會出現在獎勵池中；II/拔刀斬/納刀帶 hidden:true，
+// 不會被隨機抽到，只透過連鎖效果動態實例化後塞進手牌
+// ====================================================================
+function gainStance(hero, amount, log) {
+    const entry = EffectEngine.addStacks(hero, 'stance_stack', amount);
+    hero.dodgeCount = (hero.dodgeCount || 0) + amount;
+    hero.block = (hero.block || 0) + amount;
+    log(`🗡️ 獲得 ${amount} 層【蓄勢】(現為 ${entry.stacks} 層)，閃避+${amount}、格擋+${amount}`);
+}
+
+const CARD_KATANA_SHEATH = {
+    id: 'card_katana_sheath', theme: '戰技', hidden: true,
+    name: '納刀', cost: 0, scope: 'SELF', tags: [], burnout: true,
+    desc: '回復(3+拔刀斬所消耗之蓄勢層數)，抽2，燃盡',
+    implemented: true,
+    onPlay: (hero, enemy, combatSys, deckSys, log) => {
+        const healAmount = 3 + (hero._iaidoConsumedStacks || 0);
+        hero._iaidoConsumedStacks = 0;
+        combatSys.applyHealToHero(hero, healAmount, log);
+        deckSys.drawCard();
+        deckSys.drawCard();
+        log(`🗡️ 效果發動：抽 2 張牌`);
+    }
+};
+
+const CARD_IAIDO_SLASH = {
+    id: 'card_iaido_slash', theme: '戰技', hidden: true,
+    name: '拔刀斬', cost: 1, scope: 'ALL_ENEMIES', tags: [], burnout: true,
+    desc: '造成全體(爆擊傷害+蓄勢層數*2)點傷害，獲得一張【納刀】，消耗所有蓄勢，燃盡',
+    implemented: true,
+    onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
+        const stanceEntry = EffectEngine.getEntry(hero, 'stance_stack');
+        const stacks = stanceEntry ? stanceEntry.stacks : 0;
+        const dmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero) + stacks * 2;
+
+        const aliveEnemies = scene.enemies.filter(e => e.hp > 0);
+        log(`⚔️ 效果發動：對敵方全體造成 ${dmg} 點傷害！(蓄勢${stacks}層)`);
+        aliveEnemies.forEach(en => combatSys.applyDamageToTarget(en, dmg, log));
+
+        if (stanceEntry) {
+            hero.activeEffects = hero.activeEffects.filter(e => e !== stanceEntry);
+        }
+        hero._iaidoConsumedStacks = stacks;   // 🟢 供【納刀】計算回復量
+        log(`🗡️ 消耗所有蓄勢 (${stacks}層)，獲得一張【納刀】！`);
+
+        deckSys.addCardToHand(DeckSystem.instantiateCardDef(CARD_KATANA_SHEATH));
+        scene.renderHandUI();
+    }
+};
+
+const CARD_IAIDO_2 = {
+    id: 'card_iaido_2', theme: '戰技', hidden: true,
+    name: '拔刀術II', cost: 2, scope: 'SELF', tags: [], burnout: true,
+    desc: '獲得2層蓄勢，獲得一張【拔刀斬】，燃盡',
+    implemented: true,
+    onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
+        gainStance(hero, 2, log);
+        log(`🗡️ 獲得一張【拔刀斬】！`);
+        deckSys.addCardToHand(DeckSystem.instantiateCardDef(CARD_IAIDO_SLASH));
+        scene.renderHandUI();
+    }
+};
+
+const CARD_IAIDO_1 = {
+    id: 'card_iaido_1', theme: '戰技',
+    name: '拔刀術I', cost: 3, scope: 'SELF', tags: [],
+    desc: '獲得3層蓄勢，獲得一張【拔刀術II】',
+    implemented: true,
+    onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
+        gainStance(hero, 3, log);
+        log(`🗡️ 獲得一張【拔刀術II】！`);
+        deckSys.addCardToHand(DeckSystem.instantiateCardDef(CARD_IAIDO_2));
+        scene.renderHandUI();
+    }
+};
+
 const BASE_REWARD_CARDS = [
     {
         id: 'card_gold_bomb',theme: '富豪',
@@ -716,6 +797,31 @@ const BASE_REWARD_CARDS = [
             }
         }
     },
+    CARD_IAIDO_1,
+    CARD_IAIDO_2,
+    CARD_IAIDO_SLASH,
+    CARD_KATANA_SHEATH,
+    {
+        id: 'card_codex', theme: '主教',
+        name: '法典', cost: 0, scope: 'SELF', tags: [],
+        desc: '抽2，選擇棄1~2張卡，依棄牌數量提升回復量 (戰鬥內持續，每棄1張回復量+1)',
+        implemented: true,
+        onPlay: (hero, enemy, combatSys, deckSys, log, scene) => {
+            deckSys.drawCard();
+            deckSys.drawCard();
+            log(`📖 效果發動：抽 2 張牌，請選擇要棄置的卡片`);
+            scene.renderHandUI();
+
+            const session = UIInteractionSystem.createDiscardPickerSession(scene, deckSys, 1, 2, (count) => {
+                hero.battleHealBonus += count;
+                log(`📖 棄置了 ${count} 張卡片，回復量 +${count} (本場戰鬥內)`);
+                scene.renderHandUI();
+                scene.updateUI();
+            });
+            session.show();
+        }
+    },
+
 ];
 
 export const REWARD_CARD_POOL = [

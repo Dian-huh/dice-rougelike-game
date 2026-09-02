@@ -69,10 +69,37 @@ export class DeckSystem {
         }
     }
 
+    // 🟢 階段4新增：統一的「從卡片定義建立卡片實例」工廠方法。
+    // 取代 RewardSystem.createRewardSlot / DebugSystem.giveCard 原本各自重複的實例建構邏輯，
+    // 未來卡片實例欄位若要調整，只需要改這裡一處。
+    static instantiateCardDef(cardDef) {
+        return {
+            id: `reward_${cardDef.id}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            name: cardDef.name,
+            cost: cardDef.cost,
+            getCost: cardDef.getCost,
+            tags: cardDef.tags || [],
+            desc: cardDef.desc,
+            scope: cardDef.scope,
+            onPlay: cardDef.onPlay,
+            burnout: cardDef.burnout || false,   // 🟢 燃盡標記需要跟著複製
+            __source: 'reward',
+            __defId: cardDef.id
+        };
+    }
+
+    // 🟢 階段4新增：讓卡片效果（拔刀術連鎖）可以直接把卡片實例塞進手牌
+    addCardToHand(cardInstance) {
+        this.hand.push(cardInstance);
+    }
+
     playCard(index) {
         const card = this.hand[index];
         this.hand.splice(index, 1);
-        this.discardPile.push(card);
+        // 🟢 階段4新增：帶 burnout 標記的卡片使用後直接銷毀，不進棄牌堆循環
+        if (!card.burnout) {
+            this.discardPile.push(card);
+        }
         return card;
     }
 

@@ -166,6 +166,18 @@ export const EFFECT_REGISTRY = {
         }
     },
 
+    stance_stack: {
+        category: 'CARD_EFFECT',
+        displayName: '蓄勢',
+        getStatusText: (entry) => `蓄勢 x${entry.stacks} (受到攻擊時-1，影響拔刀斬傷害)`,
+        onGetHit: (self, entry, ctx) => {
+            entry.stacks = Math.max(0, entry.stacks - 1);
+            if (entry.stacks <= 0) {
+                self.activeEffects = self.activeEffects.filter(e => e !== entry);
+            }
+        }
+    },
+
     counter_stack: {
         category: 'DEBUFF_LIKE',   // 通用敵方機制類別，不分角色/敵人皆可掛
         displayName: '反擊',
