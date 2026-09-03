@@ -26,19 +26,6 @@ export const AttackFlowSystem = {
         return { type: 'DONE' };
     },
 
-    _handleEmbeddedSoloResult(ctx, soloResult) {
-        const flow = ctx._flow;
-        if (soloResult.type === 'NEED_TARGET') {
-            flow.stage = 'WAIT_SOLO_TARGET';
-            return soloResult;
-        }
-        if (soloResult.type === 'NEED_REROLL_CONFIRM') {
-            flow.stage = 'WAIT_SOLO_REROLL';
-            return soloResult;
-        }
-        return this._finishActionSegment(ctx);
-    },
-
     _startAction(ctx) {
         const { hero, enemies } = ctx;
         const flow = ctx._flow;

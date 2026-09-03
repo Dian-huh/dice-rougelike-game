@@ -100,8 +100,7 @@ export class BattleFlowSystem {
      * 处理战斗结束后的清理
      * 返回结算数据，UI 负责显示
      */
-    static resolveBattleEnd(hero, enemies) {
-        const status = this.checkBattleStatus(hero, enemies);
+    static resolveBattleEnd(status, hero) {
 
         if (status.status === 'victory') {
             // 重置战斗作用域的临时统计

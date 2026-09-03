@@ -2,7 +2,6 @@ import { gameState } from '../data/gameState.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
 import { RewardSystem } from '../systems/RewardSystem.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
-import { TurnSystem } from '../systems/TurnSystem.js';
 import { BattleSetup } from '../systems/BattleSetup.js';
 import { EffectEngine } from '../systems/EffectEngine.js';
 import { AttackFlowSystem } from '../systems/AttackFlowSystem.js';
@@ -41,7 +40,6 @@ export class BattleScene extends Phaser.Scene {
         
         // 🟢 新增：目標選擇 / 攻擊骰結算狀態機相關旗標
         this.isPickingTarget = false;
-        this.pendingTargetCallback = null;
         this._attackFlowRunning = false;
         this.enemyDisplays = null;
 
@@ -230,10 +228,6 @@ export class BattleScene extends Phaser.Scene {
             this.deckPanelContainer.destroy();
             this.deckPanelContainer = null;
         }
-    }
-
-    getCurrentTarget() {
-        return this.enemies.find(e => e.hp > 0) || this.enemies[0];
     }
 
     createChatLogUI() {
@@ -603,7 +597,7 @@ export class BattleScene extends Phaser.Scene {
             this.appendLog(`🎉 區域內所有敵人已被全數擊敗！戰鬥獲勝！`, 'system');
 
             // 清理战斗作用域的临时统计
-            BattleFlowSystem.resolveBattleEnd(this.hero, this.enemies);
+            BattleFlowSystem.resolveBattleEnd(status, this.hero);
 
             // 销毁交互 UI
             if (this.handContainer) this.handContainer.destroy();

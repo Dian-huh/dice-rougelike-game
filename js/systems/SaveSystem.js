@@ -2,6 +2,7 @@
 import { getCharacterDeck } from '../characters/characterRegistry.js';
 import { REWARD_CARD_POOL } from '../data/rewardPoolData.js';
 import { REWARD_CARD_ID_MIGRATIONS, STARTER_CARD_ID_MIGRATIONS } from '../data/cardIdMigrations.js';
+import { DeckSystem } from './DeckSystem.js';
 
 const SAVE_KEY = 'dice_roguelike_save_v1';
 const SCHEMA_VERSION = 1;
@@ -120,18 +121,7 @@ export const SaveSystem = {
                     return;
                 }
 
-                result.push({
-                    id: `reward_${cardDef.id}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                    name: cardDef.name,
-                    cost: cardDef.cost,
-                    getCost: cardDef.getCost,
-                    tags: cardDef.tags || [],
-                    desc: cardDef.desc,
-                    scope: cardDef.scope,
-                    onPlay: cardDef.onPlay,
-                    __source: 'reward',
-                    __defId: cardDef.id
-                });
+                result.push(DeckSystem.instantiateCardDef(cardDef));
             }
         });
 

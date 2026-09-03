@@ -318,13 +318,7 @@ export class CombatSystem {
         }
         if (intent.id === 'DIVE') attacker.isFlying = false;
 
-        // js/systems/CombatSystem.js 的 executeEnemyIntent 補上：
-
-        
-        if (!intent) return;
-
         // CombatSystem.js (召喚邏輯區塊)
-
         if (intent.type === 'SPECIAL' && intent.id === 'SUMMON') {
             safeLog(`📢 ${attacker.name} 大聲呼叫，召喚了同伴支援！`);
 
