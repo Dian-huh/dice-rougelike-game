@@ -33,7 +33,13 @@ export const SaveSystem = {
                 hero: heroSnapshot,
                 deck: this._serializeDeck(gameState.deckSys),
                 mapData: gameState.mapData,
-                currentFloor: gameState.currentFloor
+                currentFloor: gameState.currentFloor,
+                // 🟢 階段5新增：區域制狀態，皆為純資料可直接序列化
+                regionsCompleted: gameState.regionsCompleted,
+                currentRegionId: gameState.currentRegionId,
+                currentRegionGraph: gameState.currentRegionGraph,
+                currentNodeId: gameState.currentNodeId,
+                currentRegionIsFinal: gameState.currentRegionIsFinal
             };
 
             localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
@@ -70,7 +76,13 @@ export const SaveSystem = {
             hero: payload.hero,
             deck,
             mapData: payload.mapData,
-            currentFloor: payload.currentFloor
+            currentFloor: payload.currentFloor,
+            // 🟢 階段5新增：舊存檔沒有這些欄位時，用合理預設值防呆（避免讀到 undefined）
+            regionsCompleted: payload.regionsCompleted || 0,
+            currentRegionId: payload.currentRegionId || null,
+            currentRegionGraph: payload.currentRegionGraph || null,
+            currentNodeId: payload.currentNodeId || null,
+            currentRegionIsFinal: payload.currentRegionIsFinal || false
         };
     },
 

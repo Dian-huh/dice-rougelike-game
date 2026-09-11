@@ -1,9 +1,33 @@
 // 地圖節點類型定義
 export const NODE_TYPES = {
-    BATTLE: { id: 'BATTLE', name: '⚔️ 一般戰鬥', color: '#ff6666' },
-    EVENT:  { id: 'EVENT',  name: '❓ 隨機事件', color: '#ffff66' },
-    REST:   { id: 'REST',   name: '🔥 營火休息', color: '#66ff66' },
-    BOSS:   { id: 'BOSS',   name: '👹 頭目戰',   color: '#ff0000' }
+    BATTLE: {
+        id: 'BATTLE', name: '⚔️ 一般戰鬥', color: '#ff6666',
+        onEnter: (scene, node) => scene.scene.start('BattleScene', { node })
+    },
+    EVENT: {
+        id: 'EVENT', name: '❓ 隨機事件', color: '#ffff66',
+        onEnter: (scene, node) => scene.showEventUI(node)
+    },
+    REST: {
+        id: 'REST', name: '🔥 營火休息', color: '#66ff66',
+        onEnter: (scene, node, gameState) => {
+            gameState.hero.hp = Math.min(gameState.hero.maxHp, gameState.hero.hp + 15);
+            alert(`🔥 在營火旁休息，恢復了 15 點生命值！`);
+            scene.afterNodeCompleted(node);
+        }
+    },
+    BOSS: {
+        id: 'BOSS', name: '👹 頭目戰', color: '#ff0000',
+        onEnter: (scene, node) => scene.scene.start('BattleScene', { node })
+    },
+    // 🟢 Step1(regionRegistry.js) 新增的佔位型別：最終層節點固定用這個 type。
+    // 目前 onEnter 先當一般戰鬥處理；「該出現 eliteEnemy 還是 regionBoss」的判斷邏輯
+    // 待 Step3(isFinalSelection) 決定選中的區域、Step6(stageData銜接) 決定敵人池時才會真正生效，
+    // 這裡先確保「有這個節點類型可以正常進入戰鬥」不出錯即可
+    BATTLE_FINAL: {
+        id: 'BATTLE_FINAL', name: '👑 區域最終戰', color: '#ff00ff',
+        onEnter: (scene, node) => scene.scene.start('BattleScene', { node })
+    }
 };
 
 /**

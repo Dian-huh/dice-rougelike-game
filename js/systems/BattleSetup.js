@@ -21,11 +21,20 @@ export class BattleSetup {
             };
         }
 
-        const currentFloor = (gameState && gameState.currentFloor) ? gameState.currentFloor : 1;
-        const currentStageId = `1-${currentFloor}`;
-        const nodeType = (data && data.node && data.node.type) ? data.node.type : 'BATTLE';
-        const totalFloors = (gameState && gameState.mapData) ? gameState.mapData.length : 5;
-        const isFinalBoss = (nodeType === 'BOSS' && currentFloor === totalFloors);
+        const node = (data && data.node) ? data.node : { type: 'BATTLE', difficulty: 1 };
+        const nodeType = node.type || 'BATTLE';
+
+        // 🟢 階段5：區域制最終戰判定
+        const regionId = gameState && gameState.currentRegionId;
+        const isFinalOfRun = !!(gameState && gameState.currentRegionIsFinal);
+        const isRegionFinalBoss = (nodeType === 'BATTLE_FINAL' && isFinalOfRun);
+
+        // 🟢 舊系統相容：mapData.js 固定5層，最後一層BOSS才算全破
+        const legacyTotalFloors = (gameState && gameState.mapData) ? gameState.mapData.length : 5;
+        const legacyCurrentFloor = (gameState && gameState.currentFloor) ? gameState.currentFloor : 1;
+        const isLegacyFinalBoss = (nodeType === 'BOSS' && legacyCurrentFloor === legacyTotalFloors);
+
+        const isFinalBoss = isRegionFinalBoss || isLegacyFinalBoss;
 
         let hero, deckSys;
         if (data && data.hero) {
@@ -46,7 +55,7 @@ export class BattleSetup {
         const queryCtx = { nodeType, limitedToOne: false };
         EffectEngine.runHook('onStageQuery', hero, queryCtx);
 
-        const stageInfo = getStageData ? getStageData(currentStageId, nodeType, { limitedToOne: queryCtx.limitedToOne }) : null;
+        const stageInfo = getStageData(node, { regionId, isFinalOfRun, limitedToOne: queryCtx.limitedToOne });
         const currentStage = stageInfo || { name: '冒險關卡', enemies: [] };
         const enemies = currentStage.enemies || [];
 

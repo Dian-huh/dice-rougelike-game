@@ -22,6 +22,7 @@ export class BattleScene extends Phaser.Scene {
         this.enemies = setup.enemies;
         this.hero = setup.hero;
         this.deckSys = setup.deckSys;
+        this.currentNode = (data && data.node) ? data.node : null;   // 🟢 階段5：記錄本場戰鬥對應的地圖節點
         
         // 🟢 每場戰鬥開始前重置本場牌堆狀態（手牌/抽牌堆/棄牌堆），
         // 但 originalDeck（永久收藏，含戰利品新卡）維持不變
@@ -685,8 +686,16 @@ export class BattleScene extends Phaser.Scene {
         this.appendLog(`🗺️ 戰鬥勝利！返回地圖...`, 'system');
         
         this.time.delayedCall(500, () => {
-            this.removeChatLogUI();  // 🟢 新增
-            gameState.nextFloor();   // 🔑 統一只用模組單例，不再判斷 window.gameState
+            this.removeChatLogUI();
+            if (gameState.currentRegionGraph && this.currentNode) {
+                const result = gameState.advanceAfterNode(this.currentNode);
+                if (result && result.runComplete) {
+                    this.showVictoryUI();
+                    return;
+                }
+            } else {
+                gameState.nextFloor();   // 🟢 舊系統相容路徑
+            }
             this.scene.start('MapScene');
             this.scene.stop('BattleScene');
         });
