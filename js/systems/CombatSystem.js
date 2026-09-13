@@ -250,6 +250,26 @@ export class CombatSystem {
             return;
         }
 
+        if (intent.type === 'SPECIAL' && intent.id === 'SUMMON') {
+            safeLog(`📢 ${attacker.name} 大聲呼叫，召喚了同伴支援！`);
+            if (enemies && Array.isArray(enemies)) {
+                const aliveCount = enemies.filter(e => e.hp > 0).length;
+                if (aliveCount < 4) {
+                    const newGoblin = createEnemyInstance('goblin');
+                    if (newGoblin) {
+                        enemies.push(newGoblin);
+                        safeLog(`👺 新的哥布林加入了戰場！(當前存活數量: ${aliveCount + 1}/4)`);
+                    }
+                } else {
+                    safeLog(`⚠️ 場上存活敵人數量已達上限 (4/4)，無法召喚更多同伴！`);
+                }
+            } else {
+                console.warn('⚠️ 召喚失敗：無法取得 enemies 陣列');
+            }
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
         // 1. 處理 Buff / Debuff / 特殊機制 (如蓄力、飛翔、威壓)
         if (intent.type === 'BUFF' || intent.type === 'DEBUFF') {
             if (intent.id === 'CHARGE') {
@@ -318,34 +338,6 @@ export class CombatSystem {
         }
         if (intent.id === 'DIVE') attacker.isFlying = false;
 
-        // CombatSystem.js (召喚邏輯區塊)
-        if (intent.type === 'SPECIAL' && intent.id === 'SUMMON') {
-            safeLog(`📢 ${attacker.name} 大聲呼叫，召喚了同伴支援！`);
-
-            // 改成
-            if (enemies && Array.isArray(enemies)) {
-                // 🟢 改為檢查「存活」敵人數量是否低於上限 (最大 4 個)，死亡敵人不再佔用召喚名額
-                const aliveCount = enemies.filter(e => e.hp > 0).length;
-                if (aliveCount < 4) {
-                    const newGoblin = createEnemyInstance('goblin');
-                    if (newGoblin) {
-                        enemies.push(newGoblin);
-                        safeLog(`👺 新的哥布林加入了戰場！(當前存活數量: ${aliveCount + 1}/4)`);
-                    }
-                } else {
-                    // 🟢 場滿提示
-                    safeLog(`⚠️ 場上存活敵人數量已達上限 (4/4)，無法召喚更多同伴！`);
-                }
-            } else {
-                console.warn('⚠️ 召喚失敗：無法取得 enemies 陣列');
-            }
-
-            // 扣除 CT 費用 (不管成功或場滿，只要發動技能就會扣 CT)
-            if (intent.consumeCt) {
-                attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
-            }
-            return;
-        }
     }
 
 
@@ -510,7 +502,7 @@ export class CombatSystem {
             if (logCallback) logCallback(`💥 造成 ${finalDmg} 點傷害${detailStr} (剩餘 ${target.hp}/${target.maxHp} HP)`);
             this.checkPhaseTransition(target, logCallback);
             // 🟢 懸賞：帶有懸賞標記的目標死亡時，玩家獲得50*該目標身上懸賞層數的金幣
-            if (wasAliveBefore && target.hp <= 0 && target.bounty && target.bounty > 0) {
+            if (wasAliveBefore && target.hp <= 0 && target.bountyStacks && target.bountyStacks > 0) {
                 const bountyGold = 50 * target.bountyStacks;
                 this._activeHero.gold = (this._activeHero.gold || 0) + bountyGold;
                 if (logCallback) logCallback(`🏆 ${target.name} 死亡，獲得懸賞金 ${bountyGold} 金幣！`);
@@ -526,6 +518,18 @@ export class CombatSystem {
             }
         } else {
             if (logCallback) logCallback(`🛡️ 傷害被完全抵銷！`);
+        }
+    }
+
+    // 🟢 新增：統一的「即死」結算入口，跳過一般傷害計算，但仍觸發懸賞金結算，
+    // 避免各卡片各自直接寫 target.hp = 0 導致懸賞等收尾邏輯被繞過
+    static forceKill(target, logCallback) {
+        if (!target || target.hp <= 0) return;
+        target.hp = 0;
+        if (target.bountyStacks && target.bountyStacks > 0) {
+            const bountyGold = 50 * target.bountyStacks;
+            this._activeHero.gold = (this._activeHero.gold || 0) + bountyGold;
+            if (logCallback) logCallback(`🏆 ${target.name} 死亡，獲得懸賞金 ${bountyGold} 金幣！`);
         }
     }
 
@@ -741,17 +745,5 @@ export class CombatSystem {
         hero.doubleNextAction = false;
         return count;
     }
-
-    onTurnEnd(entity) {
-        let logs = [];
-        if (entity.poisonTurns && entity.poisonTurns > 0) {
-            entity.hp = Math.max(0, entity.hp - 1);
-            entity.poisonTurns -= 1;
-            logs.push(`🤢 ${entity.name} 受到【劇毒】侵蝕，扣除 1 點 HP！(剩餘 ${entity.poisonTurns} 回合)`);
-        }
-        if (typeof entity.onTurnEnd === 'function') {
-            entity.onTurnEnd();
-        }
-        return logs;
-    }
+    
 }

@@ -558,7 +558,7 @@ const BASE_REWARD_CARDS = [
             }
 
             targets.forEach(e => {
-                e.hp = 0;
+                combatSys.forceKill(e, log);
             });
             log(`💀 效果發動：${targets.map(e => e.name).join('、')} 應聲倒地！`);
         }

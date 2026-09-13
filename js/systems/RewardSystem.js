@@ -283,7 +283,6 @@ export class RewardSystem {
 
     static onRewardChosen(scene, stageData, slot, batch) {
         const finalizeChoice = () => {
-            this.handleCollectionProgress(scene, slot.category);
             scene._rewardChoicesRemaining -= 1;
             const remainingSlots = batch.filter(s => s !== slot);
 
@@ -311,18 +310,23 @@ export class RewardSystem {
                 scene._rewardContainer.destroy();
                 scene._rewardContainer = null;
             }
-            this.showCardReplacePicker(scene, slot.pendingCardDef, finalizeChoice);
+            const onReplaceSuccess = () => {
+                this.handleCollectionProgress(scene, slot.category);
+                finalizeChoice();
+            };
+            this.showCardReplacePicker(scene, slot.pendingCardDef, onReplaceSuccess, finalizeChoice);
             return;
         }
 
         slot.apply(scene);
+        this.handleCollectionProgress(scene, slot.category);
         finalizeChoice();
     }
 
     // ----------------------------------------------------------------
     // 🟢 新增：牌組已達上限時，讓玩家選一張現有卡片替換成新卡（或放棄新卡）
     // ----------------------------------------------------------------
-    static showCardReplacePicker(scene, newCardDef, onDone) {
+    static showCardReplacePicker(scene, newCardDef, onSuccess, onCancel) {
         const container = scene.add.container(0, 0).setDepth(2000);
         scene._rewardContainer = container;
 
@@ -351,7 +355,7 @@ export class RewardSystem {
                 scene.appendLog(`🔄 以 [${newCardDef.name}] 替換掉 [${card.name}]！`, 'system');
                 container.destroy();
                 scene._rewardContainer = null;
-                onDone();
+                onSuccess();
             });
 
             container.add([cardBg, nameText]);
@@ -364,7 +368,7 @@ export class RewardSystem {
               scene.appendLog(`🚫 放棄了新卡片 [${newCardDef.name}]`, 'system');
               container.destroy();
               scene._rewardContainer = null;
-              onDone();
+              onCancel();
           });
         container.add(cancelBtn);
     }

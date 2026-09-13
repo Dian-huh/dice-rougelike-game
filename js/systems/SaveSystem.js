@@ -65,8 +65,13 @@ export const SaveSystem = {
             return null;
         }
 
+        if (!payload.hero || !payload.hero.id || !Array.isArray(payload.deck)) {
+            console.warn('⚠️ 存檔缺少必要欄位 (hero/hero.id/deck)，捨棄損毀存檔');
+            return null;
+        }
+
         // 🟢 hero.id 同時是「這份存檔屬於哪個角色」的依據，用來查對應的起始牌組
-        const characterId = payload.hero ? payload.hero.id : null;
+        const characterId = payload.hero.id;
         const deck = this._deserializeDeck(payload.deck, characterId);
         if (deck.length === 0) {
             console.warn('⚠️ 存檔牌組還原後為空，可能所有卡片來源皆已失效');
