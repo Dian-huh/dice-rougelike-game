@@ -46,7 +46,7 @@ export class BattleSetup {
         } else {
             const charData = getCharacterData('hero');   // 防呆 fallback，理論上不會走到這裡
             hero = JSON.parse(JSON.stringify(charData));
-            hero.diceSkills = charData.diceSkills;
+            gameState._restoreFunctionFields(hero, charData);   // 🟢 統一走跟 initNewGame/tryLoadSave 一致的函式還原邏輯
             deckSys = new DeckSystem(getCharacterDeck('hero'));
         }
 

@@ -531,23 +531,34 @@ export class BattleScene extends Phaser.Scene {
         this.runSoloStep(AttackFlowSystem.beginSolo(this.battleCtx));
     }
 
-    runSoloStep(step) {
+        // 🟢 共用：主攻擊流程與偷打流程的 step 狀態機都靠這個推進，
+    // 差異只有 resumeFn（resume/resumeSolo）與 onDone（收尾邏輯），由呼叫端傳入
+    _runAttackStep(step, resumeFn, onDone) {
         if (step.type === 'NEED_TARGET') {
             const session = UIInteractionSystem.createTargetPickerSession(
                 this, this.enemies, step.candidates,
-                (target) => this.runSoloStep(AttackFlowSystem.resumeSolo(this.battleCtx, { target }))
+                (target) => this._runAttackStep(resumeFn({ target }), resumeFn, onDone)
             );
             session.show();
         } else if (step.type === 'NEED_REROLL_CONFIRM') {
             this.promptAttackDiceReroll(step.actionDice, step.rerollsLeft, (payload) => {
-                this.runSoloStep(AttackFlowSystem.resumeSolo(this.battleCtx, payload));
+                this._runAttackStep(resumeFn(payload), resumeFn, onDone);
             });
-        } else {
+        } else if (step.type === 'ACTION_UPDATE') {
             this.updateUI();
-            this.checkBattleEnd();
+            this._runAttackStep(resumeFn(), resumeFn, onDone);
+        } else { // 'DONE'
+            onDone();
         }
     }
 
+    runSoloStep(step) {
+        this._runAttackStep(
+            step,
+            (payload) => AttackFlowSystem.resumeSolo(this.battleCtx, payload),
+            () => { this.updateUI(); this.checkBattleEnd(); }
+        );
+    }
 
     resolveAttackPhase() {
         if (this.isPickingTarget || this._attackFlowRunning || this.rerollPromptContainer) return;
@@ -556,23 +567,16 @@ export class BattleScene extends Phaser.Scene {
     }
 
     runFlowStep(step) {
-        if (step.type === 'NEED_TARGET') {
-            const session = UIInteractionSystem.createTargetPickerSession(
-                this, this.enemies, step.candidates,
-                (target) => this.runFlowStep(AttackFlowSystem.resume(this.battleCtx, { target }))
-            );
-            session.show();
-        } else if (step.type === 'NEED_REROLL_CONFIRM') {
-            this.promptAttackDiceReroll(step.actionDice, step.rerollsLeft);
-        } else if (step.type === 'ACTION_UPDATE') {
-            this.updateUI();
-            this.runFlowStep(AttackFlowSystem.resume(this.battleCtx));
-        } else { // 'DONE'
-            this._attackFlowRunning = false;
-            if (!this.checkBattleEnd()) {
-                this.startNewTurn();
+        this._runAttackStep(
+            step,
+            (payload) => AttackFlowSystem.resume(this.battleCtx, payload),
+            () => {
+                this._attackFlowRunning = false;
+                if (!this.checkBattleEnd()) {
+                    this.startNewTurn();
+                }
             }
-        }
+        );
     }
 
     // 🟢 重構：不再遞迴自己呼叫自己，每次只顯示「當下這顆骰」的確認框，

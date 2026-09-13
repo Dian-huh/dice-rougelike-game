@@ -1,5 +1,6 @@
 // js/characters/swordsman/swordsmanData.js
 import { EffectEngine } from '../../systems/EffectEngine.js';
+import { BASE_CHARACTER_FIELDS } from '../characterBaseFields.js';
 
 // ---- 內部小工具（劍豪專屬，不放進共用系統） ----
 
@@ -50,35 +51,15 @@ export const SWORDSMAN_DATA = {
     id: 'swordsman',
     name: '劍豪',
     description: '高風險高回報的雙型態角色，透過切換【收刀】/【拔刀】狀態與經營【劍意】資源，打出爆發連段。血量偏低，須謹慎運用閃避反擊。',
+    ...BASE_CHARACTER_FIELDS,
     hp: 8, maxHp: 8,
     atk: 5,
     critBonus: 2,
-    battleCritBonus: 0,
-    battleHealBonus: 0,
     mana: 2, maxMana: 2,
     healRatio: 1,
     speedBonus: 2,
     atkCount: 2,
     armorMax: 2,
-    armorHits: 0,
-    isVulnerable: false,
-    block: 0,
-    dodgeCount: 0,
-    doubleNextAction: false,
-    poisonTurns: 0,
-    isPressured: false,
-    stigma: 0,
-    gold: 50,
-    cdActiveSkill: 0,
-    overrideDice: null,
-    battleAtkBonus: 0,
-    deckCapacity: 15,
-    activeEffects: [],
-    lastPlayedCard: null,
-    startBlock: 0,
-    goldGainBonus: 0,
-    rewardCounts: { STAT: 0, BLESSING: 0, CARD: 0 },
-    firstCardFreeEachBattle: false,
 
     // 🟢 劍豪專屬欄位
     stance: 'SHEATHED',        // 'SHEATHED'(收刀) / 'DRAWN'(拔刀)
@@ -86,10 +67,6 @@ export const SWORDSMAN_DATA = {
     insightStacks: 0,          // 慧眼，上限1
     turnCritBonus: 0,          // 花風・薄紅舞用：單回合暴擊增益，每回合開始由 TurnSystem 重置
     forceCritThisTurn: false,  // 花風・薄紅舞用：單回合必定爆擊旗標，每回合開始由 TurnSystem 重置
-
-    turnSpeedBonus: 0,
-    freeGoldCardsThisTurn: false,
-    nextStigmaCardDiscount: 0,
 
     // 🟢 被動：收刀狀態下閃避成功，對隨機目標反擊5點傷害、回復3
     // 由 CombatSystem.applyDamageToTarget 在閃避成功時呼叫（見上方共用系統改動）

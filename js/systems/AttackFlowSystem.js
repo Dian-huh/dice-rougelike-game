@@ -73,13 +73,10 @@ export const AttackFlowSystem = {
         return Phaser.Math.Between(1, 6);
     },
 
-   _soloRoll(ctx) {
-        const { hero, enemies } = ctx;
-        if (enemies.every(e => e.hp <= 0) || hero.hp <= 0) {
-            ctx._solo = null;
-            return { type: 'DONE' };
-        }
-
+    // 🟢 共用：威壓/指定骰覆蓋判定 + 擲骰。actionIndex 給 undefined 或 1 時走平均骰(1~6)，
+    // 給 >1 時走加權池（目前只有主流程第2次以後行動會用到）
+    _rollActionDice(ctx, actionIndex) {
+        const { hero } = ctx;
         let actionDice;
         let allowReroll = true;
         if (hero.isPressured) {
@@ -93,36 +90,100 @@ export const AttackFlowSystem = {
             hero.overrideDice = null;
             allowReroll = false;
         } else {
-            actionDice = Phaser.Math.Between(1, 6);
+            actionDice = this._rollMainActionDice(actionIndex);
         }
         ctx.lastActionDice = actionDice;
+        return { actionDice, allowReroll };
+    },
+
+    // 🟢 共用：查詢剩餘重骰次數，需要確認就回傳 NEED_REROLL_CONFIRM step，否則回傳 null
+    _checkRerollStep(ctx, actionDice, allowReroll) {
+        const rerollsLeft = EffectEngine.getCounterRemaining(ctx.hero, 'reroll_attack_dice');
+        if (allowReroll && rerollsLeft > 0) {
+            return { type: 'NEED_REROLL_CONFIRM', actionDice, rerollsLeft };
+        }
+        return null;
+    },
+
+    // 🟢 共用：消耗一次重骰次數、重新擲骰、寫入log，回傳新骰值
+    _consumeRerollAndReroll(ctx, actionIndex) {
+        EffectEngine.consumeCounter(ctx.hero, 'reroll_attack_dice');
+        const newDice = this._rollMainActionDice(actionIndex);
+        ctx.lastActionDice = newDice;
+        ctx.log(`🔄 重骰攻擊骰：新結果 [ ${newDice} ] 點`, 'system');
+        return newDice;
+    },
+
+    // 🟢 共用：依骰值取得技能範圍，處理嘲諷鎖定與「僅剩一隻敵人不用選」的情況。
+    // needsTarget=true 時呼叫端要跳出 NEED_TARGET 選擇 UI，target 此時為 null
+    _resolveScopeAndTarget(ctx, actionDice) {
+        const { hero, enemies } = ctx;
+        const skill = hero.diceSkills[actionDice];
+        const scope = (skill && skill.scope) || 'SINGLE_ENEMY';
+        const aliveEnemies = enemies.filter(e => e.hp > 0);
+
+        if (scope === 'SINGLE_ENEMY') {
+            const tauntTarget = CombatSystem.getTauntTarget(aliveEnemies);
+            if (tauntTarget) {
+                return { skill, scope, aliveEnemies, target: tauntTarget, needsTarget: false };
+            }
+            if (aliveEnemies.length > 1) {
+                return { skill, scope, aliveEnemies, target: null, needsTarget: true };
+            }
+        }
+
+        const target = aliveEnemies.length > 0 ? aliveEnemies[0] : null;
+        return { skill, scope, aliveEnemies, target, needsTarget: false };
+    },
+
+    // 🟢 共用：主流程與偷打流程都靠這個實際執行一次骰子技能，flowState 傳 ctx._flow 或 ctx._solo
+    _executePlayerDiceActionCore(ctx, dice, targetEnemy, flowState, savedFlyingState = null) {
+        const { hero } = ctx;
+        const skill = hero.diceSkills[dice];
+        if (!skill) return;
+
+        const checkFlyingState = savedFlyingState !== null ? savedFlyingState : (targetEnemy ? targetEnemy.isFlying : false);
+
+        if (targetEnemy && checkFlyingState) {
+            ctx.log(`💨 ${targetEnemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
+            CombatSystem.tickActionDOT(hero, (m) => ctx.log(m, 'player'));
+            return;
+        }
+        skill.execute(hero, targetEnemy, CombatSystem, (m) => ctx.log(m, 'player'), flowState, ctx.enemies);
+        CombatSystem.tickActionDOT(hero, (m) => ctx.log(m, 'player'));
+    },
+
+    _soloRoll(ctx) {
+        const { hero, enemies } = ctx;
+        if (enemies.every(e => e.hp <= 0) || hero.hp <= 0) {
+            ctx._solo = null;
+            return { type: 'DONE' };
+        }
+
+        const { actionDice, allowReroll } = this._rollActionDice(ctx);
         ctx._solo.actionDice = actionDice;
 
-        // 🟢 新增：偷打流程也支援重骰攻擊骰
-        const rerollsLeft = EffectEngine.getCounterRemaining(hero, 'reroll_attack_dice');
-        if (allowReroll && rerollsLeft > 0) {
+        const rerollStep = this._checkRerollStep(ctx, actionDice, allowReroll);
+        if (rerollStep) {
             ctx._solo.stage = 'WAIT_REROLL';
-            return { type: 'NEED_REROLL_CONFIRM', actionDice, rerollsLeft };
+            return rerollStep;
         }
 
         return this._soloContinue(ctx, actionDice);
     },
 
-    _soloAfterRerollDecision(ctx, payload) {
+        _soloAfterRerollDecision(ctx, payload) {
         const solo = ctx._solo;
         if (!solo) return { type: 'DONE' };
 
         if (payload && payload.reroll) {
-            EffectEngine.consumeCounter(ctx.hero, 'reroll_attack_dice');
-            const newDice = Phaser.Math.Between(1, 6);
-            ctx.lastActionDice = newDice;
+            const newDice = this._consumeRerollAndReroll(ctx);
             solo.actionDice = newDice;
-            ctx.log(`🔄 重骰攻擊骰：新結果 [ ${newDice} ] 點`, 'system');
 
-            const stillLeft = EffectEngine.getCounterRemaining(ctx.hero, 'reroll_attack_dice');
-            if (stillLeft > 0) {
+            const rerollStep = this._checkRerollStep(ctx, newDice, true);
+            if (rerollStep) {
                 solo.stage = 'WAIT_REROLL';
-                return { type: 'NEED_REROLL_CONFIRM', actionDice: newDice, rerollsLeft: stillLeft };
+                return rerollStep;
             }
             return this._soloContinue(ctx, newDice);
         }
@@ -131,26 +192,15 @@ export const AttackFlowSystem = {
     },
 
     _soloContinue(ctx, actionDice) {
-        const { hero, enemies } = ctx;
-        const skill = hero.diceSkills[actionDice];
-        const scope = (skill && skill.scope) || 'SINGLE_ENEMY';
-        const aliveEnemies = enemies.filter(e => e.hp > 0);
+        const { scope, aliveEnemies, target, needsTarget } = this._resolveScopeAndTarget(ctx, actionDice);
 
-        // 🟢 新增：SINGLE_ENEMY 情況下，若有敵人正在嘲諷，強制鎖定為目標，跳過選擇UI
-        if (scope === 'SINGLE_ENEMY') {
-            const tauntTarget = CombatSystem.getTauntTarget(aliveEnemies);
-            if (tauntTarget) {
-                return this._soloExecute(ctx, actionDice, scope, tauntTarget);
-            }
-            if (aliveEnemies.length > 1) {
-                ctx._solo.stage = 'WAIT_TARGET';
-                ctx._solo.pendingScope = scope;
-                ctx._solo.pendingDice = actionDice;
-                return { type: 'NEED_TARGET', candidates: aliveEnemies };
-            }
+        if (needsTarget) {
+            ctx._solo.stage = 'WAIT_TARGET';
+            ctx._solo.pendingScope = scope;
+            ctx._solo.pendingDice = actionDice;
+            return { type: 'NEED_TARGET', candidates: aliveEnemies };
         }
 
-        const target = aliveEnemies.length > 0 ? aliveEnemies[0] : null;
         return this._soloExecute(ctx, actionDice, scope, target);
     },
 
@@ -207,49 +257,18 @@ export const AttackFlowSystem = {
     },
 
     _executePlayerDiceActionSolo(ctx, dice, targetEnemy, savedFlyingState = null) {
-        const { hero } = ctx;
-        const skill = hero.diceSkills[dice];
-        if (!skill) return;
-
-        // 🟢 改進：只對基礎骰（1/3）檢查飛行狀態，技能骰（4/6）能穿過飛行狀態
-        // 且使用保存的飛行狀態（在循環前確定），避免飛行狀態在多次攻擊中間被改變
-        const checkFlyingState = savedFlyingState !== null ? savedFlyingState : (targetEnemy ? targetEnemy.isFlying : false);
-
-        if (targetEnemy && checkFlyingState) {
-            ctx.log(`💨 ${targetEnemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
-            CombatSystem.tickActionDOT(hero, (m) => ctx.log(m, 'player'));
-            return;
-        }
-        skill.execute(hero, targetEnemy, CombatSystem, (m) => ctx.log(m, 'player'), ctx._solo, ctx.enemies);
-        CombatSystem.tickActionDOT(hero, (m) => ctx.log(m, 'player'));
+        this._executePlayerDiceActionCore(ctx, dice, targetEnemy, ctx._solo, savedFlyingState);
     },
 
     _rollAndProceed(ctx) {
-        const { hero } = ctx;
         const flow = ctx._flow;
-
-        let actionDice;
-        let allowReroll = true;
-        if (hero.isPressured) {
-            actionDice = 1;
-            hero.overrideDice = null;
-            hero.isPressured = false;
-            ctx.log(`😱 【威壓】效果發動，攻擊骰被強制鎖定為 1 點！`, 'system');
-            allowReroll = false;
-        } else if (hero.overrideDice !== null) {
-            actionDice = hero.overrideDice;
-            hero.overrideDice = null;
-            allowReroll = false;
-        } else {
-            actionDice = this._rollMainActionDice(flow.actionIndex);   // 🔧 原本是 Phaser.Math.Between(1, 6)
-        }
-        ctx.lastActionDice = actionDice;
+        const { actionDice, allowReroll } = this._rollActionDice(ctx, flow.actionIndex);
         flow.actionDice = actionDice;
 
-        const rerollsLeft = EffectEngine.getCounterRemaining(hero, 'reroll_attack_dice');
-        if (allowReroll && rerollsLeft > 0) {
+        const rerollStep = this._checkRerollStep(ctx, actionDice, allowReroll);
+        if (rerollStep) {
             flow.stage = 'WAIT_REROLL';
-            return { type: 'NEED_REROLL_CONFIRM', actionDice, rerollsLeft };
+            return rerollStep;
         }
 
         return this._continueWithDice(ctx, actionDice);
@@ -260,16 +279,13 @@ export const AttackFlowSystem = {
         if (!flow) return { type: 'DONE' };
 
         if (payload && payload.reroll) {
-            EffectEngine.consumeCounter(ctx.hero, 'reroll_attack_dice');
-            const newDice = this._rollMainActionDice(flow.actionIndex);
-            ctx.lastActionDice = newDice;
+            const newDice = this._consumeRerollAndReroll(ctx, flow.actionIndex);
             flow.actionDice = newDice;
-            ctx.log(`🔄 重骰攻擊骰：新結果 [ ${newDice} ] 點`, 'system');
 
-            const stillLeft = EffectEngine.getCounterRemaining(ctx.hero, 'reroll_attack_dice');
-            if (stillLeft > 0) {
+            const rerollStep = this._checkRerollStep(ctx, newDice, true);
+            if (rerollStep) {
                 flow.stage = 'WAIT_REROLL';
-                return { type: 'NEED_REROLL_CONFIRM', actionDice: newDice, rerollsLeft: stillLeft };
+                return rerollStep;
             }
             return this._continueWithDice(ctx, newDice);
         }
@@ -278,26 +294,15 @@ export const AttackFlowSystem = {
     },
 
     _continueWithDice(ctx, actionDice) {
-        const { hero, enemies } = ctx;
-        const skill = hero.diceSkills[actionDice];
-        const scope = (skill && skill.scope) || 'SINGLE_ENEMY';
-        const aliveEnemies = enemies.filter(e => e.hp > 0);
+        const { scope, aliveEnemies, target, needsTarget } = this._resolveScopeAndTarget(ctx, actionDice);
 
-        // 🟢 新增：SINGLE_ENEMY 情況下，若有敵人正在嘲諷，強制鎖定為目標，跳過選擇UI
-        if (scope === 'SINGLE_ENEMY') {
-            const tauntTarget = CombatSystem.getTauntTarget(aliveEnemies);
-            if (tauntTarget) {
-                return this._executeAction(ctx, actionDice, scope, tauntTarget);
-            }
-            if (aliveEnemies.length > 1) {
-                ctx._flow.stage = 'WAIT_TARGET';
-                ctx._flow.pendingScope = scope;
-                ctx._flow.pendingDice = actionDice;
-                return { type: 'NEED_TARGET', candidates: aliveEnemies };
-            }
+        if (needsTarget) {
+            ctx._flow.stage = 'WAIT_TARGET';
+            ctx._flow.pendingScope = scope;
+            ctx._flow.pendingDice = actionDice;
+            return { type: 'NEED_TARGET', candidates: aliveEnemies };
         }
 
-        const target = aliveEnemies.length > 0 ? aliveEnemies[0] : null;
         return this._executeAction(ctx, actionDice, scope, target);
     },
 
@@ -433,22 +438,7 @@ export const AttackFlowSystem = {
     },
 
     _executePlayerDiceAction(ctx, dice, targetEnemy, savedFlyingState = null) {
-        const { hero } = ctx;
-        const skill = hero.diceSkills[dice];
-        if (!skill) return;
-
-        // 🟢 改進：只對基礎骰（1/3）檢查飛行狀態，技能骰（4/6）能穿過飛行狀態
-        // 且使用保存的飛行狀態（在循環前確定），避免飛行狀態在多次攻擊中間被改變
-        const checkFlyingState = savedFlyingState !== null ? savedFlyingState : (targetEnemy ? targetEnemy.isFlying : false);
-
-        if (targetEnemy && checkFlyingState) {
-            ctx.log(`💨 ${targetEnemy.name} 處於【飛翔】狀態，攻擊骰完全打不中！`, 'player');
-            CombatSystem.tickActionDOT(hero, (m) => ctx.log(m, 'player'));
-            return;
-        }
-
-        skill.execute(hero, targetEnemy, CombatSystem, (m) => ctx.log(m, 'player'), ctx._flow, ctx.enemies);
-        CombatSystem.tickActionDOT(hero, (m) => ctx.log(m, 'player'));
+        this._executePlayerDiceActionCore(ctx, dice, targetEnemy, ctx._flow, savedFlyingState);
     },
 
     _executeEnemyAction(ctx, enemy) {

@@ -12,6 +12,13 @@ const BASE_ENEMY = Object.assign(Object.create(ENEMY_TEMPLATE), {
     od: 0, maxOd: 0,
     isFlying: false, isOD: false, isBreak: false,
 
+    // 🟢 共用：多數敵人暴擊判定規則相同(OD中必定暴擊，否則依critChance機率)，
+    // 個別敵人如有不同規則可自行在自己的物件字面量覆寫
+    rollCrit() {
+        if (this.isOD) return true;
+        return Math.random() < (this.critChance || 0.15);
+    },
+
     executeAction(self, intent, target, combatSys, log, enemies) {
         const cs = combatSys || CombatSystem;
         // 🟢 補上 enemies 參數傳進去
@@ -34,11 +41,6 @@ export const BLACK_DRAGON_DATA = Object.assign(Object.create(BASE_ENEMY), {
     critChance: 0.15,
     pressureUsedThisOD: false,
     speedDiceSides: 10,
-
-    rollCrit() {
-        if (this.isOD) return true; // OD 狂暴下必定暴擊
-        return Math.random() < (this.critChance || 0.15);
-    },
 
     // 🎯 意圖決策 AI：改用標籤描述招式特性
     getIntent(turnCount, speedDice, self) {
@@ -132,11 +134,6 @@ export const ENEMY_DATABASE = {
         maxOd: 3,
         speedDiceSides: 8,
 
-        rollCrit() {
-            if (this.isOD) return true; // OD 狂暴：必定暴擊
-            return Math.random() < (this.critChance || 0.15);
-        },
-
         getIntent(turnCount, speedDice, self) {
             // 1. Break 狀態：僅能執行一般行動
             if (this.isBreak) {
@@ -183,11 +180,6 @@ export const ENEMY_DATABASE = {
         chargeTurns: 0,
         heroicTurns: 0,
 
-        rollCrit() {
-            if (this.isOD) return true;
-            return Math.random() < (this.critChance || 0.15);
-        },
-
         getIntent(turnCount, speedDice, self) {
             // Break 狀態：僅能一般攻擊
             if (this.isBreak) {
@@ -227,11 +219,6 @@ export const ENEMY_DATABASE = {
         maxOd: 5,
         speedDiceSides: 4,
 
-        rollCrit() {
-            if (this.isOD) return true;
-            return Math.random() < (this.critChance || 0.15);
-        },
-
         getIntent(turnCount, speedDice, self) {
             if (this.isBreak) {
                 return { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
@@ -268,11 +255,6 @@ export const ENEMY_DATABASE = {
         maxHp: 30, hp: 30, atk: 2, critBonus: 2, critChance: 0.15,
         ct: 0, maxCt: 2, od: 0, maxOd: 3, speedDiceSides: 6,
 
-        rollCrit() {
-            if (this.isOD) return true;
-            return Math.random() < (this.critChance || 0.15);
-        },
-
         getIntent(turnCount, speedDice, self) {
             if (this.isBreak) {
                 return { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
@@ -298,11 +280,6 @@ export const ENEMY_DATABASE = {
         maxHp: 20, hp: 20, atk: 1, critBonus: 1, critChance: 0.15,
         ct: 0, maxCt: 5, od: 0, maxOd: 3, speedDiceSides: 4,
         pendingDelayedHeal: false,
-
-        rollCrit() {
-            if (this.isOD) return true;
-            return Math.random() < (this.critChance || 0.15);
-        },
 
         getIntent(turnCount, speedDice, self) {
             // 🟢 最優先：上次「範圍治療」預約的延遲治療，輪到自己行動時觸發
@@ -339,11 +316,6 @@ export const ENEMY_DATABASE = {
         maxHp: 10, hp: 10, atk: 5, critBonus: 3, critChance: 0.15,
         ct: 0, maxCt: 2, od: 0, maxOd: 2, speedDiceSides: 8,
         nextDamageBonus: 0,
-
-        rollCrit() {
-            if (this.isOD) return true;
-            return Math.random() < (this.critChance || 0.15);
-        },
 
         getIntent(turnCount, speedDice, self) {
             if (this.isBreak) {
@@ -384,11 +356,6 @@ export const ENEMY_DATABASE = {
         healOnSpecialUse: true,
         lockedBeforeGroundThunder: false,
         pendingLightningRecall: false,
-
-        rollCrit() {
-            if (this.isOD) return true;
-            return Math.random() < (this.critChance || 0.15);
-        },
 
         onPhaseTransition(newPhase, log) {
             const safeLog = typeof log === 'function' ? log : console.log;
@@ -487,7 +454,8 @@ export function createEnemyInstance(enemyId) {
     const instance = Object.assign(Object.create(config), {
         hp: config.maxHp,
         block: 0,
-        armorHits: 0
+        armorHits: 0,
+        activeEffects: []
     });
 
     if (instance.getIntent.length !== 3) {

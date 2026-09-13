@@ -206,39 +206,6 @@ export class MapScene extends Phaser.Scene {
         }
     }
 
-    renderMapUI() {
-        const startY = 500;
-        const floorGapY = 90;
-
-        gameState.mapData.forEach((floorNodes, floorIdx) => {
-            const floorNumber = floorIdx + 1;
-            const y = startY - (floorIdx * floorGapY);
-            const isCurrentFloor = (floorNumber === gameState.currentFloor);
-
-            const totalNodes = floorNodes.length;
-            floorNodes.forEach((node, nodeIdx) => {
-                const x = 400 + (nodeIdx - (totalNodes - 1) / 2) * 160;
-                const typeConfig = NODE_TYPES[node.type] || NODE_TYPES.BATTLE;
-                const isClickable = isCurrentFloor && !node.visited;
-
-                const btnBg = this.add.rectangle(x, y, 130, 50, isClickable ? 0x333355 : 0x111122)
-                    .setStrokeStyle(2, isClickable ? 0x00ffff : 0x555555);
-
-                this.add.text(x, y, typeConfig.name, {
-                    fontSize: '13px',
-                    fill: isClickable ? '#ffffff' : '#888888'
-                }).setOrigin(0.5);
-
-                if (isClickable) {
-                    btnBg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-                        node.visited = true;
-                        this.enterNode(node);
-                    });
-                }
-            });
-        });
-    }
-
     enterNode(node) {
         const typeConfig = NODE_TYPES[node.type];
         if (!typeConfig || typeof typeConfig.onEnter !== 'function') {

@@ -1,41 +1,18 @@
+import { BASE_CHARACTER_FIELDS } from '../characterBaseFields.js';
+
 export const HERO_DATA = {
     id: 'hero',
     name: '勇者',
     description: '均衡型角色，技能組完整涵蓋攻擊、防禦與聖痕流派，適合新手熟悉戰鬥系統。',
+    ...BASE_CHARACTER_FIELDS,
     hp: 20, maxHp: 20,
     atk: 3,
     critBonus: 2,
-    battleCritBonus: 0,
-    battleHealBonus: 0,
     mana: 3, maxMana: 3,
-    healRatio: 1,               
-    speedBonus: 0,     
-    atkCount: 1,       
-    armorMax: 3,       
-    armorHits: 0,      
-    isVulnerable: false,
-    block: 0,          
-    dodgeCount: 0,     
-    doubleNextAction: false,
-    poisonTurns: 0,
-    isPressured: false,
-    stigma: 0,   
-    gold: 50,      
-    cdActiveSkill: 0,  
-    overrideDice: null,
-    battleAtkBonus: 0,
-    deckCapacity: 15,
-    activeEffects: [],
-    lastPlayedCard: null,
-
-    startBlock: 0,                                    // 🟢 補上：開局被動格擋（守護加護、數值收集里程碑會疊加此欄位）
-    goldGainBonus: 0,                                  // 🟢 補上：金幣獲得量加成百分比
-    rewardCounts: { STAT: 0, BLESSING: 0, CARD: 0 },   // 🟢 補上：獎勵選擇次數計數，供收集類里程碑判斷
-    firstCardFreeEachBattle: false,                    // 🟢 補上：卡片類收集x2的里程碑旗標（目前尚未接上實際生效邏輯，Stage 6待補）
-    
-    turnSpeedBonus: 0,
-    freeGoldCardsThisTurn: false,
-    nextStigmaCardDiscount: 0,
+    healRatio: 1,
+    speedBonus: 0,
+    atkCount: 1,
+    armorMax: 3,
 
     // 🟢 新增：scope 標籤，供 BattleScene 判斷是否需要跳出目標選擇 UI
     //   SINGLE_ENEMY -> 需要指定敵方目標（若場上僅剩1隻敵人則自動選定，不用多點一次）
