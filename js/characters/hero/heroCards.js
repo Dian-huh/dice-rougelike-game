@@ -51,7 +51,7 @@ export const HERO_CARD_DEFS = [
 ];
 
 const HERO_CARD_COUNTS = {
-    YS_01: 1, YS_02: 1, YS_03: 1, YS_04: 1, YS_05: 1, YS_06: 1
+    YS_01: 1, YS_02: 1, YS_03: 3, YS_04: 2, YS_05: 1, YS_06: 2
 };
 
 export const HERO_DECK = HERO_CARD_DEFS.flatMap(def =>

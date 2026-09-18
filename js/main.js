@@ -1,3 +1,4 @@
+import { MainMenuScene } from './scenes/MainMenuScene.js';
 import { MapScene } from './scenes/MapScene.js';
 import { BattleScene } from './scenes/BattleScene.js';
 import { DebugSystem } from './systems/DebugSystem.js';
@@ -8,7 +9,7 @@ const config = {
     height: 550,
     backgroundColor: '#111118',
     parent: 'game-container',
-    scene: [MapScene, BattleScene]
+    scene: [MainMenuScene, MapScene, BattleScene]
 };
 
 const game = new Phaser.Game(config);
