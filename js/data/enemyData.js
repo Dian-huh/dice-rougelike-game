@@ -443,16 +443,31 @@ export const ENEMY_DATABASE = {
 
 };
 
-// 🟢 4. 乾淨工廠函式 (保留防呆契約檢查)
-export function createEnemyInstance(enemyId) {
+// 🟢 敵人隨區域進度成長表：index = 已完成區域數 (gameState.regionsCompleted)
+// hpMul：最大HP倍率；dmgMul：敵方造成傷害的倍率（在 CombatSystem.applyDamageToTarget 統一套用）
+// 超過表長度時沿用最後一列，調平衡只需要改這裡的數字
+export const ENEMY_SCALING_BY_TIER = [
+    { hpMul: 1.0, dmgMul: 1.0 },
+    { hpMul: 2.5, dmgMul: 1.5 },
+    { hpMul: 4.0, dmgMul: 2.0 }
+];
+
+export function createEnemyInstance(enemyId, scaleTier = 0) {
     const config = ENEMY_DATABASE[enemyId];
     if (!config) {
         console.error(`⚠️ 找不到敵人配置 ID: ${enemyId}`);
         return null;
     }
 
+    const tier = Math.max(0, Math.min(scaleTier, ENEMY_SCALING_BY_TIER.length - 1));
+    const scaling = ENEMY_SCALING_BY_TIER[tier];
+    const scaledMaxHp = Math.max(1, Math.round(config.maxHp * scaling.hpMul));
+
     const instance = Object.assign(Object.create(config), {
-        hp: config.maxHp,
+        maxHp: scaledMaxHp,
+        hp: scaledMaxHp,
+        dmgMul: scaling.dmgMul,
+        scaleTier: tier,   // 供召喚等「中途生成敵人」的邏輯繼承同一等級
         block: 0,
         armorHits: 0,
         activeEffects: []

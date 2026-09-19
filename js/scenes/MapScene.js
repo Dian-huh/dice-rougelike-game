@@ -3,12 +3,17 @@ import { gameState } from '../data/gameState.js';
 import { EVENT_DATABASE } from '../data/eventData.js';
 import { getAllCharacterIds, getCharacterData } from '../characters/characterRegistry.js';   // 🟢 這行要存在
 import { getRegionData } from '../data/regionRegistry.js';
+import { PauseMenu } from '../systems/PauseMenu.js';
+import { TutorialSystem } from '../systems/TutorialSystem.js';
+
 export class MapScene extends Phaser.Scene {
     constructor() { 
         super({ key: 'MapScene' }); 
     }
 
     create() {
+        this._pauseBtn = null;
+        this._pauseMenuContainer = null;
         if (!gameState.mapData) {
             const loaded = gameState.tryLoadSave();
             if (!loaded) {
@@ -73,6 +78,11 @@ export class MapScene extends Phaser.Scene {
     // 🟢 階段5新增：區域制主流程入口
     // ============================================================
     enterRegionFlow() {
+        if (!this._pauseBtn) {
+            this._pauseBtn = this.add.text(720, 10, '[ ⏸ 選單 ]', {
+                fontSize: '15px', fill: '#00ffff', backgroundColor: '#222'
+            }).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openPauseMenu());
+        }
         if (gameState.currentRegionGraph) {
             this.renderRegionMapUI();
             return;
@@ -204,6 +214,24 @@ export class MapScene extends Phaser.Scene {
         } else {
             this.renderRegionMapUI();
         }
+    }
+
+    // 🟢 開啟暫停選單
+    openPauseMenu() {
+        if (PauseMenu.isOpen(this)) { PauseMenu.close(this); return; }
+        PauseMenu.open(this, [
+            { label: '[ 📖 教學 ]', onClick: () => TutorialSystem.showTutorialUI(this, () => {}) },
+            { label: '[ 🏠 回主選單 ]', color: '#ffcc66', onClick: () => this._leaveToMainMenu(false) },  // 地圖上已自動存檔，不用確認
+            { label: '[ 🗑️ 放棄本輪 ]', color: '#ff6666',
+              confirm: '放棄本輪會刪除存檔並結束這次冒險，確定嗎？',
+              onClick: () => this._leaveToMainMenu(true) }
+        ]);
+    }
+
+    _leaveToMainMenu(resetRun) {
+        if (resetRun) gameState.resetToCharacterSelect();
+        else gameState.unloadRun();
+        this.scene.start('MainMenuScene');
     }
 
     enterNode(node) {

@@ -2,8 +2,6 @@
 import { CombatSystem } from './CombatSystem.js';
 import { EffectEngine } from './EffectEngine.js';
 
-const ATTACK_DICE_IDS = [1, 3, 4, 6];
-
 export const AttackFlowSystem = {
     begin(ctx) {
         const totalTimes = ctx.hero.atkCount;
@@ -32,6 +30,7 @@ export const AttackFlowSystem = {
 
         if (enemies.every(e => e.hp <= 0) || hero.hp <= 0 || flow.timesRemaining <= 0) {
             this._flushPendingOrderedActions(ctx);
+            CombatSystem.closeFirstStrikeWindow(hero);   // 🟢 保險：整段流程結束後補行動的敵人若觸發反擊，不讓視窗殘留到下一次行動
             ctx._flow = null;
             return { type: 'DONE' };
         }
@@ -213,17 +212,6 @@ export const AttackFlowSystem = {
         const { hero, enemies } = ctx;
         const repeatCount = CombatSystem.getRepeatCount(hero);
 
-        let firstStrikeBonus = 0;
-        if (scope !== 'SELF' && !ctx.firstAttackTriggeredThisBattle && ATTACK_DICE_IDS.includes(actionDice)) {
-            const bonusCtx = { log: ctx.log, bonusTotal: 0 };
-            EffectEngine.runHook('onFirstAttack', hero, bonusCtx);
-            if (bonusCtx.bonusTotal > 0) {
-                firstStrikeBonus = bonusCtx.bonusTotal;
-                hero.battleAtkBonus = (hero.battleAtkBonus || 0) + firstStrikeBonus;
-                ctx.firstAttackTriggeredThisBattle = true;
-            }
-        }
-
         if (scope === 'SELF') {
             for (let r = 0; r < repeatCount; r++) {
                 if (hero.hp <= 0) break;
@@ -246,7 +234,7 @@ export const AttackFlowSystem = {
             }
         }
 
-        if (firstStrikeBonus > 0) hero.battleAtkBonus -= firstStrikeBonus;
+        CombatSystem.closeFirstStrikeWindow(hero);
 
         if (ctx._solo.pendingReattacks > 0) {
             ctx._solo.pendingReattacks -= 1;
@@ -320,17 +308,6 @@ export const AttackFlowSystem = {
             ctx.log(`⚡ 連打算計生效：[${actionDice}點] 連發 2 次！`, 'player');
         }
 
-        let firstStrikeBonus = 0;
-        if (scope !== 'SELF' && !ctx.firstAttackTriggeredThisBattle && ATTACK_DICE_IDS.includes(actionDice)) {
-            const bonusCtx = { log: ctx.log, bonusTotal: 0 };
-            EffectEngine.runHook('onFirstAttack', hero, bonusCtx);
-            if (bonusCtx.bonusTotal > 0) {
-                firstStrikeBonus = bonusCtx.bonusTotal;
-                hero.battleAtkBonus = (hero.battleAtkBonus || 0) + firstStrikeBonus;
-                ctx.firstAttackTriggeredThisBattle = true;
-            }
-        }
-
         if (scope === 'SELF') {
             for (let r = 0; r < repeatCount; r++) {
                 if (hero.hp <= 0) break;
@@ -352,9 +329,7 @@ export const AttackFlowSystem = {
             });
         }
 
-        if (firstStrikeBonus > 0) {
-            hero.battleAtkBonus -= firstStrikeBonus;
-        }
+        CombatSystem.closeFirstStrikeWindow(hero);
 
         return this._finishActionSegment(ctx);
     },

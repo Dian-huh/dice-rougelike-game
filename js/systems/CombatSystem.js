@@ -255,7 +255,7 @@ export class CombatSystem {
             if (enemies && Array.isArray(enemies)) {
                 const aliveCount = enemies.filter(e => e.hp > 0).length;
                 if (aliveCount < 4) {
-                    const newGoblin = createEnemyInstance('goblin');
+                    const newGoblin = createEnemyInstance('goblin', attacker.scaleTier || 0);
                     if (newGoblin) {
                         enemies.push(newGoblin);
                         safeLog(`👺 新的哥布林加入了戰場！(當前存活數量: ${aliveCount + 1}/4)`);
@@ -311,8 +311,9 @@ export class CombatSystem {
 
             // 真實傷害：無視閃避與格擋 (如：制裁)
             if (intent.trueDamage || intent.unblockable) {
-                target.hp = Math.max(0, target.hp - baseDmg);
-                safeLog(`⚡ ${attacker.name} 使用【${intent.desc}】，造成 ${baseDmg} 點無視防禦與閃避的真實傷害！`);
+                const trueDmg = Math.round(baseDmg * (attacker.dmgMul || 1));   // 🟢 真實傷害不經過 applyDamageToTarget，這裡單獨套倍率
+                target.hp = Math.max(0, target.hp - trueDmg);
+                safeLog(`⚡ ${attacker.name} 使用【${intent.desc}】，造成 ${trueDmg} 點無視防禦與閃避的真實傷害！`);
             } else {
                 // 一般結算 (經由 applyDamageToTarget)
                 this.applyDamageToTarget(target, baseDmg, safeLog, enemies, attacker);   // 🟢 傳遞 attacker 以支持 onGetHit hook
@@ -416,9 +417,35 @@ export class CombatSystem {
         entity.heroicTurns = turns;
     }
 
+        // 🟢 先發制人(onFirstAttack)：整場只觸發一次；觸發後開啟「行動視窗」，
+    // 同一次行動內，每隻敵人各自的第一擊都吃加成，行動結束後由呼叫端關閉視窗
+    static _applyFirstStrikeBonus(target, rawDmg, logCallback) {
+        const hero = this._activeHero;
+        if (!hero || target === hero || !(rawDmg > 0)) return rawDmg;
+
+        const windowSet = hero._firstStrikeWindow;
+        if (windowSet ? windowSet.has(target) : hero.firstStrikeUsed) return rawDmg;
+
+        const bonusCtx = { log: logCallback || (() => {}), bonusTotal: 0 };
+        EffectEngine.runHook('onFirstAttack', hero, bonusCtx);
+        if (bonusCtx.bonusTotal <= 0) return rawDmg;   // 沒有先發制人效果時不消耗資格
+
+        hero.firstStrikeUsed = true;
+        if (!hero._firstStrikeWindow) hero._firstStrikeWindow = new Set();
+        hero._firstStrikeWindow.add(target);
+        return rawDmg + bonusCtx.bonusTotal;
+    }
+
+    static closeFirstStrikeWindow(hero) {
+        if (hero) hero._firstStrikeWindow = null;
+    }
 
     static applyDamageToTarget(target, rawDmg, logCallback, enemies, attacker = null) {   // 🟢 Stage 5-6：新增 enemies / attacker 參數
-        // 1. 🌀 閃避判定
+        // 🟢 敵人隨區域成長：只有「帶 dmgMul 的攻擊者」造成的傷害會被放大，
+        // 放在格擋/閃避之前，防禦仍照常吸收，log 顯示的也是放大後的數字
+        if (attacker && attacker.dmgMul > 1) {
+            rawDmg = Math.round(rawDmg * attacker.dmgMul);
+        }
         // 1. 🌀 閃避判定
         if (target.dodgeCount && target.dodgeCount > 0) {
             target.dodgeCount -= 1;
@@ -430,6 +457,9 @@ export class CombatSystem {
             EffectEngine.runHook('onDodgeSuccess', target, { enemies, log: logCallback, combatSys: this });
             return;
         }
+
+        // 🟢 先發制人：閃避掉的攻擊不消耗資格；加成在格擋之前，會被格擋照常吸收
+        rawDmg = this._applyFirstStrikeBonus(target, rawDmg, logCallback);
 
         // 🟢 新增：受擊 hook —— 不論後續格擋/傷害計算結果，只要沒被閃避就觸發（反擊層數用）
         const hookCtx = { enemies, log: logCallback, combatSys: this };
@@ -559,6 +589,20 @@ export class CombatSystem {
         logCallback(`🩸⚡ ${attacker.name} 汲取流血與電擊之力，回復 ${healAmount} 點HP！`);
     }
 
+        // 🟢 意圖預告用：把 desc 內「N 點(真實/普攻)傷害」的數字換算成套用 dmgMul 後的實際數字
+    // 只改顯示，不動 intent 本身；沒有 dmgMul 時原樣回傳。
+    // 多段攻擊(「3 次 1 點傷害」)換算的是每一擊的數字，與實際結算方式一致
+    static getIntentDisplayDesc(enemy) {
+        const intent = enemy.currentIntent;
+        if (!intent || !intent.desc) return '無';
+        const mul = enemy.dmgMul || 1;
+        if (mul <= 1) return intent.desc;
+        return intent.desc.replace(
+            /(\d+)(\s*點(?:真實|普攻)?傷害)/g,
+            (m, n, tail) => `${Math.round(Number(n) * mul)}${tail}`
+        );
+    }
+
     // 🟢 中途被打進Break時，作廢原本鎖定的非一般意圖，改成當下的一般行動
     // Break分支邏輯不依賴 turnCount/speedDice，帶入安全值 0 即可正確走到 generalPool
     static resolveEnemyIntent(enemy, force = false) {
@@ -638,6 +682,9 @@ export class CombatSystem {
         hero.overrideDice = null;
         hero.lastPlayedCard = null;
         hero.cdActiveSkill = 0;   // 🟢 確認：主動技能冷卻為單場戰鬥性質，新戰鬥開局即可使用
+
+        hero.firstStrikeUsed = false;
+        hero._firstStrikeWindow = null;
 
         // 🟢 併入：DICE 計數器 used 歸零（原本獨立寫在 BattleScene.create()，統一到這裡管理，
         // 避免「單場戰鬥該清空什麼」分散在兩個地方查詢）

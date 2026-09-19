@@ -110,6 +110,8 @@ export class CardPlaySystem {
             card.onPlay(hero, target, CombatSystem, deckSys, (m) => appendLogFn(m, 'player'), scene);
         }
 
+        CombatSystem.closeFirstStrikeWindow(hero);   // 🟢 這次出牌結束，關閉先發制人視窗
+
         // 记录最后使用的卡牌（某些效果可能需要）
         hero.lastPlayedCard = card;
     }

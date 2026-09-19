@@ -58,7 +58,7 @@ export const DebugSystem = {
 
         const enemies = enemyIds
             .map(id => {
-                const inst = createEnemyInstance(id);
+                const inst = createEnemyInstance(id, opts.scaleTier || 0);
                 if (!inst) console.warn(`⚠️ 找不到敵人 id=${id}，已略過`);
                 return inst;
             })

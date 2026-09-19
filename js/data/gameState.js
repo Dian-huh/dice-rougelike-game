@@ -50,9 +50,10 @@ export const gameState = {
         console.log(`🎮 全域存檔初始化成功！(角色: ${characterId})`);
     },
 
-    // 🟢 新增：清空當前狀態，回到「尚未選角」狀態，交給 MapScene 顯示選角UI
-    // 用途：重新開始遊戲（死亡/通關後），跟第一次進遊戲走同一套選角流程
-    resetToCharacterSelect() {
+        // 🟢 離開本輪回主選單：只清記憶體中的 run 狀態，不動存檔。
+    // 之後按「繼續」時 MapScene 會因 mapData 為 null 而重新 tryLoadSave()，
+    // 避免把戰鬥中已被修改的 hero 當成存檔內容
+    unloadRun() {
         this.hero = null;
         this.deckSys = null;
         this.mapData = null;
@@ -63,6 +64,10 @@ export const gameState = {
         this.currentNodeId = null;
         this.currentRegionIsFinal = false;
         this.pendingRegionChoices = null;
+    },
+
+    resetToCharacterSelect() {
+        this.unloadRun();
         SaveSystem.clearSave();
     },
 

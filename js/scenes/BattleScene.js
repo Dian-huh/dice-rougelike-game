@@ -8,6 +8,7 @@ import { AttackFlowSystem } from '../systems/AttackFlowSystem.js';
 import { CardPlaySystem } from '../systems/CardPlaySystem.js';
 import { UIInteractionSystem } from '../systems/UIInteractionSystem.js';
 import { BattleFlowSystem } from '../systems/BattleFlowSystem.js';
+import { PauseMenu } from '../systems/PauseMenu.js';
 
 export class BattleScene extends Phaser.Scene {
     constructor() { 
@@ -35,7 +36,6 @@ export class BattleScene extends Phaser.Scene {
             enemies: this.enemies,
             playerSpeedDice: 0,
             lastActionDice: null,
-            firstAttackTriggeredThisBattle: false,
             log: (m, sender, rightMsg) => this.appendLog(m, sender, rightMsg)
         };
         
@@ -72,11 +72,9 @@ export class BattleScene extends Phaser.Scene {
             }
         );
 
-        // 🟢 新增：常駐「查看教學」按鈕，玩家隨時可重看，不受 localStorage 旗標影響
-        this.tutorialBtn = this.createButton(700, 5, '📖 教學', () => this.openTutorial());
-        this.blessingBtn = this.createButton(700, 40, '🔱 查看加護', () => this.toggleBlessingPanel());
+        this._pauseMenuContainer = null;   // Scene 實例會被重複使用，進場時要重置
+        this.pauseBtn = this.createButton(700, 5, '⏸ 選單', () => this.openPauseMenu());
         this.blessingPanelContainer = null;
-        this.deckBtn = this.createButton(700, 75, '🎴 查看牌組', () => this.toggleDeckPanel());
         this.deckPanelContainer = null;
 
 
@@ -92,6 +90,33 @@ export class BattleScene extends Phaser.Scene {
             this.showChatLogUI();
             this.startNewTurn();
         }
+    }
+
+    openPauseMenu() {
+        if (PauseMenu.isOpen(this)) { PauseMenu.close(this); return; }
+        if (this.isPickingTarget || this.rerollPromptContainer) return;
+
+        PauseMenu.open(this, [
+            { label: '[ 📖 教學 ]', onClick: () => this.openTutorial() },
+            { label: '[ 🔱 查看加護 ]', onClick: () => this.toggleBlessingPanel() },
+            { label: '[ 🎴 查看牌組 ]', onClick: () => this.toggleDeckPanel() },
+            { label: '[ 🏠 回主選單 ]', color: '#ffcc66',
+              confirm: '確定要回到主選單嗎？\n目前戰鬥進度不會保留，之後按「繼續」會回到進入此節點前的狀態。',
+              onClick: () => this._leaveToMainMenu(false) },
+            { label: '[ 🗑️ 放棄本輪 ]', color: '#ff6666',
+              confirm: '放棄本輪會刪除存檔並結束這次冒險，確定嗎？',
+              onClick: () => this._leaveToMainMenu(true) }
+        ]);
+    }
+
+    // resetRun=true：放棄本輪（清存檔）；false：只離開，保留存檔供「繼續」使用
+    _leaveToMainMenu(resetRun) {
+        this.closeDeckPanel();
+        this.removeChatLogUI();
+        if (resetRun) gameState.resetToCharacterSelect();
+        else gameState.unloadRun();
+        this.scene.start('MainMenuScene');
+        this.scene.stop('BattleScene');
     }
 
     // 🟢 新增：手動重看教學（按鈕觸發），純粹展示，不影響戰鬥流程與回合狀態
@@ -447,7 +472,7 @@ export class BattleScene extends Phaser.Scene {
             const text = this.add.text(0, 0,
                 `[ 😈 ${enemy.name} #${idx + 1} ] (${status})\n` +
                 `  格擋: ${enemy.block || 0} | 攻: ${enemy.atk} | ${extraStatusLine}\n` +
-                `  速度: [ ${enemy.speedDice || 0} ] | 預告意圖: ${enemy.currentIntent ? enemy.currentIntent.desc : '無'}`,
+                `  速度: [ ${enemy.speedDice || 0} ] | 預告意圖: ${CombatSystem.getIntentDisplayDesc(enemy)}`,
                 { fontSize: '14px', fill: '#ff5555', lineSpacing: 4 }
             );
 
@@ -645,6 +670,7 @@ export class BattleScene extends Phaser.Scene {
 
     // 🟢 死亡結算畫面
     showGameOverUI() {
+        if (this.pauseBtn) this.pauseBtn.destroy();
         // 摧毀底下仍可互動的元素，避免玩家對著覆蓋層背後繼續操作
         if (this.handContainer) this.handContainer.destroy();
         if (this.actionBtn) this.actionBtn.destroy();
@@ -664,6 +690,7 @@ export class BattleScene extends Phaser.Scene {
 
     // 🟢 全破結算畫面（僅在打贏最終樓層 Boss 時觸發）
     showVictoryUI() {
+        if (this.pauseBtn) this.pauseBtn.destroy();
         this.add.rectangle(425, 275, 850, 550, 0x000000, 0.92).setDepth(3000);
         this.add.text(425, 200, '🏆 恭喜通關！', { fontSize: '32px', fill: '#ffcc00' }).setOrigin(0.5).setDepth(3001);
         this.add.text(425, 250, `你成功擊敗了滅世黑龍，拯救了世界！`, { fontSize: '16px', fill: '#cccccc' }).setOrigin(0.5).setDepth(3001);

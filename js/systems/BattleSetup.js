@@ -55,7 +55,9 @@ export class BattleSetup {
         const queryCtx = { nodeType, limitedToOne: false };
         EffectEngine.runHook('onStageQuery', hero, queryCtx);
 
-        const stageInfo = getStageData(node, { regionId, isFinalOfRun, limitedToOne: queryCtx.limitedToOne });
+                // 🟢 敵人成長等級：區域制下依已完成區域數；無區域上下文（舊系統/debug）維持 0
+        const scaleTier = regionId ? (gameState.regionsCompleted || 0) : 0;
+        const stageInfo = getStageData(node, { regionId, isFinalOfRun, limitedToOne: queryCtx.limitedToOne, scaleTier });
         const currentStage = stageInfo || { name: '冒險關卡', enemies: [] };
         const enemies = currentStage.enemies || [];
 

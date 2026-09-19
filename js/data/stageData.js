@@ -37,6 +37,7 @@ export function getStageData(node, options = {}) {
     const nodeType = (node && node.type) ? node.type : 'BATTLE';
     const difficulty = (node && node.difficulty) ? node.difficulty : 1;
     const limitedToOne = !!options.limitedToOne;
+    const scaleTier = options.scaleTier || 0;
     const regionDef = options.regionId ? getRegionData(options.regionId) : null;
 
     let enemyIds = [];
@@ -64,7 +65,7 @@ export function getStageData(node, options = {}) {
     }
 
     const enemies = enemyIds
-        .map(id => createEnemyInstance(id))
+        .map(id => createEnemyInstance(id, scaleTier))
         .filter(e => e !== null && e !== undefined);
 
     if (enemies.length === 0) {
