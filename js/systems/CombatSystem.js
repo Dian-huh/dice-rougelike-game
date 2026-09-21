@@ -158,11 +158,12 @@ export class CombatSystem {
             return;
         }
 
-        // 🟢 境界衛士：祈求加護（回復14，過量治療轉格擋，1:1比例）
+        // 🟢 境界衛士：祈求加護（回復15%最大生命，過量治療轉格擋，1:1比例）
         if (intent.type === 'SPECIAL' && intent.id === 'PRAYER_BLESSING') {
             const before = attacker.hp;
-            const healed = Math.min(attacker.maxHp - before, 14);
-            const overflow = 14 - healed;
+            const healAmount = Math.floor(attacker.maxHp * 0.15);
+            const healed = Math.min(attacker.maxHp - before, healAmount);
+            const overflow = healAmount - healed;
             attacker.hp += healed;
             safeLog(`🙏 ${attacker.name} 發動【祈求加護】，回復 ${healed} 點HP！`);
             if (overflow > 0) {

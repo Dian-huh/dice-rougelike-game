@@ -483,7 +483,7 @@ const BASE_REWARD_CARDS = [
             let effectiveTarget = enemy;
             if (!effectiveTarget && source.scope === 'SINGLE_ENEMY') {
                 const aliveEnemies = scene.enemies.filter(e => e.hp > 0);
-                const tauntTarget = CombatSystem.getTauntTarget(aliveEnemies);
+                const tauntTarget = combatSys.getTauntTarget(aliveEnemies);
                 effectiveTarget = tauntTarget || aliveEnemies[0] || null;
             }
 

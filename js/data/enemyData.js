@@ -31,7 +31,7 @@ export const BLACK_DRAGON_DATA = Object.assign(Object.create(BASE_ENEMY), {
     id: 'black_dragon',
     name: '🐉 滅世黑龍',
     maxHp: 100,
-    hp: 100,
+    hp: 120,
     atk: 5,
     ct: 0,
     maxCt: 3,
@@ -402,7 +402,7 @@ export const ENEMY_DATABASE = {
                 }
                 const generalPool = [
                     { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
-                    { id: 'PRAYER_BLESSING', type: 'SPECIAL', desc: '🙏 祈求加護 (回復14，過量轉格擋)' },
+                    { id: 'PRAYER_BLESSING', type: 'SPECIAL', desc: '🙏 祈求加護 (回復15%最大生命，過量轉格擋)' },
                     { id: 'THRUST', type: 'ATTACK', value: 4, canCrit: true, statusEffect: { type: 'bleed', stacks: 2 }, desc: '🗡️ 突刺 (造成4點傷害並給予流血2)' },
                     { id: 'SWEEP', type: 'ATTACK', value: 4, canCrit: true, desc: '💫 橫掃 (造成4點傷害)' }
                 ];
@@ -411,7 +411,7 @@ export const ENEMY_DATABASE = {
 
             const generalPool = [
                 { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
-                { id: 'PRAYER_BLESSING', type: 'SPECIAL', desc: '🙏 祈求加護 (回復14，過量轉格擋)' },
+                { id: 'PRAYER_BLESSING', type: 'SPECIAL', desc: '🙏 祈求加護 (回復15%最大生命，過量轉格擋)' },
                 { id: 'THRUST', type: 'ATTACK', value: 4, canCrit: true, statusEffect: { type: 'bleed', stacks: 2 }, desc: '🗡️ 突刺 (造成4點傷害並給予流血2)' },
                 { id: 'SWEEP', type: 'ATTACK', value: 4, canCrit: true, desc: '💫 橫掃 (造成4點傷害)' }
             ];
@@ -448,8 +448,8 @@ export const ENEMY_DATABASE = {
 // 超過表長度時沿用最後一列，調平衡只需要改這裡的數字
 export const ENEMY_SCALING_BY_TIER = [
     { hpMul: 1.0, dmgMul: 1.0 },
-    { hpMul: 2.5, dmgMul: 1.5 },
-    { hpMul: 4.0, dmgMul: 2.0 }
+    { hpMul: 3.0, dmgMul: 2.0 },
+    { hpMul: 5.0, dmgMul: 3.0 }
 ];
 
 export function createEnemyInstance(enemyId, scaleTier = 0) {

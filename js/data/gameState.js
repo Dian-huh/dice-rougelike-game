@@ -20,6 +20,7 @@ export const gameState = {
     currentNodeId: null,        // null = 尚未踏入，站在區域入口
     currentRegionIsFinal: false,// 本次所在區域是否為本輪壓軸（決定最終層出 regionBoss 還是 eliteEnemy）
     pendingRegionChoices: null, // 區域選擇畫面用的候選清單
+    seenEventIds: [],           // 本輪遇過的事件 id（供日後連貫事件的 condition 使用）
 
     // 🟢 新增 characterId 參數，預設 'hero' 保持向下相容（現有呼叫端不用馬上全部改）
     initNewGame(characterId) {
@@ -46,6 +47,7 @@ export const gameState = {
         this.currentNodeId = null;
         this.currentRegionIsFinal = false;
         this.pendingRegionChoices = null;
+        this.seenEventIds = [];
         SaveSystem.clearSave();
         console.log(`🎮 全域存檔初始化成功！(角色: ${characterId})`);
     },
@@ -64,6 +66,7 @@ export const gameState = {
         this.currentNodeId = null;
         this.currentRegionIsFinal = false;
         this.pendingRegionChoices = null;
+        this.seenEventIds = [];
     },
 
     resetToCharacterSelect() {
@@ -97,7 +100,7 @@ export const gameState = {
         this.currentNodeId = saved.currentNodeId;
         this.currentRegionIsFinal = saved.currentRegionIsFinal;
         this.pendingRegionChoices = null;   // 🟢 候選清單不存檔，讀檔時一律視為「尚未產生候選」
-
+        this.seenEventIds = saved.seenEventIds || [];
         console.log(`💾 存檔讀取成功！(角色: ${characterId})`);
         return true;
     },
@@ -194,6 +197,15 @@ export const gameState = {
         const choices = this.generateRegionChoices();
         SaveSystem.save(this);
         return { runComplete: false, choices };
+    },
+
+    recordSeenEvent(eventId) {
+        if (!eventId || this.seenEventIds.includes(eventId)) return;
+        this.seenEventIds.push(eventId);
+    },
+
+    hasSeenEvent(eventId) {
+        return this.seenEventIds.includes(eventId);
     },
 
     nextFloor() {

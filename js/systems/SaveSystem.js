@@ -39,7 +39,8 @@ export const SaveSystem = {
                 currentRegionId: gameState.currentRegionId,
                 currentRegionGraph: gameState.currentRegionGraph,
                 currentNodeId: gameState.currentNodeId,
-                currentRegionIsFinal: gameState.currentRegionIsFinal
+                currentRegionIsFinal: gameState.currentRegionIsFinal,
+                seenEventIds: gameState.seenEventIds
             };
 
             localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
@@ -87,7 +88,8 @@ export const SaveSystem = {
             currentRegionId: payload.currentRegionId || null,
             currentRegionGraph: payload.currentRegionGraph || null,
             currentNodeId: payload.currentNodeId || null,
-            currentRegionIsFinal: payload.currentRegionIsFinal || false
+            currentRegionIsFinal: payload.currentRegionIsFinal || false,
+            seenEventIds: Array.isArray(payload.seenEventIds) ? payload.seenEventIds : []
         };
     },
 

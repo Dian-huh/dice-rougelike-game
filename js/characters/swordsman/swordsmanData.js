@@ -218,7 +218,7 @@ export const SWORDSMAN_DATA = {
                 if (hero.stance === 'SHEATHED') {
                     // 蝴蝶刃・屠龍：劍意+1，造成單體(爆擊+劍意數)傷害，切換拔刀，獲得慧眼，再攻擊
                     addSwordIntent(hero, 1);
-                    const dmg = combatSys.getEffectiveCritBonus(hero) + (hero.turnCritBonus || 0) + (hero.swordIntent || 0) + insightBonus;
+                    const dmg = combatSys.getEffectiveCritBonus(hero) + (hero.swordIntent || 0) + insightBonus;
                     log(`💥 觸發 [技能3:蝴蝶刃・屠龍] 造成 ${dmg} 點傷害`);
                     combatSys.applyDamageToTarget(enemy, dmg, log);
                     hero.stance = 'DRAWN';

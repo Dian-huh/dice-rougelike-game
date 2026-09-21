@@ -116,6 +116,58 @@ export class UIInteractionSystem {
         };
     }
 
+        /**
+     * 通用「從牌組選一張」選卡器
+     * deck：要顯示的卡片陣列；onPick(idx, card)：選定；onCancel()：按取消
+     * 版面每列 6 張，約 30 張以內不會超出畫面
+     */
+    static createDeckPickerSession(scene, deck, title, onPick, onCancel, cancelLabel = '[ 🚫 取消 ]') {
+        return {
+            container: null,
+
+            show() {
+                this.destroy();
+                const container = scene.add.container(0, 0).setDepth(2200);
+                this.container = container;
+
+                const overlay = scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.94).setInteractive();
+                const titleText = scene.add.text(425, 30, title, {
+                    fontSize: '14px', fill: '#ffcc00', align: 'center', wordWrap: { width: 760 }
+                }).setOrigin(0.5);
+                container.add([overlay, titleText]);
+
+                const perRow = 6;
+                deck.forEach((card, idx) => {
+                    const col = idx % perRow, row = Math.floor(idx / perRow);
+                    const x = 85 + col * 136, y = 100 + row * 82;
+
+                    const bg = scene.add.rectangle(x, y, 124, 70, 0x222233)
+                        .setStrokeStyle(2, 0x00ffff)
+                        .setInteractive({ useHandCursor: true });
+                    const nameText = scene.add.text(x - 57, y - 30, card.name, {
+                        fontSize: '12px', fill: '#fff', wordWrap: { width: 114 }
+                    });
+                    const descText = scene.add.text(x - 57, y - 10, card.desc || '', {
+                        fontSize: '9px', fill: '#aaaaaa', wordWrap: { width: 114, useAdvancedWrap: true }
+                    });
+
+                    bg.on('pointerdown', () => { this.destroy(); onPick(idx, card); });
+                    container.add([bg, nameText, descText]);
+                });
+
+                const cancelBtn = scene.add.text(425, 510, cancelLabel, {
+                    fontSize: '13px', fill: '#ff6666', backgroundColor: '#222', padding: { x: 10, y: 5 }
+                }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+                  .on('pointerdown', () => { this.destroy(); if (onCancel) onCancel(); });
+                container.add(cancelBtn);
+            },
+
+            destroy() {
+                if (this.container) { this.container.destroy(); this.container = null; }
+            }
+        };
+    }
+
     /**
      * 🟢 階段4新增：法典專用的棄牌選擇會話
      * 點一張立刻棄置，達 minCount 後可按「完成」，達 maxCount 自動結束

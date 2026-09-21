@@ -246,9 +246,25 @@ export class MapScene extends Phaser.Scene {
     // ============================================================
     // 🟢 EVENT 節點：從 EVENT_DATABASE 隨機抽一個事件，跳出選項 UI
     // ============================================================
+        // 依 condition 過濾可用事件；全部被過濾掉時退回完整清單，避免抽不到事件
+    // 除錯：在 console 設定 DEBUG.forceEventId = 'fallen_monk' 可強制指定事件
+    pickEvent() {
+        const forcedId = window.DEBUG && window.DEBUG.forceEventId;
+        if (forcedId) {
+            const forced = EVENT_DATABASE.find(e => e.id === forcedId);
+            if (forced) return forced;
+        }
+        const available = EVENT_DATABASE.filter(e =>
+            typeof e.condition !== 'function' || e.condition(gameState.hero, gameState)
+        );
+        return Phaser.Utils.Array.GetRandom(available.length > 0 ? available : EVENT_DATABASE);
+    }
+
     showEventUI(node) {
         this._pendingEventNode = node;
-        const eventDef = Phaser.Utils.Array.GetRandom(EVENT_DATABASE);
+        const eventDef = this.pickEvent();
+        gameState.recordSeenEvent(eventDef.id);   // 🟢 記錄遇過的事件，供日後連貫事件使用
+        const ctx = { scene: this, gameState, deckSys: gameState.deckSys };
 
         const container = this.add.container(0, 0).setDepth(2000);
         const overlay = this.add.rectangle(425, 275, 850, 550, 0x000000, 0.92);
@@ -271,8 +287,13 @@ export class MapScene extends Phaser.Scene {
                   // 選完之後所有選項按鈕失效，避免連點觸發多次效果
                   optionTexts.forEach(t => { t.disableInteractive(); });
 
-                  const resultMsg = option.action(gameState.hero, () => {});
-                  this.showEventResult(container, resultMsg);
+                  // action 可回傳字串或 Promise（需要玩家額外操作的事件，例如選卡）
+                  Promise.resolve(option.action(gameState.hero, () => {}, ctx))
+                      .then(resultMsg => this.showEventResult(container, resultMsg))
+                      .catch(err => {
+                          console.error(`⚠️ 事件 [${eventDef.id}] 執行錯誤：`, err);
+                          this.showEventResult(container, '事件發生了意外，你繼續前進。');
+                      });
               });
 
             container.add(btn);
