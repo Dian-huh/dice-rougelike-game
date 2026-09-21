@@ -151,7 +151,7 @@ export const gameState = {
 
         this.currentRegionIsFinal = this.isFinalRegionSelection();   // 🟢 鎖存判定結果，供 Step6 stageData banking 查詢
         this.currentRegionId = regionId;
-        this.currentRegionGraph = generateRegionGraph(regionDef);
+        this.currentRegionGraph = generateRegionGraph(regionDef, { isFinalOfRun: this.currentRegionIsFinal });
         this.currentNodeId = null;
         this.pendingRegionChoices = null;
 

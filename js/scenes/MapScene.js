@@ -185,7 +185,7 @@ export class MapScene extends Phaser.Scene {
                 const btnBg = this.add.rectangle(x, y, 130, 50, isClickable ? 0x333355 : 0x111122)
                     .setStrokeStyle(2, isClickable ? 0x00ffff : 0x555555);
 
-                const label = this.add.text(x, y, typeConfig.name, {
+                const label = this.add.text(x, y, node.label || typeConfig.name, {
                     fontSize: '13px',
                     fill: isClickable ? '#ffffff' : '#888888'
                 }).setOrigin(0.5);

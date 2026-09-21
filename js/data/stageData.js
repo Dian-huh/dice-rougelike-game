@@ -43,7 +43,12 @@ export function getStageData(node, options = {}) {
     let enemyIds = [];
     let stageName = '';
 
-    if (nodeType === 'BATTLE_FINAL' && regionDef) {
+    const isForcedNode = !!(node && Array.isArray(node.forceEnemies) && node.forceEnemies.length > 0);
+
+    if (isForcedNode) {
+        enemyIds = node.forceEnemies;
+        stageName = `${regionDef ? regionDef.name + ' - ' : ''}${node.label || '特殊戰鬥'}`;
+    } else if (nodeType === 'BATTLE_FINAL' && regionDef) {
         if (options.isFinalOfRun) {
             enemyIds = [regionDef.regionBoss];
             stageName = `👑 ${regionDef.name} - 壓軸首領戰`;
@@ -72,7 +77,7 @@ export function getStageData(node, options = {}) {
         console.error(`⚠️ 關卡 (node=${node ? node.id : '?'}, type=${nodeType}) 找不到對應敵人資料，enemyIds=`, enemyIds);
     }
 
-    const isBossFight = (nodeType === 'BOSS') || (nodeType === 'BATTLE_FINAL');
+    const isBossFight = (nodeType === 'BOSS') || (nodeType === 'BATTLE_FINAL') || isForcedNode;
     return {
         name: stageName,
         enemies: enemies,

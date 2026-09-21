@@ -25,7 +25,11 @@ export const REGION_REGISTRY = {
         nodeTypeWeights: { BATTLE: 2, EVENT: 1, REST: 1 },
         enemyPool: { theme: ['shield_guardian', 'sword_guardian', 'staff_guardian', 'crossbow_guardian'] },
         eliteEnemy: 'sword_guardian',  // 🟢 暫定四天王之一當菁英，可改成隨機抽或指定其他隻
-        regionBoss: 'boundary_guardian'
+        regionBoss: 'boundary_guardian',
+        finalRunPenultimate: {
+        label: '👥 四天王齊上',
+        forceEnemies: ['shield_guardian', 'sword_guardian', 'staff_guardian', 'crossbow_guardian']
+    }
     }
     // region_xxx: { ... }  // 之後新增區域只需要在這裡加一筆
 };
@@ -78,12 +82,13 @@ function pickNextFloorIndices(fromIndex, fromCount, toCount) {
  * @param {object} regionDef 來自 REGION_REGISTRY 的區域設定
  * @returns {{ floors: Array<Array<object>>, entryNodeIds: string[] }}
  */
-export function generateRegionGraph(regionDef) {
+export function generateRegionGraph(regionDef, options = {}) {
     const floorCount = Phaser.Math.Between(regionDef.floorRange[0], regionDef.floorRange[1]);
     const floors = [];
 
     for (let f = 0; f < floorCount; f++) {
         const isFinalFloor = (f === floorCount - 1);
+        const isPenultimateSpecial = !!(options.isFinalOfRun && regionDef.finalRunPenultimate && f === floorCount - 2);
         const floorNodes = [];
 
         if (isFinalFloor) {
@@ -97,6 +102,18 @@ export function generateRegionGraph(regionDef) {
                 difficulty: floorCount,
                 visited: false,
                 connectsTo: []
+            });
+        } else if (isPenultimateSpecial) {
+            const p = regionDef.finalRunPenultimate;
+            floorNodes.push({
+                id: `${regionDef.id}_${f}_1`,
+                floor: f + 1,
+                type: 'BATTLE',
+                difficulty: f + 1,
+                visited: false,
+                connectsTo: [],
+                label: p.label,
+                forceEnemies: [...p.forceEnemies]
             });
         } else {
             const nodeCount = Phaser.Math.Between(regionDef.nodeCountRange[0], regionDef.nodeCountRange[1]);

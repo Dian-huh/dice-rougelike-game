@@ -459,9 +459,10 @@ export class BattleScene extends Phaser.Scene {
         // 🟢 只顯示存活的敵人，死亡的直接消失、不佔版面
         const aliveEnemies = this.enemies.filter(e => e.hp > 0);
 
+        const gapY = aliveEnemies.length >= 4 ? 75 : 100;
         aliveEnemies.forEach((enemy, idx) => {
             const x = 450;
-            const y = 20 + idx * 100;
+            const y = 20 + idx * gapY;
             const container = this.add.container(x, y);
 
             const bg = this.add.rectangle(150, 35, 320, 80, 0x000000, 0)

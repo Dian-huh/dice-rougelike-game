@@ -52,7 +52,8 @@ export class BattleSetup {
 
         // 🟢 取代：原本 hero.limitedEnemyBattlesRemaining 的直接判斷，
         //    改成呼叫 onStageQuery，由 ctx.limitedToOne 帶回決定結果
-        const queryCtx = { nodeType, limitedToOne: false };
+        const hookNodeType = node.forceEnemies ? 'FORCED_BATTLE' : nodeType;
+        const queryCtx = { nodeType: hookNodeType, limitedToOne: false };
         EffectEngine.runHook('onStageQuery', hero, queryCtx);
 
                 // 🟢 敵人成長等級：區域制下依已完成區域數；無區域上下文（舊系統/debug）維持 0
@@ -63,7 +64,7 @@ export class BattleSetup {
 
         // 🟢 取代：原本 hero.nextBattleEnemyHpHalved 的直接判斷，
         //    改成呼叫 onEnemiesGenerated，效果內部會自行檢查 nodeType 與消耗充能
-        EffectEngine.runHook('onEnemiesGenerated', hero, { nodeType, enemies });
+        EffectEngine.runHook('onEnemiesGenerated', hero, { nodeType: hookNodeType, enemies });
 
         CombatSystem.setActiveHero(hero);   // 🟢 懸賞機制：登記本場戰鬥的 hero 參照
         
