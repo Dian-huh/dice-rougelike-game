@@ -252,16 +252,20 @@ export class CombatSystem {
         }
 
         if (intent.type === 'SPECIAL' && intent.id === 'SUMMON') {
+            const summonIds = intent.summonIds || ['goblin'];
             safeLog(`📢 ${attacker.name} 大聲呼叫，召喚了同伴支援！`);
             if (enemies && Array.isArray(enemies)) {
-                const aliveCount = enemies.filter(e => e.hp > 0).length;
-                if (aliveCount < 4) {
-                    const newGoblin = createEnemyInstance('goblin', attacker.scaleTier || 0);
-                    if (newGoblin) {
-                        enemies.push(newGoblin);
-                        safeLog(`👺 新的哥布林加入了戰場！(當前存活數量: ${aliveCount + 1}/4)`);
+                let aliveCount = enemies.filter(e => e.hp > 0).length;
+                summonIds.forEach(id => {
+                    if (aliveCount >= 4) return;
+                    const newEnemy = createEnemyInstance(id, attacker.scaleTier || 0);
+                    if (newEnemy) {
+                        enemies.push(newEnemy);
+                        aliveCount += 1;
+                        safeLog(`👺 ${newEnemy.name} 加入了戰場！(當前存活數量: ${aliveCount}/4)`);
                     }
-                } else {
+                });
+                if (aliveCount >= 4) {
                     safeLog(`⚠️ 場上存活敵人數量已達上限 (4/4)，無法召喚更多同伴！`);
                 }
             } else {
@@ -297,16 +301,15 @@ export class CombatSystem {
         for (let i = 0; i < hitCount; i++) {
             if (target.hp <= 0) break;
 
-            let baseDmg = intent.value || attacker.atk || 0;
+            let baseDmg = (intent.value || attacker.atk || 0) + EffectEngine.getLiveStatBonus(attacker, 'atk');
             if (attacker.nextDamageBonus) {
                 baseDmg += attacker.nextDamageBonus;
                 attacker.nextDamageBonus = 0;
             }
 
-            // 判斷暴擊
             const isCrit = attacker.isOD || (intent.canCrit && typeof attacker.rollCrit === 'function' && attacker.rollCrit());
             if (isCrit) {
-                baseDmg += (attacker.critBonus || 2);
+                baseDmg += (attacker.critBonus || 2) + EffectEngine.getLiveStatBonus(attacker, 'crit');
                 safeLog(`💥 【${intent.desc || '攻擊'}】觸發暴擊！`);
             }
 
@@ -441,7 +444,7 @@ export class CombatSystem {
         if (hero) hero._firstStrikeWindow = null;
     }
 
-    static applyDamageToTarget(target, rawDmg, logCallback, enemies, attacker = null) {   // 🟢 Stage 5-6：新增 enemies / attacker 參數
+    static applyDamageToTarget(target, rawDmg, logCallback, enemies, attacker = null, opts = {}) {  // 🟢 Stage 5-6：新增 enemies / attacker 參數
         // 🟢 敵人隨區域成長：只有「帶 dmgMul 的攻擊者」造成的傷害會被放大，
         // 放在格擋/閃避之前，防禦仍照常吸收，log 顯示的也是放大後的數字
         if (attacker && attacker.dmgMul > 1) {
@@ -457,6 +460,17 @@ export class CombatSystem {
             // 🟢 新增：讓「戰鬥內限時」的閃避連動效果（寂寞無為）跟角色固有被動分開掛勾
             EffectEngine.runHook('onDodgeSuccess', target, { enemies, log: logCallback, combatSys: this });
             return;
+        }
+
+        // 🟢 新增：靈體化免疫（閃避之後、先發制人之前；免疫時不觸發受擊、不加OD）
+        if (target.damageImmuneChance > 0) {
+            const tags = opts.tags || [];
+            const exceptTags = target.damageImmuneExceptTags || [];
+            const isExempt = tags.some(t => exceptTags.includes(t));
+            if (!isExempt && Math.random() < target.damageImmuneChance) {
+                if (logCallback) logCallback(`👻 ${target.name} 【靈體化】生效，免疫本次 ${rawDmg} 點傷害！`);
+                return;
+            }
         }
 
         // 🟢 先發制人：閃避掉的攻擊不消耗資格；加成在格擋之前，會被格擋照常吸收
@@ -533,10 +547,9 @@ export class CombatSystem {
             if (logCallback) logCallback(`💥 造成 ${finalDmg} 點傷害${detailStr} (剩餘 ${target.hp}/${target.maxHp} HP)`);
             this.checkPhaseTransition(target, logCallback);
             // 🟢 懸賞：帶有懸賞標記的目標死亡時，玩家獲得50*該目標身上懸賞層數的金幣
-            if (wasAliveBefore && target.hp <= 0 && target.bountyStacks && target.bountyStacks > 0) {
-                const bountyGold = 50 * target.bountyStacks;
-                this._activeHero.gold = (this._activeHero.gold || 0) + bountyGold;
-                if (logCallback) logCallback(`🏆 ${target.name} 死亡，獲得懸賞金 ${bountyGold} 金幣！`);
+            this.checkPhaseTransition(target, logCallback);
+            if (wasAliveBefore && target.hp <= 0) {
+                this._handleEnemyDeath(target, attacker || this._activeHero, logCallback, enemies, { cause: 'DAMAGE' });
             }
 
             if (target.armorMax && target.armorMax > 0) {
@@ -552,16 +565,49 @@ export class CombatSystem {
         }
     }
 
+    // 🟢 統一的死亡結算：取代 applyDamageToTarget 與 forceKill 各自的懸賞金邏輯，
+    // 並預留復活/山賊金幣返還/詛咒（Step3、Step4 才會真的掛欄位，目前多數敵人不受影響）
+    static _handleEnemyDeath(target, killer, log, enemies, opts = {}) {
+        const safeLog = typeof log === 'function' ? log : console.log;
+        if (opts.cause === 'ESCAPE') return;
+
+        // 復活（怨氣：不限次數，40%機率）
+        if (target.reviveChance && Math.random() < target.reviveChance) {
+            const reviveHp = Math.max(1, Math.round(target.maxHp * (target.reviveHpRatio || 0.5)));
+            target.hp = reviveHp;
+            safeLog(`💫 ${target.name} 觸發【怨氣】，以 ${reviveHp} 點HP復活！`);
+            return;
+        }
+
+        // 懸賞金
+        if (target.bountyStacks && target.bountyStacks > 0) {
+            const bountyGold = 50 * target.bountyStacks;
+            this._activeHero.gold = (this._activeHero.gold || 0) + bountyGold;
+            safeLog(`🏆 ${target.name} 死亡，獲得懸賞金 ${bountyGold} 金幣！`);
+        }
+
+        // 山賊金幣返還（無條件捨去一半）
+        if (target.stolenGold && target.stolenGold > 0) {
+            const returned = Math.floor(target.stolenGold / 2);
+            if (returned > 0) {
+                this._activeHero.gold = (this._activeHero.gold || 0) + returned;
+                safeLog(`💰 ${target.name} 死亡，掉落了 ${returned} 金幣！`);
+            }
+        }
+
+        // 詛咒：只有擊殺者是玩家時才施加
+        if (killer === this._activeHero && target.onDeathCurse) {
+            EffectEngine.addStacks(killer, 'debuff_curse', target.onDeathCurse);
+            safeLog(`☠️ ${target.name} 死亡低語，你獲得 ${target.onDeathCurse} 層【詛咒】！`);
+        }
+    }
+
     // 🟢 新增：統一的「即死」結算入口，跳過一般傷害計算，但仍觸發懸賞金結算，
     // 避免各卡片各自直接寫 target.hp = 0 導致懸賞等收尾邏輯被繞過
     static forceKill(target, logCallback) {
         if (!target || target.hp <= 0) return;
         target.hp = 0;
-        if (target.bountyStacks && target.bountyStacks > 0) {
-            const bountyGold = 50 * target.bountyStacks;
-            this._activeHero.gold = (this._activeHero.gold || 0) + bountyGold;
-            if (logCallback) logCallback(`🏆 ${target.name} 死亡，獲得懸賞金 ${bountyGold} 金幣！`);
-        }
+        this._handleEnemyDeath(target, this._activeHero, logCallback, null, { cause: 'DAMAGE' });
     }
 
     // 🟢 通用：血量門檻多階段轉換判定
@@ -652,6 +698,7 @@ export class CombatSystem {
         hero.dodgeCount = 0;
         hero.armorHits = 0;
         hero.isVulnerable = false;
+        hero.bleedStacks = 0;
 
         // 🟢 新增：劍豪專屬的單場戰鬥狀態，勇者身上沒有這些欄位，設定不影響勇者
         // 🟢 劍豪專屬單場戰鬥狀態：只在角色本身有定義該欄位時才重置，避免污染其他角色
@@ -671,7 +718,7 @@ export class CombatSystem {
         if (hero.activeEffects && hero.activeEffects.length > 0) {
             hero.activeEffects = hero.activeEffects.filter(entry => {
                 const def = EFFECT_REGISTRY[entry.id];
-                return !(def && def.category === 'CARD_EFFECT');
+                return !(def && (def.category === 'CARD_EFFECT' || def.category === 'DEBUFF_LIKE'));
             });
         }
 

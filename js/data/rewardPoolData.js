@@ -449,7 +449,7 @@ const BASE_REWARD_CARDS = [
             const dmg = 5 + (hero.stigma || 0);
             const aliveEnemies = scene.enemies.filter(e => e.hp > 0);
             log(`⚡ 效果發動：對敵方全體造成 ${dmg} 點傷害！`);
-            aliveEnemies.forEach(en => combatSys.applyDamageToTarget(en, dmg, log));
+            aliveEnemies.forEach(en => combatSys.applyDamageToTarget(en, dmg, log, null, null, { tags: ['聖痕'] }));
         }
     },
     {
@@ -607,7 +607,7 @@ const BASE_REWARD_CARDS = [
         onPlay: (hero, enemy, combatSys, deckSys, log) => {
             const dmg = (hero.stigma || 0) * 2;
             log(`⚔️ 效果發動：造成 ${dmg} 點傷害，聖痕層數歸零`);
-            combatSys.applyDamageToTarget(enemy, dmg, log);
+            combatSys.applyDamageToTarget(enemy, dmg, log, null, null, { tags: ['聖痕'] });
             hero.stigma = 0;
         }
     },
@@ -620,7 +620,7 @@ const BASE_REWARD_CARDS = [
             const dmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero);
             const aliveEnemies = scene.enemies.filter(e => e.hp > 0);
             log(`💥 效果發動：對敵方全體造成 ${dmg} 點爆擊傷害！`);
-            aliveEnemies.forEach(en => combatSys.applyDamageToTarget(en, dmg, log));
+            aliveEnemies.forEach(en => combatSys.applyDamageToTarget(en, dmg, log, null, null, { tags: ['聖痕'] }));
             hero.stigma += 3;
             log(`🔱 敵方附加 3 層聖痕 (現為 ${hero.stigma} 層)`);
         }

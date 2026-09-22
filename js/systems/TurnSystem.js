@@ -24,7 +24,7 @@ export class TurnSystem {
                 enemy.onTurnEnd((m) => log(m, 'system'));
             }
             EffectEngine.runHook('onTurnStart', enemy, { log: (m) => log(m, 'system') });   // 🟢 新增
-            enemy.speedDice = Phaser.Math.Between(1, enemy.speedDiceSides || 6) + (enemy.speedBonus || 0);
+            enemy.speedDice = Phaser.Math.Between(1, enemy.speedDiceSides || 6) + CombatSystem.getEffectiveEnemySpeedBonus(enemy);
             enemy.currentIntent = enemy.getIntent(turnCount, enemy.speedDice, enemy);
             enemy.currentIntent = CombatSystem.applyStunOverride(enemy, enemy.currentIntent); 
             enemy._intentLockedInBreak = enemy.isBreak;

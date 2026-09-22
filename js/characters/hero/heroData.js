@@ -79,7 +79,7 @@ export const HERO_DATA = {
             execute: (hero, enemy, combatSys, log) => {
                 let s3Dmg = 3 + combatSys.getEffectiveCritBonus(hero) + hero.stigma;
                 log(`🗡️ 觸發 [6:技能3] 造成 ${s3Dmg} 點傷害！`);
-                combatSys.applyDamageToTarget(enemy, s3Dmg, log);
+                combatSys.applyDamageToTarget(enemy, s3Dmg, log, null, null, { tags: ['聖痕'] });
                 combatSys.applyHealToHero(hero, 1 + hero.stigma, log);
             }
         }
