@@ -122,13 +122,15 @@ export const AttackFlowSystem = {
         const aliveEnemies = enemies.filter(e => e.hp > 0);
 
         if (scope === 'SINGLE_ENEMY') {
-            const tauntTarget = CombatSystem.getTauntTarget(aliveEnemies);
+            const targetable = CombatSystem.getTargetableEnemies(enemies);
+            const tauntTarget = CombatSystem.getTauntTarget(targetable);
             if (tauntTarget) {
-                return { skill, scope, aliveEnemies, target: tauntTarget, needsTarget: false };
+                return { skill, scope, aliveEnemies: targetable, target: tauntTarget, needsTarget: false };
             }
-            if (aliveEnemies.length > 1) {
-                return { skill, scope, aliveEnemies, target: null, needsTarget: true };
+            if (targetable.length > 1) {
+                return { skill, scope, aliveEnemies: targetable, target: null, needsTarget: true };
             }
+            return { skill, scope, aliveEnemies: targetable, target: targetable[0] || null, needsTarget: false };
         }
 
         const target = aliveEnemies.length > 0 ? aliveEnemies[0] : null;

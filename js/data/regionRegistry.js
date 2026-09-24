@@ -27,9 +27,19 @@ export const REGION_REGISTRY = {
         eliteEnemy: 'sword_guardian',  // 🟢 暫定四天王之一當菁英，可改成隨機抽或指定其他隻
         regionBoss: 'boundary_guardian',
         finalRunPenultimate: {
-        label: '👥 四天王齊上',
-        forceEnemies: ['shield_guardian', 'sword_guardian', 'staff_guardian', 'crossbow_guardian']
-    }
+            label: '👥 四天王齊上',
+            forceEnemies: ['shield_guardian', 'sword_guardian', 'staff_guardian', 'crossbow_guardian']
+        }
+    },
+    region_bandit: {
+        id: 'region_bandit',
+        name: '🏴 盜賊城寨',
+        floorRange: [4, 6],
+        nodeCountRange: [1, 4],
+        nodeTypeWeights: { BATTLE: 2, EVENT: 1, REST: 1 },
+        enemyPool: { theme: ['bandit', 'wanted_criminal'] },
+        eliteEnemy: 'bandit_chief',
+        regionBoss: 'boundary_guardian'   // 佔位
     }
     // region_xxx: { ... }  // 之後新增區域只需要在這裡加一筆
 };

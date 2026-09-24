@@ -335,6 +335,84 @@ export const ENEMY_DATABASE = {
             return Phaser.Utils.Array.GetRandom(pool);
         }
     }),
+
+    // 🟢 盜賊城寨
+    'bandit': Object.assign(Object.create(BASE_ENEMY), {
+        id: 'bandit',
+        name: '🗡️ 山賊',
+        maxHp: 20, hp: 20, atk: 3, critBonus: 2, critChance: 0.15,
+        ct: 0, maxCt: 2, od: 0, maxOd: 2, speedDiceSides: 6,
+        stealOnAttackChance: 0.2,   // 視財如命：每次攻擊行動判定一次
+        stealOnAttackAmount: 10,
+        stolenGold: 0,
+
+        getIntent(turnCount, speedDice, self) {
+            if (!this.isBreak && this.ct >= this.maxCt) {
+                return {
+                    id: 'KIDNAP', type: 'ATTACK', value: this.atk, canCrit: true, consumeCt: this.maxCt,
+                    statusEffect: { type: 'stun', turns: 2 },
+                    desc: `🪢 綁架 (消耗全部CT，造成 ${this.atk} 點傷害並施加暈眩)`
+                };
+            }
+            const pool = [
+                { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
+                { id: 'ROB', type: 'SPECIAL', value: 30, desc: '💰 搶劫 (盜取 30 金幣)' }
+            ];
+            return Phaser.Utils.Array.GetRandom(pool);
+        }
+    }),
+
+    'wanted_criminal': Object.assign(Object.create(BASE_ENEMY), {
+        id: 'wanted_criminal',
+        name: '🚨 通緝犯',
+        maxHp: 40, hp: 40, atk: 5, critBonus: 2, critChance: 0.15,
+        ct: 0, maxCt: 5, od: 0, maxOd: 3, speedDiceSides: 8,
+        bountyStacks: 2,            // 賞金：50 x 2 = 100 金幣
+        forceSacrificeNext: false,
+
+        getIntent(turnCount, speedDice, self) {
+            // 逃亡失敗後最優先；旗標在「執行」時才清除，避免 Break 重新解析意圖時遺失
+            const sacrifice = {
+                id: 'SACRIFICE_STRIKE', type: 'SPECIAL', selfHpCost: 8, damageFromSelfHpRatio: 0.25,
+                desc: '💢 捨身一擊 (自身HP-8，造成自身當前HP的1/4傷害)'
+            };
+            if (this.forceSacrificeNext) return sacrifice;
+
+            if (!this.isBreak && this.ct >= this.maxCt) {
+                return {
+                    id: 'ESCAPE', type: 'SPECIAL', consumeCt: this.maxCt, escapeChance: 0.3,
+                    desc: '🏃 逃亡 (消耗全部CT，30%機率脫離戰鬥，失敗則下次必定發動捨身一擊)'
+                };
+            }
+            const pool = [
+                { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
+                sacrifice
+            ];
+            return Phaser.Utils.Array.GetRandom(pool);
+        }
+    }),
+
+    'bandit_chief': Object.assign(Object.create(BASE_ENEMY), {
+        id: 'bandit_chief',
+        name: '👑 山賊首領',
+        maxHp: 50, hp: 50, atk: 4, critBonus: 3, critChance: 0.15,
+        ct: 0, maxCt: 3, od: 0, maxOd: 5, speedBonus: 2, speedDiceSides: 6,
+        untargetableWhileAlliesAlive: ['bandit', 'wanted_criminal'],   // 寨主
+
+        getIntent(turnCount, speedDice, self) {
+            if (!this.isBreak && this.ct >= this.maxCt) {
+                return {
+                    id: 'SUMMON', type: 'SPECIAL', summonIds: ['wanted_criminal', 'bandit'], consumeCt: this.maxCt,
+                    desc: '🐕 放狗咬人 (消耗全部CT，召喚通緝犯與山賊)'
+                };
+            }
+            const pool = [
+                { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
+                { id: 'SUMMON', type: 'SPECIAL', summonIds: ['bandit'], desc: '📢 召喚小弟 (召喚一個山賊)' }
+            ];
+            return Phaser.Utils.Array.GetRandom(pool);
+        }
+    }),
     //---------------------------------------------------------------------
     //boss 區域
     //---------------------------------------------------------------------

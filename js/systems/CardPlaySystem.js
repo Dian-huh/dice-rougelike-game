@@ -46,14 +46,15 @@ export class CardPlaySystem {
         const aliveEnemies = enemies.filter(e => e.hp > 0);
 
         if (scope === 'SINGLE_ENEMY') {
-            // 🟢 有敵人正在嘲諷時，強制鎖定為唯一候選目標，跳過選擇UI
-            const tauntTarget = CombatSystem.getTauntTarget(aliveEnemies);
+            const targetable = CombatSystem.getTargetableEnemies(enemies);
+            const tauntTarget = CombatSystem.getTauntTarget(targetable);
             if (tauntTarget) {
                 return { needsTarget: false, aliveEnemies: [tauntTarget] };
             }
-            if (aliveEnemies.length > 1) {
-                return { needsTarget: true, aliveEnemies };
+            if (targetable.length > 1) {
+                return { needsTarget: true, aliveEnemies: targetable };
             }
+            return { needsTarget: false, aliveEnemies: targetable };
         }
 
         return { needsTarget: false, aliveEnemies };

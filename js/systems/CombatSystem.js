@@ -251,6 +251,34 @@ export class CombatSystem {
             return;
         }
 
+        // 🟢 山賊：搶劫
+        if (intent.type === 'SPECIAL' && intent.id === 'ROB') {
+            this.stealGold(attacker, target, intent.value, safeLog);
+            return;
+        }
+
+        // 🟢 通緝犯：捨身一擊（在行動執行時才計算傷害）
+        if (intent.type === 'SPECIAL' && intent.id === 'SACRIFICE_STRIKE') {
+            attacker.forceSacrificeNext = false;
+            attacker.hp = Math.max(1, attacker.hp - (intent.selfHpCost || 0));
+            const dmg = Math.max(1, Math.floor(attacker.hp * (intent.damageFromSelfHpRatio || 0.25)));
+            safeLog(`💢 ${attacker.name} 發動【捨身一擊】！自身HP-${intent.selfHpCost}(剩 ${attacker.hp})，對 ${target.name} 造成 ${dmg} 點傷害！`);
+            this.applyDamageToTarget(target, dmg, safeLog, enemies, attacker);
+            return;
+        }
+
+        // 🟢 通緝犯：逃亡
+        if (intent.type === 'SPECIAL' && intent.id === 'ESCAPE') {
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            if (Math.random() < (intent.escapeChance || 0)) {
+                this.escapeFromBattle(attacker, safeLog);
+            } else {
+                attacker.forceSacrificeNext = true;
+                safeLog(`🏃 ${attacker.name} 試圖逃亡但失敗了，下次將必定發動【捨身一擊】！`);
+            }
+            return;
+        }
+
         if (intent.type === 'SPECIAL' && intent.id === 'SUMMON') {
             const summonIds = intent.summonIds || ['goblin'];
             safeLog(`📢 ${attacker.name} 大聲呼叫，召喚了同伴支援！`);
@@ -324,6 +352,11 @@ export class CombatSystem {
             }
         }
 
+        // 🟢 視財如命：每次攻擊行動判定一次
+        if (attacker.stealOnAttackChance && Math.random() < attacker.stealOnAttackChance) {
+            this.stealGold(attacker, target, attacker.stealOnAttackAmount || 0, safeLog);
+        }
+
         // 3. 處理狀態附加 (如：劇毒)
         if (intent.statusEffect) {
             if (intent.statusEffect.type === 'poison') {
@@ -333,6 +366,10 @@ export class CombatSystem {
                 const stacks = intent.statusEffect.stacks || 1;
                 target.bleedStacks = (target.bleedStacks || 0) + stacks;
                 safeLog(`🩸 ${target.name} 附加 ${stacks} 層【流血】！`);
+            } else if (intent.statusEffect.type === 'stun' && target.hp > 0) {
+                const stunTurns = intent.statusEffect.turns || 2;
+                safeLog(`💫 ${target.name} 陷入【暈眩】(${stunTurns} 回合)！`);
+                this.applyStun(target, stunTurns, safeLog);
             }
         }
 
@@ -745,7 +782,38 @@ export class CombatSystem {
     // === 即時計算 Helper（方案A：不存欄位，每次讀取當下 HP 現算）===
 
 
+    // 🟢 實際盜取 = min(持有金幣, 數量)，記入 thief.stolenGold（被擊殺時返還一半）
+    static stealGold(thief, victim, amount, logCallback) {
+        const safeLog = typeof logCallback === 'function' ? logCallback : console.log;
+        const actual = Math.min(victim.gold || 0, amount || 0);
+        if (actual <= 0) {
+            safeLog(`💰 ${thief.name} 想搶劫，但你身上沒有金幣可搶！`);
+            return;
+        }
+        victim.gold -= actual;
+        thief.stolenGold = (thief.stolenGold || 0) + actual;
+        safeLog(`💰 ${thief.name} 搶走了你 ${actual} 金幣！`);
+    }
 
+    // 🟢 脫離戰鬥：不算擊殺，跳過賞金/返還/詛咒
+    static escapeFromBattle(enemy, logCallback) {
+        const safeLog = typeof logCallback === 'function' ? logCallback : console.log;
+        enemy.escaped = true;
+        enemy.hp = 0;
+        safeLog(`🏃 ${enemy.name} 成功逃離了戰鬥！`);
+        this._handleEnemyDeath(enemy, null, safeLog, null, { cause: 'ESCAPE' });
+    }
+
+    // 🟢 可被「手動選取／嘲諷選定」的敵人（寨主：有指定友軍在場時不可選）
+    static getTargetableEnemies(enemies) {
+        const alive = (enemies || []).filter(e => e.hp > 0);
+        const result = alive.filter(e => {
+            const guards = e.untargetableWhileAlliesAlive;
+            if (!guards || guards.length === 0) return true;
+            return !alive.some(o => o !== e && guards.includes(o.id));
+        });
+        return result.length > 0 ? result : alive;
+    }
 
     static getEffectiveEnemyAtk(enemy) {
         return (enemy.atk || 0) + EffectEngine.getLiveStatBonus(enemy, 'atk');
