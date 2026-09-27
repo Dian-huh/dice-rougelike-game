@@ -413,6 +413,104 @@ export const ENEMY_DATABASE = {
             return Phaser.Utils.Array.GetRandom(pool);
         }
     }),
+
+    'undead': Object.assign(Object.create(BASE_ENEMY), {
+        id: 'undead',
+        name: '💀 亡靈',
+        maxHp: 4, hp: 4, atk: 4, critBonus: 4, critChance: 0.15,
+        ct: 0, maxCt: 4, od: 0, maxOd: 4, speedBonus: 4, speedDiceSides: 4,
+        onDeathCurse: 1,
+        damageImmuneChance: 0.6,
+        damageImmuneExceptTags: ['聖痕'],
+
+        getIntent(turnCount, speedDice, self) {
+            if (this.isBreak) {
+                return { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
+            }
+            if (this.ct >= this.maxCt) {
+                return { id: 'SUMMON', type: 'SPECIAL', summonIds: ['undead', 'ghost_small'], consumeCt: this.maxCt, desc: '👻 亡靈聚集 (消耗全部CT，召喚一個亡靈與小亡靈)' };
+            }
+            const pool = [
+                { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
+                { id: 'SPIRIT_STRIKE', type: 'SPECIAL', value: this.atk, desc: `💀 死靈衝擊 (單體破防並造成 ${this.atk} 點傷害)` }
+            ];
+            if (this.ct >= 1) {
+                pool.push({ id: 'SUMMON', type: 'SPECIAL', summonIds: ['ghost_small'], consumeCt: 1, desc: '👻 分靈體 (消耗1CT，召喚一個小亡靈)' });
+            }
+            return Phaser.Utils.Array.GetRandom(pool);
+        }
+    }),
+
+    'ghost_small': Object.assign(Object.create(BASE_ENEMY), {
+        id: 'ghost_small',
+        name: '👻 小亡靈',
+        maxHp: 2, hp: 2, atk: 2, critBonus: 2, critChance: 0.15,
+        ct: 0, maxCt: 2, od: 0, maxOd: 2, speedBonus: 2, speedDiceSides: 4,
+        onDeathCurse: 1,
+        damageImmuneChance: 0.6,
+        damageImmuneExceptTags: ['聖痕'],
+
+        getIntent(turnCount, speedDice, self) {
+            if (this.isBreak) {
+                return { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
+            }
+            if (this.ct >= this.maxCt) {
+                return { id: 'SPIRIT_BOMB', type: 'SPECIAL', consumeCt: this.maxCt, desc: '💥 靈體炸彈 (消耗全部CT，自己死亡並對玩家造成爆擊傷害)' };
+            }
+            const pool = [
+                { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
+                { id: 'SPIRIT_STRIKE_MULTI', type: 'ATTACK', value: this.atk, hits: 2, canCrit: true, desc: `💀 死靈衝擊 (造成 2 次 ${this.atk} 點傷害)` }
+            ];
+            return Phaser.Utils.Array.GetRandom(pool);
+        }
+    }),
+
+    'wraith': Object.assign(Object.create(BASE_ENEMY), {
+        id: 'wraith',
+        name: '👤 怨靈',
+        maxHp: 44, hp: 44, atk: 4, critBonus: 4, critChance: 0.15,
+        ct: 0, maxCt: 4, od: 0, maxOd: 4, speedBonus: 4, speedDiceSides: 6,
+        onDeathCurse: 2,
+        reviveChance: 0.7,
+        reviveHpRatio: 0.6,
+        damageImmuneChance: 0.6,
+        damageImmuneExceptTags: ['聖痕'],
+
+        getIntent(turnCount, speedDice, self) {
+            if (this.isBreak) {
+                return { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
+            }
+            if (this.ct >= this.maxCt) {
+                return { id: 'SPIRIT_BOMB', type: 'SPECIAL', summonIds: ['undead'], consumeCt: this.maxCt, desc: '💥 靈體炸彈 (消耗全部CT，召喚亡靈，自己死亡並對玩家造成爆擊傷害)' };
+            }
+            const pool = [
+                { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` },
+                { id: 'GHOST_IMPACT', type: 'ALLY_BUFF', effect: 'RAGE_BUFF', turns: 2, value: 2, desc: '怨靈衝擊 (我方全體攻擊力、速度加值+2，2回合)' }
+            ];
+            return Phaser.Utils.Array.GetRandom(pool);
+        }
+    }),
+
+    'skeleton': Object.assign(Object.create(BASE_ENEMY), {
+        id: 'skeleton',
+        name: '☠️ 骷髏',
+        maxHp: 4, hp: 4, atk: 2, critBonus: 2, critChance: 0.15,
+        ct: 0, maxCt: 2, od: 0, maxOd: 2, speedDiceSides: 4,
+        onDeathCurse: 1,
+
+        getIntent(turnCount, speedDice, self) {
+            if (this.isBreak) {
+                return { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
+            }
+            const pool = [
+                { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` }
+            ];
+            if (this.ct >= 1) {
+                pool.push({ id: 'SUMMON', type: 'SPECIAL', summonIds: ['skeleton', 'skeleton'], consumeCt: 1, desc: '💀 亡靈呼喚 (消耗1CT，召喚2個骷髏)' });
+            }
+            return Phaser.Utils.Array.GetRandom(pool);
+        }
+    }),
     //---------------------------------------------------------------------
     //boss 區域
     //---------------------------------------------------------------------

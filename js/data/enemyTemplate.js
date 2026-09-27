@@ -32,6 +32,8 @@ export const ENEMY_TEMPLATE = {
     bonusCtRegen: 0,
     chargeTurns: 0,   // 🟢 新增：衝鋒效果剩餘回合數（0 = 未生效）
     heroicTurns: 0,   // 🟢 新增：英勇效果剩餘回合數（0 = 未生效）
+    rageTurns: 0,      // 🟢 新增：怨靈衝擊用
+    rageBonus: 0,      // 🟢 新增：記錄套用時的加成量，到期才能精確歸還
 
     // === 4. 機制邏輯：受擊觸發 (On Take Damage) ===
     onTakeHit(log) {
@@ -73,6 +75,16 @@ export const ENEMY_TEMPLATE = {
             safeLog(`✨ ${this.name} 消耗了滿額 CT，成功【解除 Break 狀態】！`);
         }
 
+        if (this.rageTurns > 0) {
+            this.rageTurns -= 1;
+            if (this.rageTurns <= 0) {
+                const b = this.rageBonus || 0;
+                this.atk = Math.max(0, this.atk - b);
+                this.speedBonus = Math.max(0, (this.speedBonus || 0) - b);
+                safeLog(`💢 ${this.name} 的【怨靈衝擊】效果已結束`);
+            }
+        }
+
         // 🟢 衝鋒效果倒數：到期時歸還 OD 上限與爆擊增益的加值
         if (this.chargeTurns > 0) {
             this.chargeTurns -= 1;
@@ -107,6 +119,8 @@ export const ENEMY_TEMPLATE = {
         if (this.bleedStacks > 0) parts.push(`🩸流血x${this.bleedStacks}`);
         const shockEntry = (this.activeEffects || []).find(e => e.id === 'debuff_shock');
         if (shockEntry) parts.push(`⚡電擊x${shockEntry.stacks}`);
+        const curseEntry = (this.activeEffects || []).find(e => e.id === 'debuff_curse');
+        if (curseEntry) parts.push(`☠️詛咒x${curseEntry.stacks}`);
         
         const tags = [];
         if (this.isOD) tags.push('🔥[OD狂暴]');
@@ -114,6 +128,7 @@ export const ENEMY_TEMPLATE = {
         if (this.isFlying) tags.push('🦅[飛行]');
         if (this.chargeTurns > 0) tags.push(`⚡[衝鋒x${this.chargeTurns}]`); 
         if (this.heroicTurns > 0) tags.push(`🌟[英勇x${this.heroicTurns}]`); 
+        if (this.rageTurns > 0) tags.push(`💢[狂怒x${this.rageTurns}]`);
         if (tags.length > 0) parts.push(`狀態: ${tags.join(' ')}`);
 
         return parts.length > 0 ? `\n  ${parts.join(' | ')}` : '';

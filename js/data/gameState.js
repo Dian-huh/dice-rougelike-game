@@ -16,6 +16,7 @@ export const gameState = {
     regionsPerRun: 3,
     regionsCompleted: 0,
     currentRegionId: null,
+    lastCompletedRegionId: null,
     currentRegionGraph: null,   // { floors, entryNodeIds }
     currentNodeId: null,        // null = 尚未踏入，站在區域入口
     currentRegionIsFinal: false,// 本次所在區域是否為本輪壓軸（決定最終層出 regionBoss 還是 eliteEnemy）
@@ -43,6 +44,7 @@ export const gameState = {
         this.currentFloor = 1;
         this.regionsCompleted = 0;
         this.currentRegionId = null;
+        this.lastCompletedRegionId = null;
         this.currentRegionGraph = null;
         this.currentNodeId = null;
         this.currentRegionIsFinal = false;
@@ -62,6 +64,7 @@ export const gameState = {
         this.currentFloor = 1;
         this.regionsCompleted = 0;
         this.currentRegionId = null;
+        this.lastCompletedRegionId = null;
         this.currentRegionGraph = null;
         this.currentNodeId = null;
         this.currentRegionIsFinal = false;
@@ -96,6 +99,7 @@ export const gameState = {
         // 🟢 階段5新增：還原區域制狀態
         this.regionsCompleted = saved.regionsCompleted;
         this.currentRegionId = saved.currentRegionId;
+        this.lastCompletedRegionId = saved.lastCompletedRegionId || null;
         this.currentRegionGraph = saved.currentRegionGraph;
         this.currentNodeId = saved.currentNodeId;
         this.currentRegionIsFinal = saved.currentRegionIsFinal;
@@ -123,13 +127,15 @@ export const gameState = {
     // 🟢 階段5新增：區域制 Run 層級規則
     // ============================================================
 
-    // 隨機抽 2~3 個候選區域，允許重複主題（規格明確表示不額外限制機率）
-    generateRegionChoices() {
+    // 隨機抽 2~3 個候選區域，但排除上一個已通關的區域
+    generateRegionChoices(excludedRegionId = this.lastCompletedRegionId) {
         const allIds = getAllRegionIds();
-        const count = Math.min(allIds.length, Phaser.Math.Between(2, 3));
+        const availableIds = allIds.filter(regionId => regionId !== excludedRegionId);
+        const candidateIds = availableIds.length > 0 ? availableIds : allIds;
+        const count = Math.min(candidateIds.length, Phaser.Math.Between(2, 3));
         const result = [];
         for (let i = 0; i < count; i++) {
-            result.push(Phaser.Utils.Array.GetRandom(allIds));
+            result.push(Phaser.Utils.Array.GetRandom(candidateIds));
         }
         this.pendingRegionChoices = result;
         return result;
@@ -181,6 +187,7 @@ export const gameState = {
     // 玩家走完當前區域最終層節點後呼叫
     // 回傳 { runComplete: true } 代表整輪遊戲通關；否則回傳下一批候選區域
     completeCurrentRegion() {
+        this.lastCompletedRegionId = this.currentRegionId;
         this.regionsCompleted += 1;
 
         if (this.regionsCompleted >= this.regionsPerRun) {
@@ -194,7 +201,7 @@ export const gameState = {
         this.currentNodeId = null;
         this.currentRegionIsFinal = false;
 
-        const choices = this.generateRegionChoices();
+        const choices = this.generateRegionChoices(this.lastCompletedRegionId);
         SaveSystem.save(this);
         return { runComplete: false, choices };
     },

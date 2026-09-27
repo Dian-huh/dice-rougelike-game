@@ -178,6 +178,7 @@ export const EFFECT_REGISTRY = {
         }
     },
 
+    //DEBUFF類
     counter_stack: {
         category: 'DEBUFF_LIKE',   // 通用敵方機制類別，不分角色/敵人皆可掛
         displayName: '反擊',
@@ -264,6 +265,34 @@ export const EFFECT_REGISTRY = {
             if (entry.stacks <= 0) {
                 hero.activeEffects = hero.activeEffects.filter(e => e !== entry);
                 ctx.log(`💫 [暈眩] 效果已結束`, 'system');
+            }
+        }
+    },
+
+    debuff_curse: {
+        category: 'DEBUFF_LIKE',
+        displayName: '詛咒',
+        getStatusText: (entry) => `詛咒 x${entry.stacks} (回合開始隨機獲得流血/劇毒/電擊其中一種2層，詛咒-1層)`,
+        onTurnStart: (entity, entry, ctx) => {
+            const choice = Phaser.Utils.Array.GetRandom(['bleed', 'poison', 'shock']);
+            if (choice === 'bleed') {
+                entity.bleedStacks = (entity.bleedStacks || 0) + 2;
+                ctx.log(`☠️ [詛咒] 隨機發作：附加 2 層【流血】！`, 'system');
+            } else if (choice === 'poison') {
+                entity.poisonTurns = (entity.poisonTurns || 0) + 2;
+                ctx.log(`☠️ [詛咒] 隨機發作：附加 2 層【劇毒】！`, 'system');
+            } else {
+                // 不直接 import EffectEngine（避免循環依賴），沿用本檔案其他效果一致的直接操作寫法
+                entity.activeEffects = entity.activeEffects || [];
+                let shockEntry = entity.activeEffects.find(e => e.id === 'debuff_shock');
+                if (!shockEntry) { shockEntry = { id: 'debuff_shock', stacks: 0 }; entity.activeEffects.push(shockEntry); }
+                shockEntry.stacks += 2;
+                ctx.log(`☠️ [詛咒] 隨機發作：附加 2 層【電擊】！`, 'system');
+            }
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
+                ctx.log(`☠️ [詛咒] 效果已結束`, 'system');
             }
         }
     },

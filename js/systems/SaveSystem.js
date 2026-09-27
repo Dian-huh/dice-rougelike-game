@@ -37,6 +37,7 @@ export const SaveSystem = {
                 // 🟢 階段5新增：區域制狀態，皆為純資料可直接序列化
                 regionsCompleted: gameState.regionsCompleted,
                 currentRegionId: gameState.currentRegionId,
+                lastCompletedRegionId: gameState.lastCompletedRegionId,
                 currentRegionGraph: gameState.currentRegionGraph,
                 currentNodeId: gameState.currentNodeId,
                 currentRegionIsFinal: gameState.currentRegionIsFinal,
@@ -86,6 +87,7 @@ export const SaveSystem = {
             // 🟢 階段5新增：舊存檔沒有這些欄位時，用合理預設值防呆（避免讀到 undefined）
             regionsCompleted: payload.regionsCompleted || 0,
             currentRegionId: payload.currentRegionId || null,
+            lastCompletedRegionId: payload.lastCompletedRegionId || null,
             currentRegionGraph: payload.currentRegionGraph || null,
             currentNodeId: payload.currentNodeId || null,
             currentRegionIsFinal: payload.currentRegionIsFinal || false,

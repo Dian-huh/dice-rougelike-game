@@ -279,6 +279,35 @@ export class CombatSystem {
             return;
         }
 
+        // 死靈衝擊（亡靈）：破防 + 攻擊力傷害，比照 ARMOR_PIERCE
+        if (intent.type === 'SPECIAL' && intent.id === 'SPIRIT_STRIKE') {
+            target.armorHits = target.armorMax || 0;
+            target.isVulnerable = true;
+            safeLog(`💀 ${attacker.name} 發動【死靈衝擊】！${target.name} 護甲值歸零並進入【破防】狀態！`);
+            this.applyDamageToTarget(target, intent.value || attacker.atk, safeLog, enemies, attacker);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
+        // 靈體炸彈（小亡靈/怨靈共用）：可選先召喚，再自爆
+        if (intent.type === 'SPECIAL' && intent.id === 'SPIRIT_BOMB') {
+            if (intent.summonIds && Array.isArray(intent.summonIds) && enemies) {
+                let aliveCount = enemies.filter(e => e.hp > 0).length;
+                intent.summonIds.forEach(id => {
+                    if (aliveCount >= 4) return;
+                    const newEnemy = createEnemyInstance(id, attacker.scaleTier || 0);
+                    if (newEnemy) {
+                        enemies.push(newEnemy);
+                        aliveCount += 1;
+                        safeLog(`👻 ${newEnemy.name} 加入了戰場！(當前存活數量: ${aliveCount}/4)`);
+                    }
+                });
+            }
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            this.selfDestruct(attacker, target, enemies, safeLog);
+            return;
+        }
+
         if (intent.type === 'SPECIAL' && intent.id === 'SUMMON') {
             const summonIds = intent.summonIds || ['goblin'];
             safeLog(`📢 ${attacker.name} 大聲呼叫，召喚了同伴支援！`);
@@ -426,6 +455,11 @@ export class CombatSystem {
                 safeLog(logMsg);
                 break;
             }
+            case 'RAGE_BUFF': {
+                allAllies.forEach(ally => this.applyRageBuff(ally, intent.turns || 2, intent.value || 2));
+                safeLog(`💢 ${attacker.name} 發動【${intent.desc}】，我方全體攻擊力、速度加值 +${intent.value || 2} (${intent.turns || 2}回合)！`);
+                break;
+            }
             case 'RANDOM_SELF_BLOCK': {
                 attacker.block = (attacker.block || 0) + intent.value;
                 let msg = `🛡️ ${attacker.name} 發動【${intent.desc}】，自己獲得 ${intent.value} 點格擋`;
@@ -456,6 +490,15 @@ export class CombatSystem {
     // 🟢 套用「英勇」：效果在 onTurnEnd 中持續觸發，這裡只需設定/刷新回合數
     static applyHeroicBuff(entity, turns = 2) {
         entity.heroicTurns = turns;
+    }
+
+    static applyRageBuff(entity, turns = 2, bonus = 2) {
+        if (!(entity.rageTurns > 0)) {
+            entity.atk = (entity.atk || 0) + bonus;
+            entity.speedBonus = (entity.speedBonus || 0) + bonus;
+            entity.rageBonus = bonus;
+        }
+        entity.rageTurns = turns;
     }
 
         // 🟢 先發制人(onFirstAttack)：整場只觸發一次；觸發後開啟「行動視窗」，
@@ -802,6 +845,17 @@ export class CombatSystem {
         enemy.hp = 0;
         safeLog(`🏃 ${enemy.name} 成功逃離了戰鬥！`);
         this._handleEnemyDeath(enemy, null, safeLog, null, { cause: 'ESCAPE' });
+    }
+
+    static selfDestruct(attacker, target, enemies, logCallback) {
+        const safeLog = typeof logCallback === 'function' ? logCallback : console.log;
+        const dmg = (attacker.atk || 0) + (attacker.critBonus || 0);
+        safeLog(`💥 ${attacker.name} 引爆自身，對 ${target.name} 造成 ${dmg} 點爆擊傷害！`);
+        this.applyDamageToTarget(target, dmg, safeLog, enemies, attacker);
+        if (attacker.hp > 0) {   // 防呆：造成傷害過程若已被反擊等機制殺死，避免二次死亡結算
+            attacker.hp = 0;
+            this._handleEnemyDeath(attacker, null, safeLog, enemies, { cause: 'SELF_DESTRUCT' });
+        }
     }
 
     // 🟢 可被「手動選取／嘲諷選定」的敵人（寨主：有指定友軍在場時不可選）
