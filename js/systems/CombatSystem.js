@@ -261,7 +261,7 @@ export class CombatSystem {
         if (intent.type === 'SPECIAL' && intent.id === 'SACRIFICE_STRIKE') {
             attacker.forceSacrificeNext = false;
             attacker.hp = Math.max(1, attacker.hp - (intent.selfHpCost || 0));
-            const dmg = Math.max(1, Math.floor(attacker.hp * (intent.damageFromSelfHpRatio || 0.25)));
+            const dmg = Math.max(1, Math.floor(target.maxHp * (intent.damageFromTargetMaxHpRatio || 0.5)));
             safeLog(`💢 ${attacker.name} 發動【捨身一擊】！自身HP-${intent.selfHpCost}(剩 ${attacker.hp})，對 ${target.name} 造成 ${dmg} 點傷害！`);
             this.applyDamageToTarget(target, dmg, safeLog, enemies, attacker);
             return;

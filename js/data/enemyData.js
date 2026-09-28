@@ -373,9 +373,9 @@ export const ENEMY_DATABASE = {
         getIntent(turnCount, speedDice, self) {
             // 逃亡失敗後最優先；旗標在「執行」時才清除，避免 Break 重新解析意圖時遺失
             const sacrifice = {
-                id: 'SACRIFICE_STRIKE', type: 'SPECIAL', selfHpCost: 8, damageFromSelfHpRatio: 0.25,
-                desc: '💢 捨身一擊 (自身HP-8，造成自身當前HP的1/4傷害)'
-            };
+            id: 'SACRIFICE_STRIKE', type: 'SPECIAL', selfHpCost: 10, damageFromTargetMaxHpRatio: 0.5,
+            desc: '💢 捨身一擊 (自身HP-10，造成目標最大生命值1/2的傷害)'
+        };
             if (this.forceSacrificeNext) return sacrifice;
 
             if (!this.isBreak && this.ct >= this.maxCt) {
