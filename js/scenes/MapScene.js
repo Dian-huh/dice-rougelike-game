@@ -5,6 +5,7 @@ import { getAllCharacterIds, getCharacterData } from '../characters/characterReg
 import { getRegionData } from '../data/regionRegistry.js';
 import { PauseMenu } from '../systems/PauseMenu.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
+import { ShopSystem } from '../systems/ShopSystem.js';
 
 export class MapScene extends Phaser.Scene {
     constructor() { 
@@ -241,6 +242,10 @@ export class MapScene extends Phaser.Scene {
             return;
         }
         typeConfig.onEnter(this, node, gameState);
+    }
+
+    openRestArea(node, state) {
+        ShopSystem.enterRest(this, node, state);
     }
 
     // ============================================================

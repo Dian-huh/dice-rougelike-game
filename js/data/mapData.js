@@ -10,11 +10,7 @@ export const NODE_TYPES = {
     },
     REST: {
         id: 'REST', name: '🔥 營火休息', color: '#66ff66',
-        onEnter: (scene, node, gameState) => {
-            gameState.hero.hp = Math.min(gameState.hero.maxHp, gameState.hero.hp + 15);
-            alert(`🔥 在營火旁休息，恢復了 15 點生命值！`);
-            scene.afterNodeCompleted(node);
-        }
+        onEnter: (scene, node, gameState) => scene.openRestArea(node, gameState)
     },
     BOSS: {
         id: 'BOSS', name: '👹 頭目戰', color: '#ff0000',

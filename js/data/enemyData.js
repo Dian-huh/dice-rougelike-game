@@ -471,7 +471,7 @@ export const ENEMY_DATABASE = {
         maxHp: 44, hp: 44, atk: 4, critBonus: 4, critChance: 0.15,
         ct: 0, maxCt: 4, od: 0, maxOd: 4, speedBonus: 4, speedDiceSides: 6,
         onDeathCurse: 2,
-        reviveChance: 0.7,
+        reviveChance: 0.55,
         reviveHpRatio: 0.6,
         damageImmuneChance: 0.6,
         damageImmuneExceptTags: ['聖痕'],
