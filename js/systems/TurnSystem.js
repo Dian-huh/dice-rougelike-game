@@ -29,7 +29,14 @@ export class TurnSystem {
             enemy.currentIntent = CombatSystem.applyStunOverride(enemy, enemy.currentIntent); 
             enemy._intentLockedInBreak = enemy.isBreak;
         });
-
+        // 🟢 融合判定：CT 回復完成後檢查，融合出的敵人當回合就擲速度骰並有預告意圖
+        const fused = CombatSystem.tryFusion(enemies, (m) => log(m, 'system'));
+        if (fused) {
+            fused.speedDice = Phaser.Math.Between(1, fused.speedDiceSides || 6) + CombatSystem.getEffectiveEnemySpeedBonus(fused);
+            fused.currentIntent = fused.getIntent(turnCount, fused.speedDice, fused);
+            fused.currentIntent = CombatSystem.applyStunOverride(fused, fused.currentIntent);
+            fused._intentLockedInBreak = fused.isBreak;
+        }
         return { playerSpeedDice: Phaser.Math.Between(1, 6) + CombatSystem.getEffectiveSpeedBonus(hero) };
     }
 }

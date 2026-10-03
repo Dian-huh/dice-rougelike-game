@@ -39,7 +39,7 @@ export class BattleScene extends Phaser.Scene {
             lastActionDice: null,
             log: (m, sender, rightMsg) => this.appendLog(m, sender, rightMsg)
         };
-        
+        CombatSystem.setBattleLog(this.battleCtx.log);
         // 🟢 新增：目標選擇 / 攻擊骰結算狀態機相關旗標
         this.isPickingTarget = false;
         this._attackFlowRunning = false;
@@ -470,7 +470,7 @@ export class BattleScene extends Phaser.Scene {
             this.battleCtx,
             (m, sender) => this.appendLog(m, sender)
         );
-
+        if (this.checkBattleEnd()) return;
         // 更新 UI
         this.renderHandUI();
         this.renderSpeedRerollButton();

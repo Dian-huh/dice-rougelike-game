@@ -116,6 +116,53 @@ export const BLACK_DRAGON_DATA = Object.assign(Object.create(BASE_ENEMY), {
     }
 });
 
+// 🟢 烈焰琉璃：CT 變動時有機率給玩家冰結，所以 ct 改用 getter/setter，
+// 不必逐一改掉各處「直接改 ct」的寫法（回合結算、卡片、招式都會自動觸發）
+const FLAME_GLASS_DATA = Object.assign(Object.create(BASE_ENEMY), {
+    id: 'flame_glass',
+    name: '💎 烈焰琉璃',
+    maxHp: 200, hp: 200, atk: 8, critBonus: 4, critChance: 0.3,
+    maxCt: 4, od: 0, maxOd: 7, speedDiceSides: 15,
+    forceSpecialNext: false,
+    hitBurnChance: 0.5, hitBurnTurns: 2,                 // 造成傷害時
+    takeHitFrostbiteChance: 0.5, takeHitFrostbiteTurns: 2, // 受到傷害時
+    ctChangeFreezeChance: 0.5,                           // CT 變動時
+
+    getIntent(turnCount, speedDice, self) {
+        const doubleAttack = {
+            id: 'DOUBLE_ATTACK', type: 'ATTACK', value: (this.atk)/2, hits: 2, canCrit: true,
+            desc: `⚔️ 普攻 (造成 2 次 ${this.atk/2} 點傷害)`
+        };
+        if (this.isBreak) return doubleAttack;
+
+        const heatWave = {
+            id: 'HEAT_WAVE', type: 'SPECIAL', bossSpecial: true, consumeCt: this.ct,
+            desc: `🌡️ 膨冷熱波 (消耗全部CT，全體爆擊傷害並給予 ${1 + this.ct}T 灼燒與凍傷)`
+        };
+
+        // 蓄力後：必定發動膨冷熱波（CT 被戰意喪失壓到 0 時退回一般行動，旗標保留）
+        if (this.forceSpecialNext && this.ct >= 1) return heatWave;
+
+        const pool = [doubleAttack];
+        if (this.ct < this.maxCt) {
+            pool.push({ id: 'GLASS_CHARGE', type: 'SPECIAL', desc: '🔋 蓄力 (CT補至上限，攻擊力與爆擊增益+2，下回合必定發動膨冷熱波)' });
+        }
+        if (this.ct >= 1) pool.push(heatWave);
+        return Phaser.Utils.Array.GetRandom(pool);
+    }
+});
+
+Object.defineProperty(FLAME_GLASS_DATA, 'ct', {
+    configurable: true,
+    enumerable: true,
+    get() { return Object.prototype.hasOwnProperty.call(this, '_ctValue') ? this._ctValue : 0; },
+    set(v) {
+        const old = this.ct;
+        this._ctValue = v;
+        if (v !== old) CombatSystem.onEnemyCtChanged(this);
+    }
+});
+
 // 🟢 3. 一般怪物資料庫 (套用資料驅動)
 export const ENEMY_DATABASE = {
     //一般怪物區
@@ -515,6 +562,8 @@ export const ENEMY_DATABASE = {
     //boss 區域
     //---------------------------------------------------------------------
 
+    //烈焰琉璃
+    'flame_glass': FLAME_GLASS_DATA,
 
     //黑龍
     'black_dragon': BLACK_DRAGON_DATA,
@@ -626,6 +675,8 @@ export const ENEMY_DATABASE = {
         linkedBreakIds: ['ice_brother'],      // 兄弟同心
         avengeOnDeathOf: ['ice_brother'],     // 復仇
         forceSpecialNext: false,
+        fusionPartnerId: 'ice_brother',
+        fusionResultId: 'flame_glass',
 
         getIntent(turnCount, speedDice, self) {
             const normalAttack = { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
@@ -661,6 +712,8 @@ export const ENEMY_DATABASE = {
         linkedBreakIds: ['fire_brother'],
         avengeOnDeathOf: ['fire_brother'],
         forceSpecialNext: false,
+        fusionPartnerId: 'fire_brother',
+        fusionResultId: 'flame_glass',
 
         getIntent(turnCount, speedDice, self) {
             const normalAttack = { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
@@ -682,6 +735,8 @@ export const ENEMY_DATABASE = {
             ]);
         }
     }),
+
+
 
 };
 

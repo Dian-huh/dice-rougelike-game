@@ -22,6 +22,64 @@ export class CombatSystem {
         return entry;
     }
 
+    static setBattleLog(fn) {
+        this._battleLog = fn;
+    }
+
+    // 烈焰琉璃：CT 值每次變動，有機率給玩家 1 層冰結
+    static onEnemyCtChanged(enemy) {
+        const hero = this._activeHero;
+        if (!hero || !enemy.ctChangeFreezeChance || enemy.hp <= 0) return;
+        if (Math.random() < enemy.ctChangeFreezeChance) {
+            EffectEngine.addStacks(hero, 'debuff_freeze', 1);
+            if (this._battleLog) this._battleLog(`❄️ ${enemy.name} 的 CT 變動，${hero.name} 被施加 1 層【冰結】！`, 'enemy');
+        }
+    }
+
+    // 造成傷害時／受到傷害時的機率附加狀態（烈焰琉璃）
+    static _applyHitProcs(target, attacker, log) {
+        const safeLog = typeof log === 'function' ? log : () => {};
+        if (attacker && attacker.hitBurnChance && target.hp > 0 && Math.random() < attacker.hitBurnChance) {
+            const turns = attacker.hitBurnTurns || 2;
+            this.addTimedStatus(target, 'debuff_burn', turns, 'EXTEND');
+            safeLog(`🔥 ${attacker.name} 造成傷害，${target.name} 的【灼燒】+${turns} 回合！`);
+        }
+        if (target.takeHitFrostbiteChance && Math.random() < target.takeHitFrostbiteChance) {
+            const src = attacker || this._activeHero;
+            if (src && src !== target && src.hp > 0) {
+                const turns = target.takeHitFrostbiteTurns || 2;
+                this.addTimedStatus(src, 'debuff_frostbite', turns, 'EXTEND');
+                safeLog(`🧊 ${target.name} 受到傷害，${src.name} 的【凍傷】+${turns} 回合！`);
+            }
+        }
+    }
+
+    // 融合：partner 與自己都存活且 CT 皆滿時，兩者消失並生成 fusionResultId，立刻對玩家造成全體爆擊傷害
+    // 兩兄弟直接退場（hp=0），不走 _handleEnemyDeath：不給賞金、不觸發復仇與詛咒
+    static tryFusion(enemies, log) {
+        const safeLog = typeof log === 'function' ? log : console.log;
+        const alive = (enemies || []).filter(e => e.hp > 0);
+        for (const a of alive) {
+            if (!a.fusionPartnerId || !a.fusionResultId) continue;
+            const b = alive.find(e => e !== a && e.id === a.fusionPartnerId);
+            if (!b) continue;
+            if (!(a.maxCt > 0 && a.ct >= a.maxCt && b.ct >= b.maxCt)) continue;
+
+            a.hp = 0; b.hp = 0;
+            const fused = createEnemyInstance(a.fusionResultId, a.scaleTier || 0);
+            if (!fused) return null;
+            enemies.push(fused);
+            safeLog(`🔥🧊 ${a.name} 與 ${b.name} 的 CT 皆已滿，發動【融合】！${fused.name} 降臨戰場！`);
+
+            const hero = this._activeHero;
+            const dmg = this.getEffectiveEnemyAtk(fused) + (fused.critBonus || 0) + EffectEngine.getLiveStatBonus(fused, 'crit');
+            safeLog(`💥 ${fused.name} 出場，對全體造成爆擊傷害！`);
+            this.applyDamageToTarget(hero, dmg, safeLog, enemies, fused);
+            return fused;
+        }
+        return null;
+    }
+
     // 兄弟同心：source 剛進入 Break 時，讓 linkedBreakIds 內的其他存活敵人一起 Break
     static _propagateBreak(source, log) {
         const ids = source.linkedBreakIds;
@@ -339,6 +397,32 @@ export class CombatSystem {
             if (target.hp > 0) {
                 EffectEngine.addStacks(target, 'debuff_freeze', 2);
                 safeLog(`❄️ ${target.name} 被施加 2 層【冰結】！`);
+            }
+            return;
+        }
+
+        // 🟢 烈焰琉璃：蓄力（CT 補至上限；ct 的 setter 會自動判定冰結）
+        if (intent.type === 'SPECIAL' && intent.id === 'GLASS_CHARGE') {
+            attacker.atk = (attacker.atk || 0) + 2;
+            attacker.critBonus = (attacker.critBonus || 0) + 2;
+            attacker.ct = attacker.maxCt;
+            attacker.forceSpecialNext = true;
+            safeLog(`🔋 ${attacker.name} 發動【蓄力】！CT 補至上限，攻擊力與爆擊增益 +2，下回合必定發動膨冷熱波！`);
+            return;
+        }
+
+        // 🟢 烈焰琉璃：膨冷熱波（以「執行當下」的 CT 結算，不是預告時的數字）
+        if (intent.type === 'SPECIAL' && intent.id === 'HEAT_WAVE') {
+            const spent = attacker.ct || 0;
+            attacker.ct = 0;
+            const turns = 1 + spent;
+            const dmg = this.getEffectiveEnemyAtk(attacker) + (attacker.critBonus || 0) + EffectEngine.getLiveStatBonus(attacker, 'crit');
+            safeLog(`🌡️ ${attacker.name} 發動【膨冷熱波】！消耗 ${spent} 點 CT！`);
+            this.applyDamageToTarget(target, dmg, safeLog, enemies, attacker);
+            if (target.hp > 0) {
+                this.addTimedStatus(target, 'debuff_burn', turns, 'REFRESH');
+                this.addTimedStatus(target, 'debuff_frostbite', turns, 'REFRESH');
+                safeLog(`🌡️ ${target.name} 陷入【灼燒】與【凍傷】(各 ${turns} 回合)！`);
             }
             return;
         }
@@ -740,7 +824,7 @@ export class CombatSystem {
             if (wasAliveBefore && target.hp <= 0) {
                 this._handleEnemyDeath(target, attacker || this._activeHero, logCallback, enemies, { cause: 'DAMAGE' });
             }
-
+            this._applyHitProcs(target, attacker, logCallback);
             if (target.armorMax && target.armorMax > 0) {
                 target.armorHits = (target.armorHits || 0) + 1;
                 const effectiveArmorMax = this.getEffectiveArmorMax(target);
