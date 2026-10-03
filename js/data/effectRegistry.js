@@ -129,6 +129,8 @@ export const EFFECT_REGISTRY = {
 
     swordsman_petal_shadow: {
         category: 'CARD_EFFECT',
+        displayName: '槿花泡影',
+        getStatusText: (entry) => `槿花泡影 (剩餘 ${entry.stacks} 回合，速度+1，回合開始獲得慧眼)`,
         liveStatModifier: (hero, entry, statName) => (statName === 'speed' ? 1 : 0),
         onTurnStart: (hero, entry, ctx) => {
             if (entry.stacks <= 0) return;
@@ -294,6 +296,45 @@ export const EFFECT_REGISTRY = {
                 entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
                 ctx.log(`☠️ [詛咒] 效果已結束`, 'system');
             }
+        }
+    },
+
+    debuff_burn: {
+        category: 'DEBUFF_LIKE',
+        displayName: '灼燒',
+        getStatusText: (entry) => `灼燒 (剩餘 ${entry.stacks} 回合，回合開始受 2 點傷害)`,
+        onTurnStart: (entity, entry, ctx) => {
+            entity.hp = Math.max(0, entity.hp - 2);   // 持續傷害：不走 applyDamageToTarget
+            ctx.log(`🔥 [灼燒] ${entity.name} 受到 2 點傷害！`, 'system');
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
+                ctx.log(`🔥 [灼燒] 效果已結束`, 'system');
+            }
+        }
+    },
+
+    debuff_frostbite: {
+        category: 'DEBUFF_LIKE',
+        displayName: '凍傷',
+        getStatusText: (entry) => `凍傷 (剩餘 ${entry.stacks} 回合，每次受傷 +${entry.stacks} 點)`,
+        liveStatModifier: (entity, entry, statName) => (statName === 'damageTaken' ? entry.stacks : 0),
+        onTurnStart: (entity, entry, ctx) => {
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
+                ctx.log(`🧊 [凍傷] 效果已結束`, 'system');
+            }
+        }
+    },
+
+    // 復仇用的比例版背水：每損失 20% 最大血量，攻擊/速度/爆擊 +2（避免被區域血量倍率放大成天文數字）
+    desperation_ratio: {
+        category: 'BLESSING',
+        liveStatModifier: (entity, entry, statName) => {
+            if (!['atk', 'speed', 'crit'].includes(statName)) return 0;
+            const missing = Math.max(0, (entity.maxHp || 0) - (entity.hp || 0));
+            return Math.floor(missing * 5 / (entity.maxHp || 1)) * 2 * entry.stacks;   // 用整數運算避免 0.6/0.2 的浮點誤差
         }
     },
 

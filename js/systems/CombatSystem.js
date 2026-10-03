@@ -9,6 +9,33 @@ export class CombatSystem {
         this._activeHero = hero;
     }
 
+    static setActiveEnemies(enemies) {
+        this._activeEnemies = enemies;
+    }
+
+    // 通用「持續回合型」狀態施加：REFRESH＝取較大值（重複只刷新）；EXTEND＝累加回合
+    static addTimedStatus(target, id, turns, mode = 'REFRESH') {
+        const entry = EffectEngine.getEntry(target, id);
+        if (!entry) return EffectEngine.addStacks(target, id, turns);
+        if (mode === 'EXTEND') entry.stacks += turns;
+        else entry.stacks = Math.max(entry.stacks, turns);
+        return entry;
+    }
+
+    // 兄弟同心：source 剛進入 Break 時，讓 linkedBreakIds 內的其他存活敵人一起 Break
+    static _propagateBreak(source, log) {
+        const ids = source.linkedBreakIds;
+        if (!ids || ids.length === 0) return;
+        (this._activeEnemies || []).forEach(e => {
+            if (e === source || e.hp <= 0 || e.isBreak || !ids.includes(e.id)) return;
+            e.isOD = false;
+            e.od = 0;
+            e.isBreak = true;
+            if (log) log(`🔗 ${source.name} 陷入 Break，${e.name} 受【兄弟同心】影響一同 Break！`);
+            this.resolveEnemyIntent(e);
+        });
+    }
+
     // 🟢 通用敵人意圖解析器 (資料驅動核心)
     static executeEnemyIntent(attacker, intent, target, logCallback, enemies) {
         const safeLog = typeof logCallback === 'function' ? logCallback : console.log;
@@ -19,6 +46,9 @@ export class CombatSystem {
             safeLog(`💫 ${attacker.name} 處於【暈眩】狀態，無法行動！`);
             return;
         }
+
+        // 🟢 冰火兄弟：真正執行蓄力後的特殊技時，才清除 forceSpecialNext
+        if (intent.bossSpecial) attacker.forceSpecialNext = false;
 
         // 🟢 新增：真正發動「消耗全部CT」的滿CT技時，強制解除自己身上會導致無法行動的負面效果
         // （暈眩此時已在 applyStunOverride 被豁免、不會擋這招，但招式一旦真的打出來，殘留的暈眩層數應一併清除，
@@ -251,6 +281,68 @@ export class CombatSystem {
             return;
         }
 
+        // 🟢 冰火兄弟：蓄力
+        if (intent.type === 'SPECIAL' && intent.id === 'BOSS_CHARGE') {
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            attacker.atk = (attacker.atk || 0) + 2;
+            attacker.critBonus = (attacker.critBonus || 0) + 2;
+            attacker.forceSpecialNext = true;
+            safeLog(`🔋 ${attacker.name} 發動【蓄力】！攻擊力與爆擊增益 +2，下回合必定發動特殊行動！`);
+            return;
+        }
+
+        // 🟢 冰火兄弟-火：湮滅焰拳（目標灼燒中 → 2倍爆擊傷害；灼燒延長2T）
+        if (intent.type === 'SPECIAL' && intent.id === 'ANNIHILATE_FIST') {
+            const hadBurn = !!EffectEngine.getEntry(target, 'debuff_burn');
+            let dmg = this.getEffectiveEnemyAtk(attacker) + (attacker.critBonus || 0) + EffectEngine.getLiveStatBonus(attacker, 'crit');
+            if (hadBurn) dmg *= 2;
+            safeLog(`🔥 ${attacker.name} 發動【湮滅焰拳】！${hadBurn ? '目標灼燒中，傷害變為2倍！' : ''}`);
+            this.applyDamageToTarget(target, dmg, safeLog, enemies, attacker);
+            if (target.hp > 0 && hadBurn) {
+                this.addTimedStatus(target, 'debuff_burn', 2, 'EXTEND');
+                safeLog(`🔥 ${target.name} 的【灼燒】延長 2 回合！`);
+            }
+            return;
+        }
+
+        // 🟢 冰火兄弟-火：噴流熾炎（攻擊力傷害 → 灼燒延長2T → 再造成灼燒剩餘回合數的傷害）
+        if (intent.type === 'SPECIAL' && intent.id === 'JET_FLAME') {
+            safeLog(`🔥 ${attacker.name} 發動【噴流熾炎】！`);
+            this.applyDamageToTarget(target, this.getEffectiveEnemyAtk(attacker), safeLog, enemies, attacker);
+            if (target.hp > 0) {
+                const burn = this.addTimedStatus(target, 'debuff_burn', 2, 'EXTEND');
+                safeLog(`🔥 ${target.name} 的【灼燒】延長 2 回合 (剩餘 ${burn.stacks} 回合)，餘焰爆發！`);
+                this.applyDamageToTarget(target, burn.stacks, safeLog, enemies, attacker);
+            }
+            return;
+        }
+
+        // 🟢 冰火兄弟-冰：冰壁（我方全體存活者下次受傷變0，沿用 dodgeCount）
+        if (intent.type === 'SPECIAL' && intent.id === 'ICE_WALL') {
+            (enemies || []).filter(e => e.hp > 0).forEach(ally => { ally.dodgeCount = (ally.dodgeCount || 0) + 1; });
+            safeLog(`🧱 ${attacker.name} 展開【冰壁】！我方全體下次受到的傷害變為 0！`);
+            return;
+        }
+
+        // 🟢 冰火兄弟-冰：冰天雪地
+        if (intent.type === 'SPECIAL' && intent.id === 'FROSTBITE_CAST') {
+            this.addTimedStatus(target, 'debuff_frostbite', 5, 'REFRESH');
+            safeLog(`🧊 ${attacker.name} 發動【冰天雪地】！${target.name} 陷入【凍傷】(5 回合)！`);
+            return;
+        }
+
+        // 🟢 冰火兄弟-冰：絕對冰結
+        if (intent.type === 'SPECIAL' && intent.id === 'ABSOLUTE_FREEZE') {
+            const dmg = this.getEffectiveEnemyAtk(attacker) + (attacker.critBonus || 0) + EffectEngine.getLiveStatBonus(attacker, 'crit');
+            safeLog(`🧊 ${attacker.name} 發動【絕對冰結】！`);
+            this.applyDamageToTarget(target, dmg, safeLog, enemies, attacker);
+            if (target.hp > 0) {
+                EffectEngine.addStacks(target, 'debuff_freeze', 2);
+                safeLog(`❄️ ${target.name} 被施加 2 層【冰結】！`);
+            }
+            return;
+        }
+
         // 🟢 山賊：搶劫
         if (intent.type === 'SPECIAL' && intent.id === 'ROB') {
             this.stealGold(attacker, target, intent.value, safeLog);
@@ -399,6 +491,14 @@ export class CombatSystem {
                 const stunTurns = intent.statusEffect.turns || 2;
                 safeLog(`💫 ${target.name} 陷入【暈眩】(${stunTurns} 回合)！`);
                 this.applyStun(target, stunTurns, safeLog);
+            } else if (intent.statusEffect.type === 'burn' && target.hp > 0) {
+                const turns = intent.statusEffect.turns || 5;
+                this.addTimedStatus(target, 'debuff_burn', turns, 'REFRESH');
+                safeLog(`🔥 ${target.name} 陷入【灼燒】(${turns} 回合)！`);
+            } else if (intent.statusEffect.type === 'frostbite' && target.hp > 0) {
+                const turns = intent.statusEffect.turns || 5;
+                this.addTimedStatus(target, 'debuff_frostbite', turns, 'REFRESH');
+                safeLog(`🧊 ${target.name} 陷入【凍傷】(${turns} 回合)！`);    
             }
         }
 
@@ -563,9 +663,11 @@ export class CombatSystem {
 
         // 改成
         // 2. 觸發受擊 OD / Break 增減 (適用於敵人)
+        const wasBreak = !!target.isBreak;
         if (typeof target.onTakeHit === 'function') {
             target.onTakeHit(logCallback);
         }
+        if (!wasBreak && target.isBreak) this._propagateBreak(target, logCallback);
 
         // 🟢 若這一擊讓敵人當場進入Break，立刻重新驗證意圖並更新顯示，
         // 不要等到敵人真正執行動作時才切換，避免玩家看到過期的預告文字
@@ -584,6 +686,13 @@ export class CombatSystem {
         else if (target.isVulnerable) {
             finalDmg += 2;
             logDetails.push(`玩家破防+2`);
+        }
+
+        // 凍傷：每次受傷額外增加（剩餘回合數）點
+        const takenBonus = EffectEngine.getLiveStatBonus(target, 'damageTaken');
+        if (takenBonus > 0 && finalDmg > 0) {
+            finalDmg += takenBonus;
+            logDetails.push(`凍傷+${takenBonus}`);
         }
 
         // 4. 格擋 (Block) 抵銷扣除 (玩家與敵人皆適用)
@@ -649,7 +758,7 @@ export class CombatSystem {
     // 並預留復活/山賊金幣返還/詛咒（Step3、Step4 才會真的掛欄位，目前多數敵人不受影響）
     static _handleEnemyDeath(target, killer, log, enemies, opts = {}) {
         const safeLog = typeof log === 'function' ? log : console.log;
-        if (opts.cause === 'ESCAPE') return;
+        if (opts.cause === 'ESCAPE' || opts.cause === 'FUSE') return;
 
         // 復活（怨氣：不限次數，40%機率）
         if (target.reviveChance && Math.random() < target.reviveChance) {
@@ -658,6 +767,13 @@ export class CombatSystem {
             safeLog(`💫 ${target.name} 觸發【怨氣】，以 ${reviveHp} 點HP復活！`);
             return;
         }
+
+        // 復仇：存活的友軍若登記了 avengeOnDeathOf 包含死者 id，獲得比例版背水
+        (enemies || this._activeEnemies || []).forEach(e => {
+            if (e === target || e.hp <= 0 || !(e.avengeOnDeathOf || []).includes(target.id)) return;
+            EffectEngine.addStacks(e, 'desperation_ratio', 1);
+            safeLog(`😡 ${e.name} 目睹 ${target.name} 倒下，發動【復仇】獲得背水加護！`);
+        });
 
         // 懸賞金
         if (target.bountyStacks && target.bountyStacks > 0) {

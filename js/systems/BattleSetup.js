@@ -12,6 +12,7 @@ export class BattleSetup {
             const hero = data.hero;
             const deckSys = data.deckSys;
             CombatSystem.setActiveHero(hero);
+            CombatSystem.setActiveEnemies(data.__debugOverride.enemies);
             return {
                 hero,
                 deckSys,
@@ -50,6 +51,8 @@ export class BattleSetup {
             deckSys = new DeckSystem(getCharacterDeck('hero'));
         }
 
+        CombatSystem.setActiveHero(hero);
+
         // 🟢 取代：原本 hero.limitedEnemyBattlesRemaining 的直接判斷，
         //    改成呼叫 onStageQuery，由 ctx.limitedToOne 帶回決定結果
         const hookNodeType = node.forceEnemies ? 'FORCED_BATTLE' : nodeType;
@@ -66,7 +69,7 @@ export class BattleSetup {
         //    改成呼叫 onEnemiesGenerated，效果內部會自行檢查 nodeType 與消耗充能
         EffectEngine.runHook('onEnemiesGenerated', hero, { nodeType: hookNodeType, enemies });
 
-        CombatSystem.setActiveHero(hero);   // 🟢 懸賞機制：登記本場戰鬥的 hero 參照
+        CombatSystem.setActiveEnemies(enemies);   // 🟢 懸賞機制：登記本場戰鬥的 hero 參照
         
         return { hero, deckSys, currentStage, enemies, isFinalBoss };
     }

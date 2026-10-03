@@ -9,6 +9,7 @@ import { CardPlaySystem } from '../systems/CardPlaySystem.js';
 import { UIInteractionSystem } from '../systems/UIInteractionSystem.js';
 import { BattleFlowSystem } from '../systems/BattleFlowSystem.js';
 import { PauseMenu } from '../systems/PauseMenu.js';
+import { EFFECT_REGISTRY } from '../data/effectRegistry.js';
 
 export class BattleScene extends Phaser.Scene {
     constructor() { 
@@ -47,7 +48,10 @@ export class BattleScene extends Phaser.Scene {
         // UI 區塊
         this.heroText = this.add.text(40, 20, '', { fontSize: '15px', fill: '#4efa7b', lineSpacing: 4 });
         this.diceBoardText = this.add.text(280, 140, '', { fontSize: '15px', fill: '#00ffff', align: 'center', backgroundColor: '#222', padding: { x: 10, y: 8 } });
-
+        this.heroStatusZone = this.add.rectangle(40, 20, 380, 130, 0x000000, 0)
+            .setOrigin(0, 0)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerdown', () => this.toggleStatusPanel());
         this.createChatLogUI();
          // 按鈕區
         this.actionBtn = this.createButton(620, 360, '🎲 擲攻擊骰並結算', () => this.resolveAttackPhase());
@@ -76,7 +80,7 @@ export class BattleScene extends Phaser.Scene {
         this.pauseBtn = this.createButton(700, 5, '⏸ 選單', () => this.openPauseMenu());
         this.blessingPanelContainer = null;
         this.deckPanelContainer = null;
-
+        this.statusPanelContainer = null;
 
         this.appendLog(`⚔️ 進入關卡【${this.currentStage.name}】！遇到 ${this.enemies.length} 個敵人！`, 'system');
 
@@ -161,6 +165,74 @@ export class BattleScene extends Phaser.Scene {
         container.add(closeBtn);
 
         this.blessingPanelContainer = container;
+    }
+
+    // 收集玩家身上目前所有狀態，回傳可直接顯示的文字陣列
+    collectHeroStatuses() {
+        const h = this.hero;
+        const list = [];
+        const add = (icon, name, detail) => list.push(`${icon} ${name}：${detail}`);
+
+        if (h.poisonTurns > 0) add('🤢', '劇毒', `剩餘 ${h.poisonTurns} 次，每次行動受 1 點傷害`);
+        if (h.bleedStacks > 0) add('🩸', '流血', `${h.bleedStacks} 層，每次行動受 ${h.bleedStacks} 點傷害，之後 -1 層`);
+        if (h.isPressured) add('😱', '威壓', '下次攻擊骰鎖定為 1，本回合無法使用主動技能');
+        if (h.isVulnerable) add('⚠️', '破防', '受到的傷害 +2');
+        if (h.stigma > 0) add('🔱', '聖痕', `敵方身上 ${h.stigma} 層（聖痕卡片與技能3依層數強化）`);
+        if (h.stance !== undefined) {
+            if (h.stance === 'DRAWN') add('🗡️', '拔刀', '攻擊骰造成傷害時，對隨機敵人追加 2 次 1 點傷害');
+            else add('🛡️', '收刀', '閃避成功時，對隨機敵人反擊 5 點傷害並回復 3 點HP');
+        }
+        if (h.swordIntent > 0) add('💠', '劍意', `${h.swordIntent} 層（上限10；每5層使普攻/爆擊追加 1 點傷害）`);
+        if (h.insightStacks > 0) add('👁️', '慧眼', '下一次造成的傷害 +3');
+        if (h.forceCritThisTurn) add('🌸', '必定爆擊', '本回合攻擊必定觸發爆擊加成');
+        if (h.doubleNextAction) add('⚡', '連打', '下一次攻擊骰行動執行 2 次');
+        if (h.turnSpeedBonus > 0) add('💨', '速度加成', `本回合速度 +${h.turnSpeedBonus}`);
+        if (h.nextStigmaCardDiscount > 0) add('🎴', '借用神力', `下一張聖痕卡費用 -${h.nextStigmaCardDiscount}`);
+        if (h.freeGoldCardsThisTurn) add('💰', '利滾利', '本回合金幣卡 0 費，每使用一張 +20 金幣');
+
+        (h.activeEffects || []).forEach(entry => {
+            const def = EFFECT_REGISTRY[entry.id];
+            if (!def || !def.displayName || typeof def.getStatusText !== 'function') return;
+            if (def.category !== 'DEBUFF_LIKE' && def.category !== 'CARD_EFFECT') return;
+            list.push(`• ${def.getStatusText(entry)}`);
+        });
+        return list;
+    }
+
+    toggleStatusPanel() {
+        if (this.statusPanelContainer) { this.closeStatusPanel(); return; }
+        if (this.isPickingTarget || this.rerollPromptContainer) return;
+
+        const lines = this.collectHeroStatuses();
+        const body = lines.length > 0 ? lines.join('\n') : '目前沒有任何狀態效果。';
+
+        const container = this.add.container(0, 0).setDepth(1800);
+        // 全螢幕點擊層：點任何地方關閉，同時避免點穿到底下的按鈕/手牌
+        const catcher = this.add.rectangle(425, 275, 850, 550, 0x000000, 0.35)
+            .setInteractive().on('pointerdown', () => this.closeStatusPanel());
+
+        const title = this.add.text(0, 0, `📋 ${this.hero.name} 目前狀態`, { fontSize: '15px', fill: '#ffcc00' });
+        const text = this.add.text(0, 0, body, {
+            fontSize: '13px', fill: '#eeeeee', wordWrap: { width: 340 }, lineSpacing: 6
+        });
+        const hint = this.add.text(0, 0, '（點擊任意處關閉）', { fontSize: '11px', fill: '#888888' });
+
+        const x = 30, y = 135, w = 372, pad = 14;
+        const h = pad * 2 + title.height + 10 + text.height + 10 + hint.height;
+        const bg = this.add.rectangle(x, y, w, h, 0x111122, 0.97).setOrigin(0, 0).setStrokeStyle(2, 0x00ffff);
+        title.setPosition(x + pad, y + pad);
+        text.setPosition(x + pad, y + pad + title.height + 10);
+        hint.setPosition(x + pad, y + h - pad - hint.height);
+
+        container.add([catcher, bg, title, text, hint]);
+        this.statusPanelContainer = container;
+    }
+
+    closeStatusPanel() {
+        if (this.statusPanelContainer) {
+            this.statusPanelContainer.destroy();
+            this.statusPanelContainer = null;
+        }
     }
 
     toggleDeckPanel() {
@@ -637,7 +709,8 @@ export class BattleScene extends Phaser.Scene {
             if (this.speedRerollBtn) { this.speedRerollBtn.destroy(); this.speedRerollBtn = null; }
             if (this.rerollPromptContainer) { this.rerollPromptContainer.destroy(); this.rerollPromptContainer = null; }
             if (this.uiTargetPickerSession) { this.uiTargetPickerSession.destroy(); this.uiTargetPickerSession = null; }
-
+            this.closeStatusPanel();
+            if (this.heroStatusZone) this.heroStatusZone.disableInteractive();
             // 分流：最終樓層 Boss 戰勝利 → 遊戲通關結算；一般戰鬥勝利 → 獎勵選擇
             if (this.isFinalBoss) {
                 this.time.delayedCall(600, () => {
@@ -744,20 +817,8 @@ export class BattleScene extends Phaser.Scene {
         );
 
         let passivesText = this.hero.startBlock ? ` | 開局格擋: +${this.hero.startBlock}` : '';
-        let statusText = '';
-        if (this.hero.poisonTurns > 0) statusText += ` 🤢[劇毒x${this.hero.poisonTurns}]`;
-        if (this.hero.isPressured) statusText += ` 😱[威壓中]`;
-        if (this.hero.stigma > 0) statusText += ` 🔱[聖痕x${this.hero.stigma}]`; 
-        if (this.hero.bleedStacks > 0) statusText += ` 🩸[流血x${this.hero.bleedStacks}]`;
-        const heroShock = EffectEngine.getEntry(this.hero, 'debuff_shock');
-        if (heroShock) statusText += ` ⚡[電擊x${heroShock.stacks}]`;
-
-        if (this.hero.stance !== undefined) {
-            statusText += this.hero.stance === 'DRAWN' ? ` 🗡️[拔刀]` : ` 🛡️[收刀]`;
-        }
-        if (this.hero.swordIntent > 0) statusText += ` 💠[劍意x${this.hero.swordIntent}]`;
-        if (this.hero.insightStacks > 0) statusText += ` 👁️[慧眼]`;
-        if (this.hero.forceCritThisTurn) statusText += ` 🌸[必定爆擊-本回合]`;
+        const statusCount = this.collectHeroStatuses().length;
+        const statusText = statusCount > 0 ? ` 📋[狀態x${statusCount}]` : '';
 
         // 改成：
         const effAtk = CombatSystem.getEffectiveAtk(this.hero);

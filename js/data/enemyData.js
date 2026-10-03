@@ -617,6 +617,72 @@ export const ENEMY_DATABASE = {
         }
     }),
 
+    // 🟢 盜賊城寨 Boss：冰火兄弟（規則B：特殊技不耗CT，只在蓄力後的下一回合才出）
+    'fire_brother': Object.assign(Object.create(BASE_ENEMY), {
+        id: 'fire_brother',
+        name: '🔥 冰火兄弟-火',
+        maxHp: 100, hp: 100, atk: 5, critBonus: 3, critChance: 0.15,
+        ct: 0, maxCt: 3, od: 0, maxOd: 3, speedDiceSides: 10,
+        linkedBreakIds: ['ice_brother'],      // 兄弟同心
+        avengeOnDeathOf: ['ice_brother'],     // 復仇
+        forceSpecialNext: false,
+
+        getIntent(turnCount, speedDice, self) {
+            const normalAttack = { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
+
+            // Break 狀態：僅能一般行動（forceSpecialNext 旗標保留，解除後才用掉）
+            if (this.isBreak) return normalAttack;
+
+            // 蓄力後的下一回合：必定發動蓄力外的隨機特殊行動
+            if (this.forceSpecialNext) {
+                return Phaser.Utils.Array.GetRandom([
+                    { id: 'ANNIHILATE_FIST', type: 'SPECIAL', bossSpecial: true, desc: '🔥 湮滅焰拳 (全體爆擊傷害，目標灼燒中則變2倍，並延長灼燒2T)' },
+                    { id: 'JET_FLAME', type: 'SPECIAL', bossSpecial: true, desc: '🔥 噴流熾炎 (造成攻擊力傷害並延長灼燒2T，再造成灼燒剩餘回合數的傷害)' }
+                ]);
+            }
+
+            // CT>=2 時 50% 機率蓄力
+            if (this.ct >= 2 && Math.random() < 0.5) {
+                return { id: 'BOSS_CHARGE', type: 'SPECIAL', consumeCt: 2, desc: '🔋 蓄力 (消耗2CT，攻擊力與爆擊增益+2，下回合必定發動特殊行動)' };
+            }
+
+            return Phaser.Utils.Array.GetRandom([
+                normalAttack,
+                { id: 'FLAME_FIST', type: 'ATTACK', value: this.atk, canCrit: true, statusEffect: { type: 'burn', turns: 5 }, desc: `🔥 炎拳 (造成 ${this.atk} 點傷害並給予5T灼燒)` }
+            ]);
+        }
+    }),
+
+    'ice_brother': Object.assign(Object.create(BASE_ENEMY), {
+        id: 'ice_brother',
+        name: '🧊 冰火兄弟-冰',
+        maxHp: 100, hp: 100, atk: 3, critBonus: 1, critChance: 0.15,
+        ct: 0, maxCt: 3, od: 0, maxOd: 4, speedDiceSides: 10,
+        linkedBreakIds: ['fire_brother'],
+        avengeOnDeathOf: ['fire_brother'],
+        forceSpecialNext: false,
+
+        getIntent(turnCount, speedDice, self) {
+            const normalAttack = { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
+
+            if (this.isBreak) return normalAttack;
+
+            if (this.forceSpecialNext) {
+                return { id: 'ABSOLUTE_FREEZE', type: 'SPECIAL', bossSpecial: true, desc: '🧊 絕對冰結 (單體爆擊傷害，並給予2層冰結)' };
+            }
+
+            if (this.ct >= 2 && Math.random() < 0.5) {
+                return { id: 'BOSS_CHARGE', type: 'SPECIAL', consumeCt: 2, desc: '🔋 蓄力 (消耗2CT，攻擊力與爆擊增益+2，下回合必定發動特殊行動)' };
+            }
+
+            return Phaser.Utils.Array.GetRandom([
+                normalAttack,
+                { id: 'ICE_WALL', type: 'SPECIAL', desc: '🧱 冰壁 (我方全體下次受傷傷害變為0)' },
+                { id: 'FROSTBITE_CAST', type: 'SPECIAL', desc: '🧊 冰天雪地 (給予敵方5T凍傷)' }
+            ]);
+        }
+    }),
+
 };
 
 // 🟢 敵人隨區域進度成長表：index = 已完成區域數 (gameState.regionsCompleted)
