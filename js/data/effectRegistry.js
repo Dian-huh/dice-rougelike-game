@@ -299,6 +299,66 @@ export const EFFECT_REGISTRY = {
         }
     },
 
+    debuff_pressure: {
+        category: 'DEBUFF_LIKE',
+        displayName: '威壓',
+        getStatusText: (entry) => `威壓 (剩餘 ${entry.stacks} 回合，攻擊骰鎖定為1，無法使用主動技能)`,
+        onTurnStart: (entity, entry, ctx) => {
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
+                ctx.log(`😱 [威壓] 效果已結束`, 'system');
+            }
+        }
+    },
+
+    spirit_form: {   // 純標記：免疫判定寫在 CombatSystem.applyDamageToTarget，由持有者自行移除
+        category: 'DEBUFF_LIKE',
+        displayName: '靈體化',
+        getStatusText: () => `靈體化 (受到傷害有60%機率免疫，聖痕來源除外)`
+    },
+
+    deadcity_aura: {
+        category: 'DEBUFF_LIKE',
+        displayName: '死寂之城',
+        getStatusText: (entry) => `死寂之城 (剩餘 ${entry.stacks} 回合，攻擊力+2、爆擊率+20%、速度+4)`,
+        liveStatModifier: (entity, entry, statName) =>
+            statName === 'atk' ? 2 : statName === 'speed' ? 4 : statName === 'critChance' ? 0.2 : 0,
+        onTurnStart: (entity, entry, ctx) => {
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
+                ctx.log(`💀 [死寂之城] 效果已結束`);
+            }
+        }
+    },
+
+    death_awakening: {
+        category: 'DEBUFF_LIKE',
+        displayName: '覺醒',
+        getStatusText: (entry) => `覺醒 (剩餘 ${entry.stacks} 回合，死寂之城怪物死亡時：攻擊力+1、格擋+6、全場雙方受2點傷害)`,
+        onTurnStart: (entity, entry, ctx) => {
+            entry.stacks -= 1;
+            if (entry.stacks <= 0) {
+                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
+                ctx.log(`⚔️ [覺醒] 效果已結束`);
+            }
+        },
+        onAllyDeath: (self, entry, ctx) => {
+            if (ctx.dead === self || ctx.dead.faction !== 'deadcity') return;
+            self.atk = (self.atk || 0) + 1;
+            self.block = (self.block || 0) + 6;
+            ctx.log(`⚔️ [覺醒] ${ctx.dead.name} 倒下，${self.name} 攻擊力+1、格擋+6，並對全場雙方造成 2 點傷害！`);
+            const cs = ctx.combatSys;
+            if (ctx.hero && ctx.hero.hp > 0) {
+                cs.applyDamageToTarget(ctx.hero, 2, ctx.log, ctx.enemies, self, { noProc: true });
+            }
+            ctx.enemies.filter(e => e.hp > 0).forEach(e =>
+                cs.applyDamageToTarget(e, 2, ctx.log, ctx.enemies, self, { noProc: true, noScale: true })
+            );
+        }
+    },
+
     debuff_burn: {
         category: 'DEBUFF_LIKE',
         displayName: '灼燒',

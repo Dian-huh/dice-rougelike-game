@@ -130,6 +130,13 @@ export const ENEMY_TEMPLATE = {
         if (this.heroicTurns > 0) tags.push(`🌟[英勇x${this.heroicTurns}]`); 
         if (this.rageTurns > 0) tags.push(`💢[狂怒x${this.rageTurns}]`);
         if (tags.length > 0) parts.push(`狀態: ${tags.join(' ')}`);
+        
+        const findFx = (id) => (this.activeEffects || []).find(e => e.id === id);
+        if (findFx('spirit_form')) tags.push('👻[靈體化]');
+        const auraFx = findFx('deadcity_aura');
+        if (auraFx) tags.push(`💀[死寂之城x${auraFx.stacks}]`);
+        const awakenFx = findFx('death_awakening');
+        if (awakenFx) tags.push(`⚔️[覺醒x${awakenFx.stacks}]`);
 
         return parts.length > 0 ? `\n  ${parts.join(' | ')}` : '';
     },

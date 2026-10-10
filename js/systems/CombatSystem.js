@@ -427,6 +427,110 @@ export class CombatSystem {
             return;
         }
 
+        // ================= 死骸騎士 =================
+        // 突襲：單體爆擊傷害 + 破防（比照 ARMOR_PIERCE，破防先於傷害）+ 對全體1點傷害
+        if (intent.type === 'SPECIAL' && intent.id === 'ASSAULT') {
+            const dmg = this.getEffectiveEnemyAtk(attacker) + (attacker.critBonus || 0) + EffectEngine.getLiveStatBonus(attacker, 'crit');
+            safeLog(`🗡️ ${attacker.name} 發動【突襲】！${target.name} 護甲值歸零並進入【破防】狀態！`);
+            target.armorHits = target.armorMax || 0;
+            target.isVulnerable = true;
+            this.applyDamageToTarget(target, dmg, safeLog, enemies, attacker);
+            if (target.hp > 0) this.applyDamageToTarget(target, 1, safeLog, enemies, attacker);
+            return;
+        }
+
+        // 恐懼：威壓2T + 凍傷4T
+        if (intent.type === 'SPECIAL' && intent.id === 'TERROR') {
+            this.addTimedStatus(target, 'debuff_pressure', 2, 'REFRESH');
+            this.addTimedStatus(target, 'debuff_frostbite', 4, 'REFRESH');
+            safeLog(`😱 ${attacker.name} 發動【恐懼】！${target.name} 陷入【威壓】(2回合)與【凍傷】(4回合)！`);
+            return;
+        }
+
+        // 亡靈斬擊：處死其他死寂之城小怪（擊殺者算死骸騎士，不給詛咒），重複 X+1 次全體4點傷害 + 4格擋
+        if (intent.type === 'SPECIAL' && intent.id === 'UNDEAD_SLASH') {
+            const victims = (enemies || []).filter(e => e !== attacker && e.hp > 0 && e.faction === 'deadcity');
+            safeLog(`💀 ${attacker.name} 發動【亡靈斬擊】！`);
+            victims.forEach(v => {
+                if (v.hp <= 0) return;
+                v.hp = 0;
+                safeLog(`💀 ${v.name} 被斬殺！`);
+                this._handleEnemyDeath(v, attacker, safeLog, enemies, { cause: 'DAMAGE' });
+            });
+            const killed = victims.filter(v => v.hp <= 0).length;   // 連鎖(覺醒)造成的死亡也算
+            const repeats = killed + 1;
+            safeLog(`💀 亡靈斬擊重複 ${repeats} 次：每次對全體造成 4 點傷害並獲得 4 點格擋！`);
+            for (let i = 0; i < repeats; i++) {
+                if (target.hp <= 0 || attacker.hp <= 0) break;
+                this.applyDamageToTarget(target, 4, safeLog, enemies, attacker);
+                attacker.block = (attacker.block || 0) + 4;
+            }
+            return;
+        }
+
+        // 死靈招喚
+        if (intent.type === 'SPECIAL' && intent.id === 'NECRO_SUMMON') {
+            safeLog(`💀 ${attacker.name} 發動【死靈招喚】！`);
+            this.summonEnemies(attacker, intent.summonIds || [], enemies, safeLog);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
+        // 亡靈突襲：單體4點傷害，其他死寂之城小怪立刻各發動一次普通攻擊
+        if (intent.type === 'SPECIAL' && intent.id === 'UNDEAD_RAID') {
+            safeLog(`⚔️ ${attacker.name} 發動【亡靈突襲】！`);
+            this.applyDamageToTarget(target, 4, safeLog, enemies, attacker);
+            const minions = (enemies || []).filter(e => e !== attacker && e.hp > 0 && e.faction === 'deadcity');
+            minions.forEach(m => {
+                if (m.hp <= 0 || target.hp <= 0) return;
+                safeLog(`👊 ${m.name} 受令立刻發動一次普通攻擊！`);
+                this.executeEnemyIntent(m, { id: 'ATTACK', type: 'ATTACK', value: m.atk, canCrit: true, desc: '普通攻擊' }, target, safeLog, enemies);
+            });
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
+        // 骷髏大軍：補滿骷髏士兵到滿場，全體獲得 4×骷髏士兵數 格擋
+        if (intent.type === 'SPECIAL' && intent.id === 'SKELETON_ARMY') {
+            safeLog(`🦴 ${attacker.name} 發動【骷髏大軍】！`);
+            const need = Math.max(0, 4 - (enemies || []).filter(e => e.hp > 0).length);
+            if (need > 0) this.summonEnemies(attacker, Array(need).fill('skeleton_soldier'), enemies, safeLog);
+            const soldiers = (enemies || []).filter(e => e.hp > 0 && e.id === 'skeleton_soldier').length;
+            const blk = 4 * soldiers;
+            (enemies || []).filter(e => e.hp > 0).forEach(e => { e.block = (e.block || 0) + blk; });
+            safeLog(`🛡️ 場上 ${soldiers} 個骷髏士兵，我方全體獲得 ${blk} 點格擋！`);
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            return;
+        }
+
+        // 魔劍覺醒：獲得靈體化，下回合轉換由 corpse_knight.onTurnEnd 處理
+        if (intent.type === 'SPECIAL' && intent.id === 'SWORD_AWAKEN') {
+            if (!EffectEngine.getEntry(attacker, 'spirit_form')) EffectEngine.addStacks(attacker, 'spirit_form', 1);
+            attacker.awakenPending = true;
+            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
+            safeLog(`🗡️ ${attacker.name} 發動【魔劍覺醒】！獲得【靈體化】，下回合 CT 將補至上限並發動【弒滅劍】！`);
+            return;
+        }
+
+        // 弒滅劍：以「執行當下」的 CT 為 X，使目標血量變為 (50-10X)%；仍可被閃避/格擋，覺醒 X 回合
+        if (intent.type === 'SPECIAL' && intent.id === 'ANNIHILATE_SWORD') {
+            const x = Math.max(1, attacker.ct || 0);
+            attacker.ct = 0;
+            attacker.forceSlayerNext = false;
+            const targetPct = Math.max(0, 50 - x * 10);
+            const targetHp = Math.max(1, Math.floor(target.maxHp * targetPct / 100));
+            const dmg = Math.max(0, target.hp - targetHp);
+            safeLog(`🗡️ ${attacker.name} 發動【弒滅劍】(消耗 ${x} CT)！要將 ${target.name} 的血量斬至 ${targetPct}%！`);
+            if (dmg > 0) {
+                this.applyDamageToTarget(target, dmg, safeLog, enemies, attacker, { fixedDamage: dmg, noScale: true });
+            } else {
+                safeLog(`🗡️ ${target.name} 的血量已低於 ${targetPct}%，這一劍沒有造成傷害。`);
+            }
+            this.addTimedStatus(attacker, 'death_awakening', x, 'REFRESH');
+            safeLog(`⚔️ ${attacker.name} 進入【覺醒】狀態 (${x} 回合)！`);
+            return;
+        }
+
         // 🟢 山賊：搶劫
         if (intent.type === 'SPECIAL' && intent.id === 'ROB') {
             this.stealGold(attacker, target, intent.value, safeLog);
@@ -657,6 +761,14 @@ export class CombatSystem {
                 safeLog(msg);
                 break;
             }
+                case 'BLOCK_HEAL_ALL': {   // 骨氣：我方全體（含自己）獲得格擋並回復
+                allAllies.forEach(ally => {
+                    ally.block = (ally.block || 0) + (intent.value || 0);
+                    ally.hp = Math.min(ally.maxHp, ally.hp + (intent.healValue || 0));
+                });
+                safeLog(`🦴 ${attacker.name} 發動【${intent.desc}】，我方全體獲得 ${intent.value || 0} 點格擋並回復 ${intent.healValue || 0} 點HP！`);
+                break;
+            }
             default:
                 safeLog(`⚠️ 未知的友軍增益效果類型: ${intent.effect}`);
         }
@@ -711,7 +823,7 @@ export class CombatSystem {
     static applyDamageToTarget(target, rawDmg, logCallback, enemies, attacker = null, opts = {}) {  // 🟢 Stage 5-6：新增 enemies / attacker 參數
         // 🟢 敵人隨區域成長：只有「帶 dmgMul 的攻擊者」造成的傷害會被放大，
         // 放在格擋/閃避之前，防禦仍照常吸收，log 顯示的也是放大後的數字
-        if (attacker && attacker.dmgMul > 1) {
+        if (attacker && attacker.dmgMul > 1 && !opts.noScale) {
             rawDmg = Math.round(rawDmg * attacker.dmgMul);
         }
         // 1. 🌀 閃避判定
@@ -726,19 +838,21 @@ export class CombatSystem {
             return;
         }
 
-        // 🟢 新增：靈體化免疫（閃避之後、先發制人之前；免疫時不觸發受擊、不加OD）
-        if (target.damageImmuneChance > 0) {
+        // 🟢 靈體化免疫（閃避之後、先發制人之前；免疫時不觸發受擊、不加OD）
+        const spiritEntry = EffectEngine.getEntry(target, 'spirit_form');
+        const immuneChance = Math.max(target.damageImmuneChance || 0, spiritEntry ? 0.6 : 0);
+        if (immuneChance > 0) {
             const tags = opts.tags || [];
-            const exceptTags = target.damageImmuneExceptTags || [];
+            const exceptTags = target.damageImmuneExceptTags || (spiritEntry ? ['聖痕'] : []);
             const isExempt = tags.some(t => exceptTags.includes(t));
-            if (!isExempt && Math.random() < target.damageImmuneChance) {
+            if (!isExempt && Math.random() < immuneChance) {
                 if (logCallback) logCallback(`👻 ${target.name} 【靈體化】生效，免疫本次 ${rawDmg} 點傷害！`);
                 return;
             }
         }
 
         // 🟢 先發制人：閃避掉的攻擊不消耗資格；加成在格擋之前，會被格擋照常吸收
-        rawDmg = this._applyFirstStrikeBonus(target, rawDmg, logCallback);
+        if (!opts.noProc) rawDmg = this._applyFirstStrikeBonus(target, rawDmg, logCallback);
 
         // 🟢 新增：受擊 hook —— 不論後續格擋/傷害計算結果，只要沒被閃避就觸發（反擊層數用）
         const hookCtx = { enemies, log: logCallback, combatSys: this };
@@ -779,6 +893,9 @@ export class CombatSystem {
             logDetails.push(`凍傷+${takenBonus}`);
         }
 
+        // 🟢 固定傷害（弒滅劍）：覆蓋為指定數值，仍會被格擋吸收；呼叫端需同時傳 noScale
+        if (opts.fixedDamage != null) finalDmg = opts.fixedDamage;
+
         // 4. 格擋 (Block) 抵銷扣除 (玩家與敵人皆適用)
         let blockedAmount = 0;   // 🟢 Stage 5-6：記錄這次實際被格擋吸收的量
         if (target.block && target.block > 0) {
@@ -815,16 +932,23 @@ export class CombatSystem {
         // 5. 扣除 HP 與 受傷次數判定
         if (finalDmg > 0) {
             const wasAliveBefore = target.hp > 0;
-            target.hp = Math.max(0, target.hp - finalDmg);
+            const hpBefore = target.hp;
+            let newHp = Math.max(0, hpBefore - finalDmg);
+            // 🟢 血量下限：只在 phase 1 生效（用 floor 確保下限比例 ≤ 門檻，必能觸發轉階段）
+            if (target.hpFloorRatio && (target.phase || 1) === 1) {
+                const floorHp = Math.floor(target.maxHp * target.hpFloorRatio);
+                newHp = Math.max(newHp, Math.min(hpBefore, floorHp));
+            }
+            finalDmg = hpBefore - newHp;
+            target.hp = newHp;
             let detailStr = logDetails.length > 0 ? ` (${logDetails.join(', ')})` : '';
             if (logCallback) logCallback(`💥 造成 ${finalDmg} 點傷害${detailStr} (剩餘 ${target.hp}/${target.maxHp} HP)`);
-            this.checkPhaseTransition(target, logCallback);
-            // 🟢 懸賞：帶有懸賞標記的目標死亡時，玩家獲得50*該目標身上懸賞層數的金幣
             this.checkPhaseTransition(target, logCallback);
             if (wasAliveBefore && target.hp <= 0) {
                 this._handleEnemyDeath(target, attacker || this._activeHero, logCallback, enemies, { cause: 'DAMAGE' });
             }
             this._applyHitProcs(target, attacker, logCallback);
+            if (!opts.noProc) this._applyDamageProcs(target, attacker, enemies, logCallback);
             if (target.armorMax && target.armorMax > 0) {
                 target.armorHits = (target.armorHits || 0) + 1;
                 const effectiveArmorMax = this.getEffectiveArmorMax(target);
@@ -838,10 +962,51 @@ export class CombatSystem {
         }
     }
 
+    // 🟢 通用召喚：存活上限 4（含召喚者），逐隻生成並呼叫 onSpawn；回傳實際生成的敵人
+    static summonEnemies(summoner, ids, enemies, log) {
+        const safeLog = typeof log === 'function' ? log : console.log;
+        const spawned = [];
+        if (!Array.isArray(enemies)) { console.warn('⚠️ 召喚失敗：無法取得 enemies 陣列'); return spawned; }
+        let aliveCount = enemies.filter(e => e.hp > 0).length;
+        for (const id of ids) {
+            if (aliveCount >= 4) { safeLog(`⚠️ 場上存活敵人數量已達上限 (4/4)，無法召喚更多同伴！`); break; }
+            const e = createEnemyInstance(id, summoner.scaleTier || 0);
+            if (!e) continue;
+            enemies.push(e);
+            aliveCount += 1;
+            spawned.push(e);
+            safeLog(`${e.name} 加入了戰場！(當前存活數量: ${aliveCount}/4)`);
+            if (typeof e.onSpawn === 'function') e.onSpawn(e, enemies, safeLog);
+        }
+        return spawned;
+    }
+
+    // 🟢 傷害被動：受傷召喚（亡靈軍勢）、造傷附帶全體傷害（死神氣息）。內部傷害請傳 noProc 避免遞迴
+    static _applyDamageProcs(target, attacker, enemies, log) {
+        const safeLog = typeof log === 'function' ? log : () => {};
+        const pool = enemies || this._activeEnemies;
+        if (target.onDamagedSummonChance && target.hp > 0 && Math.random() < target.onDamagedSummonChance) {
+            safeLog(`💀 ${target.name} 的【亡靈軍勢】發動！`);
+            this.summonEnemies(target, target.onDamagedSummonIds || [], pool, safeLog);
+        }
+        const hero = this._activeHero;
+        if (attacker && attacker.onDealDamageAoeChance && attacker.hp > 0 && hero && hero.hp > 0
+            && Math.random() < attacker.onDealDamageAoeChance) {
+            const v = attacker.onDealDamageAoeValue || 1;
+            safeLog(`☠️ ${attacker.name} 的【死神氣息】發動，對全體造成 ${v} 點傷害！`);
+            this.applyDamageToTarget(hero, v, safeLog, pool, attacker, { noProc: true });
+        }
+    }
+
+    static getEffectiveEnemyCritChance(enemy) {
+        return (enemy.critChance || 0.15) + EffectEngine.getLiveStatBonus(enemy, 'critChance');
+    }
+
     // 🟢 統一的死亡結算：取代 applyDamageToTarget 與 forceKill 各自的懸賞金邏輯，
     // 並預留復活/山賊金幣返還/詛咒（Step3、Step4 才會真的掛欄位，目前多數敵人不受影響）
     static _handleEnemyDeath(target, killer, log, enemies, opts = {}) {
         const safeLog = typeof log === 'function' ? log : console.log;
+        if (target === this._activeHero) return;
         if (opts.cause === 'ESCAPE' || opts.cause === 'FUSE') return;
 
         // 復活（怨氣：不限次數，40%機率）
@@ -880,6 +1045,29 @@ export class CombatSystem {
             EffectEngine.addStacks(killer, 'debuff_curse', target.onDeathCurse);
             safeLog(`☠️ ${target.name} 死亡低語，你獲得 ${target.onDeathCurse} 層【詛咒】！`);
         }
+
+        // 自身死亡時對指定友軍的效果（骷髏士兵：回歸死城）
+        const pool = enemies || this._activeEnemies || [];
+        const eff = target.onDeathAllyEffect;
+        if (eff) {
+            const ally = pool.find(e => e.hp > 0 && e.id === eff.targetId);
+            if (ally) {
+                if (eff.ct) ally.ct = Math.min(ally.maxCt, (ally.ct || 0) + eff.ct);
+                if (eff.block) ally.block = (ally.block || 0) + eff.block;
+                if (eff.heal) ally.hp = Math.min(ally.maxHp, ally.hp + eff.heal);
+                safeLog(`💀 ${target.name} 的【回歸死城】發動：${ally.name} CT+${eff.ct || 0}、格擋+${eff.block || 0}、回復${eff.heal || 0}！`);
+            }
+        }
+
+        // 友軍死亡連動（覺醒等）：通知所有仍存活敵人身上的 onAllyDeath hook
+        pool.forEach(e => {
+            if (e !== target && e.hp > 0) {
+                EffectEngine.runHook('onAllyDeath', e, {
+                    dead: target, killer, hero: this._activeHero,
+                    enemies: pool, log: safeLog, combatSys: this
+                });
+            }
+        });
     }
 
     // 🟢 新增：統一的「即死」結算入口，跳過一般傷害計算，但仍觸發懸賞金結算，

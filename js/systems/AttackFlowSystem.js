@@ -78,10 +78,11 @@ export const AttackFlowSystem = {
         const { hero } = ctx;
         let actionDice;
         let allowReroll = true;
-        if (hero.isPressured) {
+        const pressureFx = EffectEngine.getEntry(hero, 'debuff_pressure');
+        if (hero.isPressured || (pressureFx && pressureFx.stacks > 0)) {
             actionDice = 1;
             hero.overrideDice = null;
-            hero.isPressured = false;
+            hero.isPressured = false;   // 舊一次性旗標照舊消耗；新效果由回合倒數解除
             ctx.log(`😱 【威壓】效果發動，攻擊骰被強制鎖定為 1 點！`, 'system');
             allowReroll = false;
         } else if (hero.overrideDice !== null) {

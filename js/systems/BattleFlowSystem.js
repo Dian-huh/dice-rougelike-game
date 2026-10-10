@@ -71,7 +71,8 @@ export class BattleFlowSystem {
      * @returns { canUse: boolean, reason?: string }
      */
     static canUseActiveSkill(hero) {
-        if (hero.isPressured) {
+        const pressureFx = EffectEngine.getEntry(hero, 'debuff_pressure');
+        if (hero.isPressured || (pressureFx && pressureFx.stacks > 0)) {
             return { canUse: false, reason: `⚠️ 受到【威壓】封印，本回合無法使用主動技能` };
         }
 
