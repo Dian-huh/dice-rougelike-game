@@ -49,7 +49,7 @@ export const REGION_REGISTRY = {
         nodeTypeWeights: { BATTLE: 2, EVENT: 1, REST: 1 },
         enemyPool: { theme: ['undead', 'skeleton', 'ghost_small'] },
         eliteEnemy: 'wraith',
-        regionBoss: 'black_dragon'   // 佔位，比照 region_bandit 用既有boss
+        regionBoss: 'corpse_knight'
     },
     // region_xxx: { ... }  // 之後新增區域只需要在這裡加一筆
 };

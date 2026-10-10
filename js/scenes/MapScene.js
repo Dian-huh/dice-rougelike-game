@@ -1,11 +1,14 @@
 import { NODE_TYPES } from '../data/mapData.js';
 import { gameState } from '../data/gameState.js';
 import { EVENT_DATABASE } from '../data/eventData.js';
-import { getAllCharacterIds, getCharacterData } from '../characters/characterRegistry.js';   // 🟢 這行要存在
+import { getAllCharacterIds, getCharacterData } from '../characters/characterRegistry.js';
 import { getRegionData } from '../data/regionRegistry.js';
 import { PauseMenu } from '../systems/PauseMenu.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
+import { ENEMY_DATABASE } from '../data/enemyData.js';
+
+const enemyName = (id) => (ENEMY_DATABASE[id] && ENEMY_DATABASE[id].name) || id;
 
 export class MapScene extends Phaser.Scene {
     constructor() { 
@@ -117,7 +120,9 @@ export class MapScene extends Phaser.Scene {
 
             const nameText = this.add.text(x, y - 110, regionDef.name, { fontSize: '17px', fill: '#ffffff', wordWrap: { width: cardWidth - 20 } }).setOrigin(0.5);
             const floorText = this.add.text(x, y - 60, `樓層數: ${regionDef.floorRange[0]}~${regionDef.floorRange[1]}`, { fontSize: '13px', fill: '#aaddff' }).setOrigin(0.5);
-            const finalLabel = isFinal ? `👑 最終樓層：${regionDef.regionBoss}` : `⚔️ 最終樓層菁英：${regionDef.eliteEnemy}`;
+            const finalLabel = isFinal
+                ? `👑 最終樓層：${enemyName(regionDef.regionBoss)}`
+                : `⚔️ 最終樓層菁英：${enemyName(regionDef.eliteEnemy)}`;
             const bossText = this.add.text(x, y - 20, finalLabel, { fontSize: '12px', fill: '#ffaaff', wordWrap: { width: cardWidth - 20 } }).setOrigin(0.5);
 
             this.add.text(x, y + 120, '[ 選擇此區域 ]', {

@@ -128,5 +128,16 @@ export const DebugSystem = {
         }
 
         console.log(`🧪 已獲得卡片 [${cardDef.name}] x${count}${isBattleRunning ? '（已直接放入手牌）' : '（已加入牌組收藏，下次抽牌可能抽到）'}`);
-    }
+    },
+
+    // 🟢 直接跳到「指定區域作為本輪壓軸」：用來測 regionBoss 與通關流程（需先進入地圖畫面）
+    jumpToFinalRegion(regionId = 'region_deadcity') {
+        if (!gameState.hero) { console.error('⚠️ 請先開始一局遊戲（進入地圖後再呼叫）'); return; }
+        gameState.regionsCompleted = gameState.regionsPerRun - 1;
+        gameState.pendingRegionChoices = null;
+        gameState.chooseRegion(regionId);
+        const mapScene = this._game.scene.getScene('MapScene');
+        if (mapScene && mapScene.scene.isActive()) mapScene.scene.restart();
+        console.log(`🧪 已跳到壓軸區域 [${regionId}]（regionsCompleted=${gameState.regionsCompleted}，敵人為最高成長等級）`);
+    },
 };

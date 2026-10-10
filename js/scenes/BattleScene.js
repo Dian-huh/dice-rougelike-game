@@ -767,7 +767,8 @@ export class BattleScene extends Phaser.Scene {
         if (this.pauseBtn) this.pauseBtn.destroy();
         this.add.rectangle(425, 275, 850, 550, 0x000000, 0.92).setDepth(3000);
         this.add.text(425, 200, '🏆 恭喜通關！', { fontSize: '32px', fill: '#ffcc00' }).setOrigin(0.5).setDepth(3001);
-        this.add.text(425, 250, `你成功擊敗了滅世黑龍，拯救了世界！`, { fontSize: '16px', fill: '#cccccc' }).setOrigin(0.5).setDepth(3001);
+        const bossName = (this.enemies && this.enemies[0] && this.enemies[0].name) || '最終首領';
+        this.add.text(425, 250, `你成功擊敗了${bossName}，拯救了世界！`, { fontSize: '16px', fill: '#cccccc' }).setOrigin(0.5).setDepth(3001);
         this.add.text(425, 290, `💰 最終金幣：${this.hero.gold || 0}　❤️ 剩餘 HP：${this.hero.hp}/${this.hero.maxHp}`, { fontSize: '14px', fill: '#4efa7b' }).setOrigin(0.5).setDepth(3001);
 
         this.add.text(425, 360, '[ 🔄 開始新的旅程 ]', {
