@@ -8,6 +8,18 @@
     <style>
     html, body { margin: 0; height: 100%; background: #111118; overflow: hidden; color: #fff; font-family: monospace; }
     #game-container { width: 100vw; height: 100vh; }
+
+    /* 暫時允許小螢幕頁面捲動；桌面端維持原本的固定視窗行為。 */
+    @media (max-width: 900px), (max-height: 600px) {
+        html, body {
+            overflow: auto;
+            min-height: 100%;
+        }
+
+        #game-container {
+            overflow: visible;
+        }
+    }
     </style>
 </head>
 <body>
