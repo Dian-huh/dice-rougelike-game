@@ -50,7 +50,9 @@ export function getStageData(node, options = {}) {
         stageName = `${regionDef ? regionDef.name + ' - ' : ''}${node.label || '特殊戰鬥'}`;
     } else if (nodeType === 'BATTLE_FINAL' && regionDef) {
         if (options.isFinalOfRun) {
-            enemyIds = [regionDef.regionBoss];
+            enemyIds = Array.isArray(regionDef.regionBoss)
+                ? [...regionDef.regionBoss]
+                : [regionDef.regionBoss];
             stageName = `👑 ${regionDef.name} - 壓軸首領戰`;
         } else {
             enemyIds = [regionDef.eliteEnemy];

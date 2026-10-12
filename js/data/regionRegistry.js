@@ -39,7 +39,8 @@ export const REGION_REGISTRY = {
         nodeTypeWeights: { BATTLE: 2, EVENT: 1, REST: 1 },
         enemyPool: { theme: ['bandit', 'wanted_criminal'] },
         eliteEnemy: 'bandit_chief',
-        regionBoss: 'boundary_guardian'   // 佔位
+        regionBoss: ['ice_brother','fire_brother'],
+
     },
     region_deadcity: {
         id: 'region_deadcity',

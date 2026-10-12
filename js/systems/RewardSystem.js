@@ -6,6 +6,7 @@ import {
     REWARD_CARD_POOL
 } from '../data/rewardPoolData.js';
 import { EffectEngine } from './EffectEngine.js';
+import { fullOverlay, X, Y, S, px } from '../config/layout.js';
 // ====================================================================
 // 🟢 第 2 階段：抽獎邏輯 + UI 重構
 //
@@ -17,6 +18,8 @@ import { EffectEngine } from './EffectEngine.js';
 //   - 刷新時盡量避免「跟上一批完全相同的 3 個類別組合」（依既有 learning：
 //     只追蹤緊鄰的前一批，不追蹤完整歷史，因類別只有5種，過嚴格會無解）
 //   - 收集類（COLLECTION_MILESTONES）不進獎勵池，選擇獎勵後累計次數達標自動觸發
+//
+// 🟢 版面：UI 座標沿用舊版 850x550 的設計值，統一用 X()/Y()/S()/px() 換算成 1920x1080
 // ====================================================================
 
 const ALL_CATEGORIES = ['STAT', 'BLESSING', 'CARD', 'DICE', 'SPEEDRUN'];
@@ -50,8 +53,6 @@ export class RewardSystem {
         this.renderRewardUI(scene, stageData, config, stageName, batch);
     }
 
-    // ----------------------------------------------------------------
-    // 抽獎核心：決定本次要出現的 N 組獎勵（N = 3 + extraChoices）
     // ----------------------------------------------------------------
     // 抽獎核心：固定產生 3 組候選（min 是防呆，避免類別數<3時出錯）
     // ----------------------------------------------------------------
@@ -168,7 +169,6 @@ export class RewardSystem {
                 ? `(${displayCost}費，依聖痕層數浮動)`
                 : `(${displayCost}費)`;
 
-            // 修改後
             const newCard = DeckSystem.instantiateCardDef(cardDef);   // 🟢 提前建立，供牌組已滿時的替換流程共用
 
             return {
@@ -210,7 +210,7 @@ export class RewardSystem {
     }
 
     // ----------------------------------------------------------------
-    // UI 渲染
+    // UI 渲染（下方座標皆為舊版 850x550 設計值，用 X/Y/S/px 換算）
     // ----------------------------------------------------------------
     static renderRewardUI(scene, stageData, config, stageName, batch) {
         if (scene._rewardContainer) {
@@ -221,33 +221,33 @@ export class RewardSystem {
         const rewardContainer = scene.add.container(0, 0);
         scene._rewardContainer = rewardContainer;
 
-        const overlay = scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.9);
-        const title = scene.add.text(260, 40, `🏆 ${stageName} 戰鬥獲勝！`, { fontSize: '20px', fill: '#ffcc00' });
-        const subTitle = scene.add.text(280, 68, `💰 現有金幣: ${scene.hero.gold || 0}`, { fontSize: '13px', fill: '#00ffaa' });
+        const overlay = fullOverlay(scene, 0.9);
+        const title = scene.add.text(X(260), Y(40), `🏆 ${stageName} 戰鬥獲勝！`, { fontSize: px(20), fill: '#ffcc00' });
+        const subTitle = scene.add.text(X(280), Y(68), `💰 現有金幣: ${scene.hero.gold || 0}`, { fontSize: px(13), fill: '#00ffaa' });
 
         rewardContainer.add([overlay, title, subTitle]);
 
         // 🟢 新增：多選提示（只有還能選超過1項時才顯示，避免平常畫面多雜訊）
         if ((scene._rewardChoicesRemaining || 1) > 1) {
-            const choiceHint = scene.add.text(280, 88, `🎯 本次還可選擇 ${scene._rewardChoicesRemaining} 項獎勵！`, { fontSize: '12px', fill: '#ffaaff' });
+            const choiceHint = scene.add.text(X(280), Y(88), `🎯 本次還可選擇 ${scene._rewardChoicesRemaining} 項獎勵！`, { fontSize: px(12), fill: '#ffaaff' });
             rewardContainer.add(choiceHint);
         }
 
         const slotCount = batch.length;
         const totalWidth = slotCount * 200 + (slotCount - 1) * 20;
-        const startX = 425 - totalWidth / 2 + 100;
+        const startX = 425 - totalWidth / 2 + 100;   // 舊版座標
 
         batch.forEach((slot, index) => {
-            const x = startX + index * 220;
+            const x = startX + index * 220;           // 舊版座標
 
-            const cardBg = scene.add.rectangle(x, 235, 200, 190, 0x222233)
-                .setStrokeStyle(2, 0x00ffff)
+            const cardBg = scene.add.rectangle(X(x), Y(235), S(200), S(190), 0x222233)
+                .setStrokeStyle(S(2), 0x00ffff)
                 .setInteractive({ useHandCursor: true })
                 .on('pointerdown', () => this.onRewardChosen(scene, stageData, slot, batch));
 
-            const nameText = scene.add.text(x - 90, 150, slot.title, { fontSize: '13px', fill: '#ffffff', wordWrap: { width: 180 } });
-            const descText = scene.add.text(x - 90, 195, slot.desc, { fontSize: '11px', fill: '#aaaaaa', wordWrap: { width: 180 }, lineSpacing: 3 });
-            const selectBtn = scene.add.text(x - 40, 300, '[ 選擇此項 ]', { fontSize: '13px', fill: '#00ffaa' });
+            const nameText = scene.add.text(X(x - 90), Y(150), slot.title, { fontSize: px(13), fill: '#ffffff', wordWrap: { width: S(180) } });
+            const descText = scene.add.text(X(x - 90), Y(195), slot.desc, { fontSize: px(11), fill: '#aaaaaa', wordWrap: { width: S(180) }, lineSpacing: S(3) });
+            const selectBtn = scene.add.text(X(x - 40), Y(300), '[ 選擇此項 ]', { fontSize: px(13), fill: '#00ffaa' });
 
             rewardContainer.add([cardBg, nameText, descText, selectBtn]);
         });
@@ -257,14 +257,14 @@ export class RewardSystem {
         const rerollCost = rerollState.freeUsed ? (20 + 5 * rerollState.paidCount) : 0;
         const rerollLabel = rerollState.freeUsed ? `🔄 刷新獎勵 (💰${rerollCost})` : `🔄 免費刷新獎勵`;
 
-        const rerollBtn = scene.add.text(300, 385, `[ ${rerollLabel} ]`, {
-            fontSize: '14px', fill: '#66ccff', backgroundColor: '#222', padding: { x: 10, y: 5 }
+        const rerollBtn = scene.add.text(X(300), Y(385), `[ ${rerollLabel} ]`, {
+            fontSize: px(14), fill: '#66ccff', backgroundColor: '#222', padding: { x: S(10), y: S(5) }
         }).setInteractive({ useHandCursor: true })
           .on('pointerdown', () => this.onRerollClicked(scene, stageData, config, stageName));
         rewardContainer.add(rerollBtn);
 
-        const skipBtn = scene.add.text(280, 425, '[ 🚫 跳過獎勵：換取 +50 金幣 & 恢復 5 HP ]', {
-            fontSize: '14px', fill: '#ff6666', backgroundColor: '#222', padding: { x: 10, y: 5 }
+        const skipBtn = scene.add.text(X(280), Y(425), '[ 🚫 跳過獎勵：換取 +50 金幣 & 恢復 5 HP ]', {
+            fontSize: px(14), fill: '#ff6666', backgroundColor: '#222', padding: { x: S(10), y: S(5) }
         }).setInteractive({ useHandCursor: true })
           .on('pointerdown', () => {
               const goldBonusPct = scene.hero.goldGainBonus || 0;                    // 🔧 Stage 5後續修正
@@ -330,10 +330,10 @@ export class RewardSystem {
         const container = scene.add.container(0, 0).setDepth(2000);
         scene._rewardContainer = container;
 
-        const overlay = scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.92);
-        const title = scene.add.text(60, 25,
+        const overlay = fullOverlay(scene, 0.92);
+        const title = scene.add.text(X(60), Y(25),
             `🎴 牌組已達上限 (${scene.deckSys.originalDeck.length}/${scene.hero.deckCapacity})，請選一張現有卡片替換為 [${newCardDef.name}]：`,
-            { fontSize: '13px', fill: '#ffcc00', wordWrap: { width: 730 } });
+            { fontSize: px(13), fill: '#ffcc00', wordWrap: { width: S(730) } });
         container.add([overlay, title]);
 
         const deck = scene.deckSys.originalDeck;
@@ -341,13 +341,13 @@ export class RewardSystem {
         deck.forEach((card, idx) => {
             const col = idx % perRow;
             const row = Math.floor(idx / perRow);
-            const x = 90 + col * 140;
+            const x = 90 + col * 140;   // 舊版座標
             const y = 90 + row * 85;
 
-            const cardBg = scene.add.rectangle(x, y, 120, 65, 0x222233)
-                .setStrokeStyle(2, 0x00ffff)
+            const cardBg = scene.add.rectangle(X(x), Y(y), S(120), S(65), 0x222233)
+                .setStrokeStyle(S(2), 0x00ffff)
                 .setInteractive({ useHandCursor: true });
-            const nameText = scene.add.text(x - 55, y - 25, card.name, { fontSize: '12px', fill: '#fff', wordWrap: { width: 110 } });
+            const nameText = scene.add.text(X(x - 55), Y(y - 25), card.name, { fontSize: px(12), fill: '#fff', wordWrap: { width: S(110) } });
 
             cardBg.on('pointerdown', () => {
                 deck.splice(idx, 1);
@@ -361,8 +361,8 @@ export class RewardSystem {
             container.add([cardBg, nameText]);
         });
 
-        const cancelBtn = scene.add.text(320, 500, '[ 🚫 放棄這張新卡片 ]', {
-            fontSize: '13px', fill: '#ff6666', backgroundColor: '#222', padding: { x: 10, y: 5 }
+        const cancelBtn = scene.add.text(X(320), Y(500), '[ 🚫 放棄這張新卡片 ]', {
+            fontSize: px(13), fill: '#ff6666', backgroundColor: '#222', padding: { x: S(10), y: S(5) }
         }).setInteractive({ useHandCursor: true })
           .on('pointerdown', () => {
               scene.appendLog(`🚫 放棄了新卡片 [${newCardDef.name}]`, 'system');

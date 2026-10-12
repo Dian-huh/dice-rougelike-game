@@ -1,4 +1,5 @@
 import { TUTORIAL_PAGES } from '../data/tutorialData.js';
+import { fullOverlay, CX, X, Y, S, px } from '../config/layout.js';
 
 export class TutorialSystem {
     static hasSeenTutorial() {
@@ -13,8 +14,8 @@ export class TutorialSystem {
         let pageIndex = 0;
         const container = scene.add.container(0, 0).setDepth(4000);
 
-        const overlay = scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.93);
-        overlay.setInteractive(); // 🟢 新增：攔截點擊，避免玩家隔著教學視窗點到底下的按鈕/手牌
+        // fullOverlay 本身已可互動：攔截點擊，避免玩家隔著教學視窗點到底下的按鈕/手牌
+        const overlay = fullOverlay(scene, 0.93);
         container.add(overlay);
 
         let titleText, bodyText, pageIndicator, nextBtn, skipBtn;
@@ -28,21 +29,21 @@ export class TutorialSystem {
 
             const page = TUTORIAL_PAGES[pageIndex];
 
-            titleText = scene.add.text(425, 80, page.title, { fontSize: '22px', fill: '#ffcc00' }).setOrigin(0.5);
+            titleText = scene.add.text(CX, Y(80), page.title, { fontSize: px(22), fill: '#ffcc00' }).setOrigin(0.5);
 
             const bodyStr = page.lines.join('\n\n');
-            bodyText = scene.add.text(425, 240, bodyStr, {
-                fontSize: '14px', fill: '#eeeeee', align: 'left',
-                wordWrap: { width: 620 }, lineSpacing: 8
+            bodyText = scene.add.text(CX, Y(240), bodyStr, {
+                fontSize: px(14), fill: '#eeeeee', align: 'left',
+                wordWrap: { width: S(620) }, lineSpacing: S(8)
             }).setOrigin(0.5);
 
-            pageIndicator = scene.add.text(425, 420, `${pageIndex + 1} / ${TUTORIAL_PAGES.length}`, {
-                fontSize: '12px', fill: '#888888'
+            pageIndicator = scene.add.text(CX, Y(420), `${pageIndex + 1} / ${TUTORIAL_PAGES.length}`, {
+                fontSize: px(12), fill: '#888888'
             }).setOrigin(0.5);
 
             const isLastPage = pageIndex === TUTORIAL_PAGES.length - 1;
-            nextBtn = scene.add.text(425, 460, isLastPage ? '[ 我知道了，開始冒險！ ]' : '[ 下一頁 ▶ ]', {
-                fontSize: '16px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 14, y: 8 }
+            nextBtn = scene.add.text(CX, Y(460), isLastPage ? '[ 我知道了，開始冒險！ ]' : '[ 下一頁 ▶ ]', {
+                fontSize: px(16), fill: '#00ffaa', backgroundColor: '#222', padding: { x: S(14), y: S(8) }
             }).setOrigin(0.5)
               .setInteractive({ useHandCursor: true })
               .on('pointerdown', () => {
@@ -59,8 +60,8 @@ export class TutorialSystem {
             container.add([titleText, bodyText, pageIndicator, nextBtn]);
 
             if (!isLastPage) {
-                skipBtn = scene.add.text(760, 40, '跳過教學', {
-                    fontSize: '12px', fill: '#888888'
+                skipBtn = scene.add.text(X(760), Y(40), '跳過教學', {
+                    fontSize: px(12), fill: '#888888'
                 }).setInteractive({ useHandCursor: true })
                   .on('pointerdown', () => {
                       TutorialSystem.markTutorialSeen();

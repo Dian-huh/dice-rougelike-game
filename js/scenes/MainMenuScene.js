@@ -4,6 +4,7 @@ import { SaveSystem } from '../systems/SaveSystem.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
 import { DeckSystem } from '../systems/DeckSystem.js';
 import { getAllCharacterIds, getCharacterData, getCharacterDeck } from '../characters/characterRegistry.js';
+import { fullOverlay, CX, X, Y, S, px } from '../config/layout.js';
 
 export class MainMenuScene extends Phaser.Scene {
     constructor() {
@@ -17,7 +18,7 @@ export class MainMenuScene extends Phaser.Scene {
     renderMainMenu() {
         const container = this.add.container(0, 0);
 
-        const title = this.add.text(425, 110, '🎲 骰子地牢', { fontSize: '32px', fill: '#ffcc00' }).setOrigin(0.5);
+        const title = this.add.text(CX, Y(110), '🎲 骰子地牢', { fontSize: px(32), fill: '#ffcc00' }).setOrigin(0.5);
         container.add(title);
 
         const hasSave = SaveSystem.hasSave();
@@ -32,9 +33,9 @@ export class MainMenuScene extends Phaser.Scene {
 
         const startY = 230;
         buttons.forEach((btn, idx) => {
-            const y = startY + idx * 55;
-            const btnText = this.add.text(425, y, btn.label, {
-                fontSize: '18px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 16, y: 10 }
+            const y = Y(startY + idx * 55);
+            const btnText = this.add.text(CX, y, btn.label, {
+                fontSize: px(18), fill: '#00ffaa', backgroundColor: '#222', padding: { x: S(16), y: S(10) }
             }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', btn.onClick);
             container.add(btnText);
         });
@@ -59,19 +60,19 @@ export class MainMenuScene extends Phaser.Scene {
 
     showConfirmDialog(message, onConfirm) {
         const container = this.add.container(0, 0).setDepth(2000);
-        const overlay = this.add.rectangle(425, 275, 850, 550, 0x000000, 0.92).setInteractive();
-        const bg = this.add.rectangle(425, 260, 500, 160, 0x111122).setStrokeStyle(2, 0xff6666);
-        const text = this.add.text(425, 220, message, {
-            fontSize: '14px', fill: '#ffffff', align: 'center', wordWrap: { width: 440 }
+        const overlay = fullOverlay(this, 0.92);
+        const bg = this.add.rectangle(CX, Y(260), S(500), S(160), 0x111122).setStrokeStyle(S(2), 0xff6666);
+        const text = this.add.text(CX, Y(220), message, {
+            fontSize: px(14), fill: '#ffffff', align: 'center', wordWrap: { width: S(440) }
         }).setOrigin(0.5);
 
-        const confirmBtn = this.add.text(340, 300, '[ 確定覆蓋 ]', {
-            fontSize: '15px', fill: '#ff6666', backgroundColor: '#222', padding: { x: 10, y: 6 }
+        const confirmBtn = this.add.text(X(340), Y(300), '[ 確定覆蓋 ]', {
+            fontSize: px(15), fill: '#ff6666', backgroundColor: '#222', padding: { x: S(10), y: S(6) }
         }).setOrigin(0.5).setInteractive({ useHandCursor: true })
           .on('pointerdown', () => { container.destroy(); onConfirm(); });
 
-        const cancelBtn = this.add.text(510, 300, '[ 取消 ]', {
-            fontSize: '15px', fill: '#66ccff', backgroundColor: '#222', padding: { x: 10, y: 6 }
+        const cancelBtn = this.add.text(X(510), Y(300), '[ 取消 ]', {
+            fontSize: px(15), fill: '#66ccff', backgroundColor: '#222', padding: { x: S(10), y: S(6) }
         }).setOrigin(0.5).setInteractive({ useHandCursor: true })
           .on('pointerdown', () => container.destroy());
 
@@ -99,33 +100,33 @@ export class MainMenuScene extends Phaser.Scene {
         const charData = getCharacterData(charId);
         const tempDeckSys = new DeckSystem(getCharacterDeck(charId));
 
-        const overlay = this.add.rectangle(425, 275, 850, 550, 0x000000, 0.94).setInteractive();
-        const title = this.add.text(425, 30, `🎴 ${charData.name} - 起始牌組`, { fontSize: '18px', fill: '#ffcc00' }).setOrigin(0.5);
+        const overlay = fullOverlay(this, 0.94);
+        const title = this.add.text(CX, Y(30), `🎴 ${charData.name} - 起始牌組`, { fontSize: px(18), fill: '#ffcc00' }).setOrigin(0.5);
         container.add([overlay, title]);
 
         const groups = tempDeckSys.getCollectionSummary();
         const perRow = 5;
         groups.forEach((g, idx) => {
             const col = idx % perRow, row = Math.floor(idx / perRow);
-            const x = 90 + col * 140, y = 90 + row * 95;
+            const x = X(90 + col * 140), y = Y(90 + row * 95);
             const countLabel = g.count > 1 ? ` x${g.count}` : '';
             const costLabel = (typeof g.card.getCost === 'function') ? `${g.card.cost}費(浮動)` : `${g.card.cost}費`;
 
-            const cardBg = this.add.rectangle(x, y, 120, 78, 0x222233).setStrokeStyle(2, 0x00ffff);
-            const nameText = this.add.text(x - 55, y - 33, `${g.card.name}${countLabel}`, { fontSize: '12px', fill: '#fff', wordWrap: { width: 110 } });
-            const costText = this.add.text(x - 55, y - 14, costLabel, { fontSize: '10px', fill: '#66ccff' });
-            const descText = this.add.text(x - 55, y + 2, g.card.desc, { fontSize: '9px', fill: '#aaaaaa', wordWrap: { width: 110, useAdvancedWrap: true } });
+            const cardBg = this.add.rectangle(x, y, S(120), S(78), 0x222233).setStrokeStyle(S(2), 0x00ffff);
+            const nameText = this.add.text(x - S(55), y - S(33), `${g.card.name}${countLabel}`, { fontSize: px(12), fill: '#fff', wordWrap: { width: S(110) } });
+            const costText = this.add.text(x - S(55), y - S(14), costLabel, { fontSize: px(10), fill: '#66ccff' });
+            const descText = this.add.text(x - S(55), y + S(2), g.card.desc, { fontSize: px(9), fill: '#aaaaaa', wordWrap: { width: S(110), useAdvancedWrap: true } });
             container.add([cardBg, nameText, costText, descText]);
         });
 
         if (ids.length > 1) {
-            const prevBtn = this.add.text(60, 275, '◀', { fontSize: '24px', fill: '#66ccff' })
+            const prevBtn = this.add.text(X(60), Y(275), '◀', { fontSize: px(24), fill: '#66ccff' })
                 .setInteractive({ useHandCursor: true })
                 .on('pointerdown', () => {
                     this._codexCharIndex = (this._codexCharIndex - 1 + ids.length) % ids.length;
                     this.renderCodexPanel();
                 });
-            const nextBtn = this.add.text(790, 275, '▶', { fontSize: '24px', fill: '#66ccff' })
+            const nextBtn = this.add.text(X(790), Y(275), '▶', { fontSize: px(24), fill: '#66ccff' })
                 .setInteractive({ useHandCursor: true })
                 .on('pointerdown', () => {
                     this._codexCharIndex = (this._codexCharIndex + 1) % ids.length;
@@ -134,8 +135,8 @@ export class MainMenuScene extends Phaser.Scene {
             container.add([prevBtn, nextBtn]);
         }
 
-        const closeBtn = this.add.text(425, 510, '[ 關閉 ]', {
-            fontSize: '15px', fill: '#ff6666', backgroundColor: '#222', padding: { x: 12, y: 6 }
+        const closeBtn = this.add.text(CX, Y(510), '[ 關閉 ]', {
+            fontSize: px(15), fill: '#ff6666', backgroundColor: '#222', padding: { x: S(12), y: S(6) }
         }).setOrigin(0.5).setInteractive({ useHandCursor: true })
           .on('pointerdown', () => { container.destroy(); this._codexContainer = null; });
         container.add(closeBtn);
@@ -150,18 +151,18 @@ export class MainMenuScene extends Phaser.Scene {
         const container = this.add.container(0, 0).setDepth(1800);
         this._settingsContainer = container;
 
-        const overlay = this.add.rectangle(425, 275, 850, 550, 0x000000, 0.94).setInteractive();
-        const title = this.add.text(425, 100, '⚙️ 設定', { fontSize: '20px', fill: '#ffcc00' }).setOrigin(0.5);
+        const overlay = fullOverlay(this, 0.94);
+        const title = this.add.text(CX, Y(100), '⚙️ 設定', { fontSize: px(20), fill: '#ffcc00' }).setOrigin(0.5);
         container.add([overlay, title]);
 
-        const tutorialBtn = this.add.text(425, 200, '[ 📖 重看教學 ]', {
-            fontSize: '16px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 12, y: 8 }
+        const tutorialBtn = this.add.text(CX, Y(200), '[ 📖 重看教學 ]', {
+            fontSize: px(16), fill: '#00ffaa', backgroundColor: '#222', padding: { x: S(12), y: S(8) }
         }).setOrigin(0.5).setInteractive({ useHandCursor: true })
           .on('pointerdown', () => TutorialSystem.showTutorialUI(this, () => {}));
         container.add(tutorialBtn);
 
-        const closeBtn = this.add.text(425, 480, '[ 關閉 ]', {
-            fontSize: '15px', fill: '#ff6666', backgroundColor: '#222', padding: { x: 12, y: 6 }
+        const closeBtn = this.add.text(CX, Y(480), '[ 關閉 ]', {
+            fontSize: px(15), fill: '#ff6666', backgroundColor: '#222', padding: { x: S(12), y: S(6) }
         }).setOrigin(0.5).setInteractive({ useHandCursor: true })
           .on('pointerdown', () => { container.destroy(); this._settingsContainer = null; });
         container.add(closeBtn);

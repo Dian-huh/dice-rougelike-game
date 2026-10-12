@@ -3,6 +3,10 @@ import { DeckSystem } from './DeckSystem.js';
 import { EffectEngine } from './EffectEngine.js';
 import { UIInteractionSystem } from './UIInteractionSystem.js';
 import { SaveSystem } from './SaveSystem.js';
+import { fullOverlay, CX, X, Y, S, px } from '../config/layout.js';
+
+// 🟢 版面：座標沿用舊版 850x550 的設計值，統一用 X()/Y()/S()/px() 換算成 1920x1080。
+// addButton 的 y 參數也是舊版座標（內部轉換）。
 
 const SHOP_PRICES = {
     card: 30,
@@ -43,10 +47,10 @@ export class ShopSystem {
         this.destroyUI(scene);
         const container = scene.add.container(0, 0).setDepth(2000);
         scene._restContainer = container;
-        const overlay = scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.94).setInteractive();
-        const title = scene.add.text(425, 55, '🔥 休息區', { fontSize: '22px', fill: '#ffcc00' }).setOrigin(0.5);
-        const status = scene.add.text(425, 115, `基礎休息：HP ${before} → ${after}\n💰 金幣：${gameState.hero.gold || 0}`, {
-            fontSize: '15px', fill: '#ffffff', align: 'center', lineSpacing: 8
+        const overlay = fullOverlay(scene, 0.94);
+        const title = scene.add.text(CX, Y(55), '🔥 休息區', { fontSize: px(22), fill: '#ffcc00' }).setOrigin(0.5);
+        const status = scene.add.text(CX, Y(115), `基礎休息：HP ${before} → ${after}\n💰 金幣：${gameState.hero.gold || 0}`, {
+            fontSize: px(15), fill: '#ffffff', align: 'center', lineSpacing: S(8)
         }).setOrigin(0.5);
         container.add([overlay, title, status]);
 
@@ -70,9 +74,9 @@ export class ShopSystem {
         this.destroyUI(scene);
         const container = scene.add.container(0, 0).setDepth(2000);
         scene._restContainer = container;
-        const overlay = scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.94).setInteractive();
-        const title = scene.add.text(425, 42, '🛒 休息區商店', { fontSize: '21px', fill: '#ffcc00' }).setOrigin(0.5);
-        const gold = scene.add.text(425, 78, `💰 金幣：${gameState.hero.gold || 0}`, { fontSize: '14px', fill: '#00ffaa' }).setOrigin(0.5);
+        const overlay = fullOverlay(scene, 0.94);
+        const title = scene.add.text(CX, Y(42), '🛒 休息區商店', { fontSize: px(21), fill: '#ffcc00' }).setOrigin(0.5);
+        const gold = scene.add.text(CX, Y(78), `💰 金幣：${gameState.hero.gold || 0}`, { fontSize: px(14), fill: '#00ffaa' }).setOrigin(0.5);
         container.add([overlay, title, gold]);
 
         this.addButton(scene, container, 145, `🎴 買兩張新卡（${this.getPrice(scene, 'card')} 金幣）`, '#00ffaa', () => this.showCardOffer(scene, gameState));
@@ -95,24 +99,24 @@ export class ShopSystem {
         this.destroyUI(scene);
         const container = scene.add.container(0, 0).setDepth(2100);
         scene._restContainer = container;
-        container.add(scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.95).setInteractive());
-        container.add(scene.add.text(425, 38, `🎴 ${theme || '卡片'}：兩張一起購買或放棄`, {
-            fontSize: '17px', fill: '#ffcc00', wordWrap: { width: 760 }, align: 'center'
+        container.add(fullOverlay(scene, 0.95));
+        container.add(scene.add.text(CX, Y(38), `🎴 ${theme || '卡片'}：兩張一起購買或放棄`, {
+            fontSize: px(17), fill: '#ffcc00', wordWrap: { width: S(760) }, align: 'center'
         }).setOrigin(0.5));
-        container.add(scene.add.text(425, 72, `💰 剩餘金幣：${gameState.hero.gold || 0}`, {
-            fontSize: '14px', fill: '#00ffaa'
+        container.add(scene.add.text(CX, Y(72), `💰 剩餘金幣：${gameState.hero.gold || 0}`, {
+            fontSize: px(14), fill: '#00ffaa'
         }).setOrigin(0.5));
 
         cards.forEach((card, index) => {
-            const x = 315 + index * 220;
-            const bg = scene.add.rectangle(x, 220, 190, 250, 0x222233).setStrokeStyle(2, 0x00ffff);
-            const name = scene.add.text(x, 135, card.name, { fontSize: '14px', fill: '#ffffff', wordWrap: { width: 165 }, align: 'center' }).setOrigin(0.5);
-            const desc = scene.add.text(x, 235, card.desc || '', { fontSize: '11px', fill: '#bbbbbb', wordWrap: { width: 160 }, align: 'center', lineSpacing: 4 }).setOrigin(0.5);
+            const x = X(315 + index * 220);
+            const bg = scene.add.rectangle(x, Y(220), S(190), S(250), 0x222233).setStrokeStyle(S(2), 0x00ffff);
+            const name = scene.add.text(x, Y(135), card.name, { fontSize: px(14), fill: '#ffffff', wordWrap: { width: S(165) }, align: 'center' }).setOrigin(0.5);
+            const desc = scene.add.text(x, Y(235), card.desc || '', { fontSize: px(11), fill: '#bbbbbb', wordWrap: { width: S(160) }, align: 'center', lineSpacing: S(4) }).setOrigin(0.5);
             container.add([bg, name, desc]);
         });
 
-        const buyButton = scene.add.text(425, 380, `[ ✅ 一起購買（${price} 金幣） ]`, {
-            fontSize: '15px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 12, y: 7 }
+        const buyButton = scene.add.text(CX, Y(380), `[ ✅ 一起購買（${price} 金幣） ]`, {
+            fontSize: px(15), fill: '#00ffaa', backgroundColor: '#222', padding: { x: S(12), y: S(7) }
         }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
             const deck = gameState.deckSys.originalDeck;
             if (!this.canPay(gameState, price)) {
@@ -196,15 +200,16 @@ export class ShopSystem {
         this.destroyUI(scene);
         const container = scene.add.container(0, 0).setDepth(2100);
         scene._restContainer = container;
-        container.add(scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.95).setInteractive());
-        container.add(scene.add.text(425, 42, title, { fontSize: '17px', fill: '#ffcc00', wordWrap: { width: 760 }, align: 'center' }).setOrigin(0.5));
-        container.add(scene.add.text(425, 78, `💰 剩餘金幣：${gameState.hero.gold || 0}`, { fontSize: '14px', fill: '#00ffaa' }).setOrigin(0.5));
+        container.add(fullOverlay(scene, 0.95));
+        container.add(scene.add.text(CX, Y(42), title, { fontSize: px(17), fill: '#ffcc00', wordWrap: { width: S(760) }, align: 'center' }).setOrigin(0.5));
+        container.add(scene.add.text(CX, Y(78), `💰 剩餘金幣：${gameState.hero.gold || 0}`, { fontSize: px(14), fill: '#00ffaa' }).setOrigin(0.5));
         choices.forEach((item, index) => {
-            const x = choices.length === 1 ? 425 : 245 + index * 180;
-            const bg = scene.add.rectangle(x, 245, 160, 250, 0x222233).setStrokeStyle(2, 0x00ffff).setInteractive({ useHandCursor: true });
-            const name = scene.add.text(x, 155, item.name, { fontSize: '14px', fill: '#ffffff', wordWrap: { width: 140 }, align: 'center' }).setOrigin(0.5);
-            const text = scene.add.text(x, 245, desc(item), { fontSize: '11px', fill: '#bbbbbb', wordWrap: { width: 135 }, align: 'center', lineSpacing: 4 }).setOrigin(0.5);
-            const button = scene.add.text(x, 340, `[ ${choices.length === 2 ? '購買' : '選擇'} ]`, { fontSize: '13px', fill: '#00ffaa' }).setOrigin(0.5);
+            // 🔧 以畫面中心對稱排列（3 張時與舊版位置相同；1、2 張時也會置中）
+            const x = X(425 + (index - (choices.length - 1) / 2) * 180);
+            const bg = scene.add.rectangle(x, Y(245), S(160), S(250), 0x222233).setStrokeStyle(S(2), 0x00ffff).setInteractive({ useHandCursor: true });
+            const name = scene.add.text(x, Y(155), item.name, { fontSize: px(14), fill: '#ffffff', wordWrap: { width: S(140) }, align: 'center' }).setOrigin(0.5);
+            const text = scene.add.text(x, Y(245), desc(item), { fontSize: px(11), fill: '#bbbbbb', wordWrap: { width: S(135) }, align: 'center', lineSpacing: S(4) }).setOrigin(0.5);
+            const button = scene.add.text(x, Y(340), `[ ${choices.length === 2 ? '購買' : '選擇'} ]`, { fontSize: px(13), fill: '#00ffaa' }).setOrigin(0.5);
             bg.on('pointerdown', () => {
                 const result = onChoose(item);
                 if (result === false) this.showMessage(scene, gameState, '💰 金幣不足，無法購買。');
@@ -232,13 +237,14 @@ export class ShopSystem {
         this.destroyUI(scene);
         const container = scene.add.container(0, 0).setDepth(2200);
         scene._restContainer = container;
-        container.add(scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.95).setInteractive());
-        container.add(scene.add.text(425, 220, message, { fontSize: '17px', fill: '#ffffff', wordWrap: { width: 650 }, align: 'center' }).setOrigin(0.5));
+        container.add(fullOverlay(scene, 0.95));
+        container.add(scene.add.text(CX, Y(220), message, { fontSize: px(17), fill: '#ffffff', wordWrap: { width: S(650) }, align: 'center' }).setOrigin(0.5));
         this.addButton(scene, container, 425, '↩ 返回商店', '#66ccff', () => this.showShop(scene, gameState));
     }
 
+    // y 為舊版座標
     static addButton(scene, container, y, label, color, onClick) {
-        const button = scene.add.text(425, y, `[ ${label} ]`, { fontSize: '15px', fill: color, backgroundColor: '#222', padding: { x: 12, y: 7 }, wordWrap: { width: 720 }, align: 'center' })
+        const button = scene.add.text(CX, Y(y), `[ ${label} ]`, { fontSize: px(15), fill: color, backgroundColor: '#222', padding: { x: S(12), y: S(7) }, wordWrap: { width: S(720) }, align: 'center' })
             .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
         container.add(button);
     }

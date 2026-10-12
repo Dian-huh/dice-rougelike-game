@@ -7,9 +7,12 @@ import { PauseMenu } from '../systems/PauseMenu.js';
 import { TutorialSystem } from '../systems/TutorialSystem.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
 import { ENEMY_DATABASE } from '../data/enemyData.js';
+import { fullOverlay, CX, X, Y, S, px } from '../config/layout.js';
 
 const enemyName = (id) => (ENEMY_DATABASE[id] && ENEMY_DATABASE[id].name) || id;
 
+// 🟢 版面（步驟2-B）：選角、區域選擇、事件畫面已改用 X/Y/S/px 換算成 1920x1080。
+//    renderRegionMapUI()（地圖節點圖）仍是舊座標，會在步驟4 改成可捲動的縱向地圖。
 export class MapScene extends Phaser.Scene {
     constructor() { 
         super({ key: 'MapScene' }); 
@@ -33,38 +36,38 @@ export class MapScene extends Phaser.Scene {
     // ============================================================
     showCharacterSelectUI() {
         const container = this.add.container(0, 0).setDepth(2000);
-        const overlay = this.add.rectangle(425, 275, 850, 550, 0x000000, 0.95);
-        const title = this.add.text(425, 45, '⚔️ 請選擇你的冒險者', { fontSize: '22px', fill: '#ffcc00' }).setOrigin(0.5);
+        const overlay = fullOverlay(this, 0.95);
+        const title = this.add.text(CX, Y(45), '⚔️ 請選擇你的冒險者', { fontSize: px(22), fill: '#ffcc00' }).setOrigin(0.5);
         container.add([overlay, title]);
 
         const ids = getAllCharacterIds();
-        const cardWidth = 220, cardHeight = 380, gap = 30;
+        const cardWidth = 220, cardHeight = 380, gap = 30;   // 舊版尺寸
         const totalWidth = ids.length * cardWidth + (ids.length - 1) * gap;
-        const startX = 425 - totalWidth / 2 + cardWidth / 2;
+        const startX = 425 - totalWidth / 2 + cardWidth / 2;  // 舊版座標
         const y = 290;
 
         ids.forEach((id, idx) => {
             const data = getCharacterData(id);
-            const x = startX + idx * (cardWidth + gap);
+            const x = X(startX + idx * (cardWidth + gap));
 
-            const cardBg = this.add.rectangle(x, y, cardWidth, cardHeight, 0x222233)
-                .setStrokeStyle(2, 0x00ffff)
+            const cardBg = this.add.rectangle(x, Y(y), S(cardWidth), S(cardHeight), 0x222233)
+                .setStrokeStyle(S(2), 0x00ffff)
                 .setInteractive({ useHandCursor: true });
 
-            const nameText = this.add.text(x, y - 160, data.name, { fontSize: '19px', fill: '#ffffff' }).setOrigin(0.5);
+            const nameText = this.add.text(x, Y(y - 160), data.name, { fontSize: px(19), fill: '#ffffff' }).setOrigin(0.5);
 
-            const statsText = this.add.text(x, y - 60,
+            const statsText = this.add.text(x, Y(y - 60),
                 `HP: ${data.maxHp}\n攻擊力: ${data.atk}\n魔力: ${data.maxMana}\n爆擊增益: +${data.critBonus || 0}\n速度加值: +${data.speedBonus || 0}\n攻擊次數: ${data.atkCount || 1}`,
-                { fontSize: '13px', fill: '#aaddff', align: 'center', lineSpacing: 6 }
+                { fontSize: px(13), fill: '#aaddff', align: 'center', lineSpacing: S(6) }
             ).setOrigin(0.5);
 
-            const descText = this.add.text(x, y + 100, data.description || '', {
-                fontSize: '12px', fill: '#cccccc', align: 'center',
-                wordWrap: { width: cardWidth - 30 , useAdvancedWrap: true }, lineSpacing: 4
+            const descText = this.add.text(x, Y(y + 100), data.description || '', {
+                fontSize: px(12), fill: '#cccccc', align: 'center',
+                wordWrap: { width: S(cardWidth - 30), useAdvancedWrap: true }, lineSpacing: S(4)
             }).setOrigin(0.5);
 
-            const selectBtn = this.add.text(x, y + 165, '[ 選擇此角色 ]', {
-                fontSize: '14px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 10, y: 6 }
+            const selectBtn = this.add.text(x, Y(y + 165), '[ 選擇此角色 ]', {
+                fontSize: px(14), fill: '#00ffaa', backgroundColor: '#222', padding: { x: S(10), y: S(6) }
             }).setOrigin(0.5);
 
             cardBg.on('pointerdown', () => this.onCharacterChosen(id, container));
@@ -83,8 +86,8 @@ export class MapScene extends Phaser.Scene {
     // ============================================================
     enterRegionFlow() {
         if (!this._pauseBtn) {
-            this._pauseBtn = this.add.text(720, 10, '[ ⏸ 選單 ]', {
-                fontSize: '15px', fill: '#00ffff', backgroundColor: '#222'
+            this._pauseBtn = this.add.text(X(720), Y(10), '[ ⏸ 選單 ]', {
+                fontSize: px(15), fill: '#00ffff', backgroundColor: '#222'
             }).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openPauseMenu());
         }
         if (gameState.currentRegionGraph) {
@@ -99,34 +102,35 @@ export class MapScene extends Phaser.Scene {
 
     showRegionChoiceUI() {
         const container = this.add.container(0, 0).setDepth(2000);
-        const overlay = this.add.rectangle(425, 275, 850, 550, 0x000000, 0.95);
+        const overlay = fullOverlay(this, 0.95);
         const isFinal = gameState.isFinalRegionSelection();
-        const title = this.add.text(425, 50, isFinal ? '👑 選擇本輪最終區域' : '🗺️ 選擇下一個區域', { fontSize: '20px', fill: '#ffcc00' }).setOrigin(0.5);
+        const title = this.add.text(CX, Y(50), isFinal ? '👑 選擇本輪最終區域' : '🗺️ 選擇下一個區域', { fontSize: px(20), fill: '#ffcc00' }).setOrigin(0.5);
         container.add([overlay, title]);
 
         const choices = gameState.pendingRegionChoices;
-        const cardWidth = 220, cardHeight = 300, gap = 30;
+        const cardWidth = 220, cardHeight = 300, gap = 30;   // 舊版尺寸
         const totalWidth = choices.length * cardWidth + (choices.length - 1) * gap;
-        const startX = 425 - totalWidth / 2 + cardWidth / 2;
+        const startX = 425 - totalWidth / 2 + cardWidth / 2;  // 舊版座標
         const y = 290;
 
         choices.forEach((regionId, idx) => {
             const regionDef = getRegionData(regionId);
-            const x = startX + idx * (cardWidth + gap);
+            const x = X(startX + idx * (cardWidth + gap));
 
-            const cardBg = this.add.rectangle(x, y, cardWidth, cardHeight, 0x222233)
-                .setStrokeStyle(2, 0x00ffff)
+            const cardBg = this.add.rectangle(x, Y(y), S(cardWidth), S(cardHeight), 0x222233)
+                .setStrokeStyle(S(2), 0x00ffff)
                 .setInteractive({ useHandCursor: true });
 
-            const nameText = this.add.text(x, y - 110, regionDef.name, { fontSize: '17px', fill: '#ffffff', wordWrap: { width: cardWidth - 20 } }).setOrigin(0.5);
-            const floorText = this.add.text(x, y - 60, `樓層數: ${regionDef.floorRange[0]}~${regionDef.floorRange[1]}`, { fontSize: '13px', fill: '#aaddff' }).setOrigin(0.5);
+            const nameText = this.add.text(x, Y(y - 110), regionDef.name, { fontSize: px(17), fill: '#ffffff', wordWrap: { width: S(cardWidth - 20) } }).setOrigin(0.5);
+            const floorText = this.add.text(x, Y(y - 60), `樓層數: ${regionDef.floorRange[0]}~${regionDef.floorRange[1]}`, { fontSize: px(13), fill: '#aaddff' }).setOrigin(0.5);
             const finalLabel = isFinal
                 ? `👑 最終樓層：${enemyName(regionDef.regionBoss)}`
                 : `⚔️ 最終樓層菁英：${enemyName(regionDef.eliteEnemy)}`;
-            const bossText = this.add.text(x, y - 20, finalLabel, { fontSize: '12px', fill: '#ffaaff', wordWrap: { width: cardWidth - 20 } }).setOrigin(0.5);
+            const bossText = this.add.text(x, Y(y - 20), finalLabel, { fontSize: px(12), fill: '#ffaaff', wordWrap: { width: S(cardWidth - 20) } }).setOrigin(0.5);
 
-            this.add.text(x, y + 120, '[ 選擇此區域 ]', {
-                fontSize: '14px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 10, y: 6 }
+            // 🔧 原本這個標籤沒有加進 container（深度比遮罩低，實際上被蓋住看不到），現在一併加入
+            const selectLabel = this.add.text(x, Y(y + 120), '[ 選擇此區域 ]', {
+                fontSize: px(14), fill: '#00ffaa', backgroundColor: '#222', padding: { x: S(10), y: S(6) }
             }).setOrigin(0.5);
 
             cardBg.on('pointerdown', () => {
@@ -135,11 +139,12 @@ export class MapScene extends Phaser.Scene {
                 this.renderRegionMapUI();
             });
 
-            container.add([cardBg, nameText, floorText, bossText]);
+            container.add([cardBg, nameText, floorText, bossText, selectLabel]);
         });
     }
 
     // 🟢 讀取 currentRegionGraph 畫出全區域樓層+連線，可點擊範圍限制在 currentNodeId 的 connectsTo
+    // （步驟4 才會改成 1920x1080 可捲動版面，目前仍是舊座標）
     renderRegionMapUI() {
         if (this._regionMapContainer) { this._regionMapContainer.destroy(); this._regionMapContainer = null; }
         const container = this.add.container(0, 0);
@@ -277,20 +282,20 @@ export class MapScene extends Phaser.Scene {
         const ctx = { scene: this, gameState, deckSys: gameState.deckSys };
 
         const container = this.add.container(0, 0).setDepth(2000);
-        const overlay = this.add.rectangle(425, 275, 850, 550, 0x000000, 0.92);
-        const title = this.add.text(425, 60, eventDef.title, { fontSize: '20px', fill: '#ffcc00' }).setOrigin(0.5);
-        const desc = this.add.text(425, 130, eventDef.desc, {
-            fontSize: '14px', fill: '#eeeeee', align: 'center', wordWrap: { width: 650 }, lineSpacing: 6
+        const overlay = fullOverlay(this, 0.92);
+        const title = this.add.text(CX, Y(60), eventDef.title, { fontSize: px(20), fill: '#ffcc00' }).setOrigin(0.5);
+        const desc = this.add.text(CX, Y(130), eventDef.desc, {
+            fontSize: px(14), fill: '#eeeeee', align: 'center', wordWrap: { width: S(650) }, lineSpacing: S(6)
         }).setOrigin(0.5);
 
         container.add([overlay, title, desc]);
 
         const optionTexts = [];
         eventDef.options.forEach((option, idx) => {
-            const y = 220 + idx * 60;
-            const btn = this.add.text(425, y, option.text, {
-                fontSize: '15px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 12, y: 8 },
-                wordWrap: { width: 600 }, align: 'center'
+            const y = 220 + idx * 60;   // 舊版座標
+            const btn = this.add.text(CX, Y(y), option.text, {
+                fontSize: px(15), fill: '#00ffaa', backgroundColor: '#222', padding: { x: S(12), y: S(8) },
+                wordWrap: { width: S(600) }, align: 'center'
             }).setOrigin(0.5)
               .setInteractive({ useHandCursor: true })
               .on('pointerdown', () => {
@@ -313,13 +318,13 @@ export class MapScene extends Phaser.Scene {
 
     // 顯示事件結果訊息，並提供「繼續」按鈕收尾（推進樓層、重整地圖）
     showEventResult(container, resultMsg) {
-        const resultBg = this.add.rectangle(425, 430, 700, 70, 0x111122).setStrokeStyle(2, 0x00ffff);
-        const resultText = this.add.text(425, 430, resultMsg || '事件結束。', {
-            fontSize: '14px', fill: '#ffffff', align: 'center', wordWrap: { width: 650 }
+        const resultBg = this.add.rectangle(CX, Y(430), S(700), S(70), 0x111122).setStrokeStyle(S(2), 0x00ffff);
+        const resultText = this.add.text(CX, Y(430), resultMsg || '事件結束。', {
+            fontSize: px(14), fill: '#ffffff', align: 'center', wordWrap: { width: S(650) }
         }).setOrigin(0.5);
 
-        const continueBtn = this.add.text(425, 480, '[ 繼續前進 ]', {
-            fontSize: '15px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 12, y: 6 }
+        const continueBtn = this.add.text(CX, Y(480), '[ 繼續前進 ]', {
+            fontSize: px(15), fill: '#00ffaa', backgroundColor: '#222', padding: { x: S(12), y: S(6) }
         }).setOrigin(0.5)
           .setInteractive({ useHandCursor: true })
           .on('pointerdown', () => {

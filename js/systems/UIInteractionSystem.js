@@ -13,7 +13,13 @@
  * - show() 方法显示 UI
  * - 用户交互后自动调用回调函数
  * - 自动管理 UI 状态（创建/销毁）
+ *
+ * 🟢 版面（1920x1080）：全螢幕選單類（選卡器、棄牌選擇）用 X/Y/S/px 換算；
+ *    疊在戰鬥畫面上的小視窗（重骰確認框、骰子選擇器）固定放在左欄的
+ *    「勇者狀態/骰子面板」上方區域 (中心約 x=450, y=375)，
+ *    不遮住下方的操作按鈕與右欄的敵人資訊。
  */
+import { fullOverlay, CX, X, Y, S, px } from '../config/layout.js';
 
 export class UIInteractionSystem {
     /**
@@ -40,7 +46,7 @@ export class UIInteractionSystem {
 
                 scene.enemyDisplays.forEach(display => {
                     if (display.enemy.hp > 0 && this.aliveEnemies.includes(display.enemy)) {
-                        display.bg.setFillStyle(0x333355, 0.35).setStrokeStyle(2, 0xffff00);
+                        display.bg.setFillStyle(0x333355, 0.35).setStrokeStyle(S(2), 0xffff00);
                         display.bg.setInteractive({ useHandCursor: true });
                         display.bg.on('pointerdown', () => this._onTargetChosen(display.enemy));
                     }
@@ -87,12 +93,13 @@ export class UIInteractionSystem {
                 if (this.container) this.container.destroy();
 
                 this.container = scene.add.container(0, 0).setDepth(1500);
-                const bg = scene.add.rectangle(620, 200, 260, 90, 0x000000, 0.95).setStrokeStyle(2, 0x66ccff);
-                const text = scene.add.text(500, 165, `🎲 攻擊骰結果：[ ${this.actionDice} ] 點`, { fontSize: '15px', fill: '#ffffff' });
-                const confirmBtn = scene.add.text(500, 200, '[ ✅ 確定使用 ]', { fontSize: '14px', fill: '#00ffaa' })
-                    .setInteractive({ useHandCursor: true });
-                const rerollBtn = scene.add.text(500, 230, `[ 🔄 重骰 (剩餘${this.rerollsLeft}次) ]`, { fontSize: '14px', fill: '#66ccff' })
-                    .setInteractive({ useHandCursor: true });
+                const bg = scene.add.rectangle(450, 375, 700, 180, 0x000000, 0.95).setStrokeStyle(S(2), 0x66ccff);
+                const text = scene.add.text(450, 330, `🎲 攻擊骰結果：[ ${this.actionDice} ] 點`, { fontSize: px(15), fill: '#ffffff' })
+                    .setOrigin(0.5);
+                const confirmBtn = scene.add.text(450, 378, '[ ✅ 確定使用 ]', { fontSize: px(14), fill: '#00ffaa' })
+                    .setOrigin(0.5).setInteractive({ useHandCursor: true });
+                const rerollBtn = scene.add.text(450, 424, `[ 🔄 重骰 (剩餘${this.rerollsLeft}次) ]`, { fontSize: px(14), fill: '#66ccff' })
+                    .setOrigin(0.5).setInteractive({ useHandCursor: true });
 
                 this.container.add([bg, text, confirmBtn, rerollBtn]);
 
@@ -116,10 +123,10 @@ export class UIInteractionSystem {
         };
     }
 
-        /**
+    /**
      * 通用「從牌組選一張」選卡器
      * deck：要顯示的卡片陣列；onPick(idx, card)：選定；onCancel()：按取消
-     * 版面每列 6 張，約 30 張以內不會超出畫面
+     * 版面每列 6 張（舊版座標），約 30 張以內不會超出畫面
      */
     static createDeckPickerSession(scene, deck, title, onPick, onCancel, cancelLabel = '[ 🚫 取消 ]') {
         return {
@@ -130,33 +137,33 @@ export class UIInteractionSystem {
                 const container = scene.add.container(0, 0).setDepth(2200);
                 this.container = container;
 
-                const overlay = scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.94).setInteractive();
-                const titleText = scene.add.text(425, 30, title, {
-                    fontSize: '14px', fill: '#ffcc00', align: 'center', wordWrap: { width: 760 }
+                const overlay = fullOverlay(scene, 0.94);
+                const titleText = scene.add.text(CX, Y(30), title, {
+                    fontSize: px(14), fill: '#ffcc00', align: 'center', wordWrap: { width: S(760) }
                 }).setOrigin(0.5);
                 container.add([overlay, titleText]);
 
                 const perRow = 6;
                 deck.forEach((card, idx) => {
                     const col = idx % perRow, row = Math.floor(idx / perRow);
-                    const x = 85 + col * 136, y = 100 + row * 82;
+                    const x = 85 + col * 136, y = 100 + row * 82;   // 舊版座標
 
-                    const bg = scene.add.rectangle(x, y, 124, 70, 0x222233)
-                        .setStrokeStyle(2, 0x00ffff)
+                    const bg = scene.add.rectangle(X(x), Y(y), S(124), S(70), 0x222233)
+                        .setStrokeStyle(S(2), 0x00ffff)
                         .setInteractive({ useHandCursor: true });
-                    const nameText = scene.add.text(x - 57, y - 30, card.name, {
-                        fontSize: '12px', fill: '#fff', wordWrap: { width: 114 }
+                    const nameText = scene.add.text(X(x - 57), Y(y - 30), card.name, {
+                        fontSize: px(12), fill: '#fff', wordWrap: { width: S(114) }
                     });
-                    const descText = scene.add.text(x - 57, y - 10, card.desc || '', {
-                        fontSize: '9px', fill: '#aaaaaa', wordWrap: { width: 114, useAdvancedWrap: true }
+                    const descText = scene.add.text(X(x - 57), Y(y - 10), card.desc || '', {
+                        fontSize: px(9), fill: '#aaaaaa', wordWrap: { width: S(114), useAdvancedWrap: true }
                     });
 
                     bg.on('pointerdown', () => { this.destroy(); onPick(idx, card); });
                     container.add([bg, nameText, descText]);
                 });
 
-                const cancelBtn = scene.add.text(425, 510, cancelLabel, {
-                    fontSize: '13px', fill: '#ff6666', backgroundColor: '#222', padding: { x: 10, y: 5 }
+                const cancelBtn = scene.add.text(CX, Y(510), cancelLabel, {
+                    fontSize: px(13), fill: '#ff6666', backgroundColor: '#222', padding: { x: S(10), y: S(5) }
                 }).setOrigin(0.5).setInteractive({ useHandCursor: true })
                   .on('pointerdown', () => { this.destroy(); if (onCancel) onCancel(); });
                 container.add(cancelBtn);
@@ -184,28 +191,28 @@ export class UIInteractionSystem {
             render() {
                 if (this.container) this.container.destroy();
                 this.container = scene.add.container(0, 0).setDepth(1900);
-                const overlay = scene.add.rectangle(425, 275, 850, 550, 0x000000, 0.92).setInteractive();
-                const title = scene.add.text(425, 40,
+                const overlay = fullOverlay(scene, 0.92);
+                const title = scene.add.text(CX, Y(40),
                     `🗑️ 法典：請選擇要棄置的卡片 (已棄 ${this.discardedCount}/${maxCount}，至少 ${minCount} 張)`,
-                    { fontSize: '15px', fill: '#ffcc00' }).setOrigin(0.5);
+                    { fontSize: px(15), fill: '#ffcc00' }).setOrigin(0.5);
                 this.container.add([overlay, title]);
 
                 deckSys.hand.forEach((card, idx) => {
                     const col = idx % 5, row = Math.floor(idx / 5);
-                    const x = 90 + col * 150, y = 100 + row * 90;
-                    const cardBg = scene.add.rectangle(x, y, 130, 70, 0x222233)
-                        .setStrokeStyle(2, 0xff6666)
+                    const x = 90 + col * 150, y = 100 + row * 90;   // 舊版座標
+                    const cardBg = scene.add.rectangle(X(x), Y(y), S(130), S(70), 0x222233)
+                        .setStrokeStyle(S(2), 0xff6666)
                         .setInteractive({ useHandCursor: true });
-                    const nameText = scene.add.text(x - 60, y - 30, card.name, {
-                        fontSize: '12px', fill: '#fff', wordWrap: { width: 120 }
+                    const nameText = scene.add.text(X(x - 60), Y(y - 30), card.name, {
+                        fontSize: px(12), fill: '#fff', wordWrap: { width: S(120) }
                     });
                     cardBg.on('pointerdown', () => this._onDiscard(idx));
                     this.container.add([cardBg, nameText]);
                 });
 
                 if (this.discardedCount >= minCount) {
-                    const doneBtn = scene.add.text(425, 480, '[ ✅ 完成選擇 ]', {
-                        fontSize: '15px', fill: '#00ffaa', backgroundColor: '#222', padding: { x: 12, y: 6 }
+                    const doneBtn = scene.add.text(CX, Y(480), '[ ✅ 完成選擇 ]', {
+                        fontSize: px(15), fill: '#00ffaa', backgroundColor: '#222', padding: { x: S(12), y: S(6) }
                     }).setOrigin(0.5).setInteractive({ useHandCursor: true })
                       .on('pointerdown', () => this._finish());
                     this.container.add(doneBtn);
@@ -251,13 +258,16 @@ export class UIInteractionSystem {
                     return;
                 }
 
-                this.container = scene.add.container(200, 160);
-                let bg = scene.add.rectangle(180, 40, 420, 90, 0x000000, 0.95).setStrokeStyle(2, 0xffcc00);
-                this.pickerTitleText = scene.add.text(10, 5, this.title, { fontSize: '14px', fill: '#ffcc00' });
+                this.container = scene.add.container(0, 0);
+                let bg = scene.add.rectangle(450, 375, 800, 180, 0x000000, 0.95).setStrokeStyle(S(2), 0xffcc00);
+                this.pickerTitleText = scene.add.text(450, 325, this.title, { fontSize: px(14), fill: '#ffcc00' }).setOrigin(0.5);
                 this.container.add([bg, this.pickerTitleText]);
 
                 for (let i = 1; i <= 6; i++) {
-                    let btn = scene.add.text((i - 1) * 65 + 15, 35, `[ ${i} ]`, { fontSize: '20px', fill: '#ffffff', backgroundColor: '#333' })
+                    let btn = scene.add.text(450 + (i - 3.5) * 120, 392, `[ ${i} ]`, {
+                        fontSize: px(20), fill: '#ffffff', backgroundColor: '#333', padding: { x: S(6), y: S(4) }
+                    })
+                        .setOrigin(0.5)
                         .setInteractive({ useHandCursor: true })
                         .on('pointerdown', () => {
                             this.hide();
@@ -266,7 +276,7 @@ export class UIInteractionSystem {
                     this.container.add(btn);
                 }
 
-                this.container.setDepth(100);
+                this.container.setDepth(1400);
             },
 
             hide() {
