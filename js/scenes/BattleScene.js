@@ -179,7 +179,7 @@ export class BattleScene extends Phaser.Scene {
     // 🟢 新增：手動重看教學（按鈕觸發），純粹展示，不影響戰鬥流程與回合狀態
     openTutorial() {
         TutorialSystem.showTutorialUI(this, () => {
-            // 關閉即可，不需要重新開始回合或做任何遊戲狀態異動
+            this.openPauseMenu();
         });
     }
 
@@ -214,6 +214,7 @@ export class BattleScene extends Phaser.Scene {
           .on('pointerdown', () => {
               container.destroy();
               this.blessingPanelContainer = null;
+              this.openPauseMenu();
           });
         container.add(closeBtn);
 
@@ -359,7 +360,10 @@ export class BattleScene extends Phaser.Scene {
         const closeBtn = this.add.text(CX, 1000, '[ 關閉 ]', {
             fontSize: px(15), fill: '#ff6666', backgroundColor: '#222', padding: { x: S(12), y: S(6) }
         }).setOrigin(0.5).setInteractive({ useHandCursor: true })
-          .on('pointerdown', () => this.closeDeckPanel());
+          .on('pointerdown', () => {
+              this.closeDeckPanel();
+              this.openPauseMenu();
+          });
         container.add(closeBtn);
 
         this.deckPanelContainer = container;
@@ -549,6 +553,7 @@ export class BattleScene extends Phaser.Scene {
         this._logSpeed = order[(order.indexOf(this._logSpeed) + 1) % order.length];
         try { localStorage.setItem(LOG_SPEED_KEY, this._logSpeed); } catch (e) { /* 無痕模式等情況存不了就算了 */ }
         this.appendLog(`📜 戰報播放：${LOG_SPEEDS[this._logSpeed].label}`, 'system');
+        this.openPauseMenu();
     }
 
     // 播放期間被要求刷新的畫面，播完才一次補刷（戰鬥已結束時只刷新數字，不重畫手牌與按鈕）
