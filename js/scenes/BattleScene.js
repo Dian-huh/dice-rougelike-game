@@ -1102,11 +1102,11 @@ export class BattleScene extends Phaser.Scene {
         this.add.text(CX, Y(220), '💀 遊戲結束', { fontSize: px(32), fill: '#ff4444' }).setOrigin(0.5).setDepth(3001);
         this.add.text(CX, Y(270), `勇者倒下於第 ${gameState.currentFloor} 層...`, { fontSize: px(16), fill: '#cccccc' }).setOrigin(0.5).setDepth(3001);
 
-        this.add.text(CX, Y(340), '[ 🔄 重新開始 ]', {
+        this.add.text(CX, Y(340), '[ 🏠 回主畫面 ]', {
             fontSize: px(18), fill: '#00ffaa', backgroundColor: '#222', padding: { x: S(14), y: S(8) }
         }).setOrigin(0.5).setDepth(3001)
           .setInteractive({ useHandCursor: true })
-          .on('pointerdown', () => this.restartGame());
+          .on('pointerdown', () => this.returnToMainMenuAfterDeath());
     }
 
     // 🟢 全破結算畫面（僅在打贏最終樓層 Boss 時觸發）
@@ -1123,6 +1123,14 @@ export class BattleScene extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(3001)
           .setInteractive({ useHandCursor: true })
           .on('pointerdown', () => this.restartGame());
+    }
+
+    // 🟢 死亡後清除本輪進度並返回主畫面，避免直接進入選角畫面
+    returnToMainMenuAfterDeath() {
+        this.removeChatLogUI();
+        gameState.resetToCharacterSelect();
+        this.scene.start('MainMenuScene');
+        this.scene.stop('BattleScene');
     }
 
     // 🟢 統一的「重新開始」邏輯：清空戰報、重置全域狀態、回到地圖場景讓玩家重新選角

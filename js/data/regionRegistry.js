@@ -10,7 +10,7 @@ export const REGION_REGISTRY = {
     region_forest: {
         id: 'region_forest',
         name: '🌲 哥布林森林',
-        floorRange: [4, 6],
+        floorRange: [5, 10],
         nodeCountRange: [1, 4],
         nodeTypeWeights: { BATTLE: 2, EVENT: 1, REST: 1 },
         enemyPool: { theme: ['goblin', 'goblin_shaman'] },
@@ -20,7 +20,7 @@ export const REGION_REGISTRY = {
     region_boundary: {
         id: 'region_boundary',
         name: '⚔️ 門衛邊境',
-        floorRange: [4, 6],
+        floorRange: [5, 10],
         nodeCountRange: [1, 4],
         nodeTypeWeights: { BATTLE: 2, EVENT: 1, REST: 1 },
         enemyPool: { theme: ['shield_guardian', 'sword_guardian', 'staff_guardian', 'crossbow_guardian'] },
@@ -34,7 +34,7 @@ export const REGION_REGISTRY = {
     region_bandit: {
         id: 'region_bandit',
         name: '🏴 盜賊城寨',
-        floorRange: [4, 6],
+        floorRange: [5, 10],
         nodeCountRange: [1, 4],
         nodeTypeWeights: { BATTLE: 2, EVENT: 1, REST: 1 },
         enemyPool: { theme: ['bandit', 'wanted_criminal'] },
@@ -45,7 +45,7 @@ export const REGION_REGISTRY = {
     region_deadcity: {
         id: 'region_deadcity',
         name: '💀 死寂之城',
-        floorRange: [4, 6],
+        floorRange: [5, 10],
         nodeCountRange: [1, 4],
         nodeTypeWeights: { BATTLE: 2, EVENT: 1, REST: 1 },
         enemyPool: { theme: ['undead', 'skeleton', 'ghost_small'] },
