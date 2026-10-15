@@ -38,7 +38,7 @@ export class MapScene extends Phaser.Scene {
         this._mapHitSet = null;
         this._mapDrag = null;
         this._mapInputBound = false;      // 場景重新開始後 input 監聽已被清除，需要重新綁定
-        if (!gameState.mapData) {
+        if (!gameState.hero) {
             const loaded = gameState.tryLoadSave();
             if (!loaded) {
                 this.showCharacterSelectUI();   // 🔴 改動：不再直接 initNewGame()，先跳選角

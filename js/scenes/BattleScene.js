@@ -1105,7 +1105,7 @@ export class BattleScene extends Phaser.Scene {
 
         fullOverlay(this, 0.92).setDepth(3000);
         this.add.text(CX, Y(220), '💀 遊戲結束', { fontSize: px(32), fill: '#ff4444' }).setOrigin(0.5).setDepth(3001);
-        this.add.text(CX, Y(270), `勇者倒下於第 ${gameState.currentFloor} 層...`, { fontSize: px(16), fill: '#cccccc' }).setOrigin(0.5).setDepth(3001);
+        this.add.text(CX, Y(270), `勇者倒下於區域 ${gameState.regionsCompleted + 1}/${gameState.regionsPerRun}...`, { fontSize: px(16), fill: '#cccccc' }).setOrigin(0.5).setDepth(3001);
 
         this.add.text(CX, Y(340), '[ 🏠 回主畫面 ]', {
             fontSize: px(18), fill: '#00ffaa', backgroundColor: '#222', padding: { x: S(14), y: S(8) }
@@ -1160,7 +1160,11 @@ export class BattleScene extends Phaser.Scene {
                     return;
                 }
             } else {
-                gameState.nextFloor();   // 🟢 舊系統相容路徑
+               // DEBUG.startTestBattle 的測試戰鬥：沒有區域圖，結束後直接回主選單（不動存檔）
+               gameState.unloadRun();
+               this.scene.start('MainMenuScene');
+               this.scene.stop('BattleScene');
+               return;
             }
             this.scene.start('MapScene');
             this.scene.stop('BattleScene');

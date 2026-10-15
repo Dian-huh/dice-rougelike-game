@@ -29,13 +29,7 @@ export class BattleSetup {
         const regionId = gameState && gameState.currentRegionId;
         const isFinalOfRun = !!(gameState && gameState.currentRegionIsFinal);
         const isRegionFinalBoss = (nodeType === 'BATTLE_FINAL' && isFinalOfRun);
-
-        // 🟢 舊系統相容：mapData.js 固定5層，最後一層BOSS才算全破
-        const legacyTotalFloors = (gameState && gameState.mapData) ? gameState.mapData.length : 5;
-        const legacyCurrentFloor = (gameState && gameState.currentFloor) ? gameState.currentFloor : 1;
-        const isLegacyFinalBoss = (nodeType === 'BOSS' && legacyCurrentFloor === legacyTotalFloors);
-
-        const isFinalBoss = isRegionFinalBoss || isLegacyFinalBoss;
+        const isFinalBoss = isRegionFinalBoss;
 
         let hero, deckSys;
         if (data && data.hero) {

@@ -1,5 +1,4 @@
 // js/data/gameState.js
-import { generateProceduralMap } from './mapData.js';
 import { getCharacterData, getCharacterDeck } from '../characters/characterRegistry.js';
 import { getRegionData, getAllRegionIds, generateRegionGraph } from './regionRegistry.js';
 import { DeckSystem } from '../systems/DeckSystem.js';
@@ -8,11 +7,8 @@ import { SaveSystem } from '../systems/SaveSystem.js';
 export const gameState = {
     hero: null,
     deckSys: null,
-    mapData: null,
-    currentFloor: 1,
 
-    // 🟢 階段5新增：區域制狀態。與上面 mapData/currentFloor 暫時並存，
-    // 切換到「以此為準」的時機點在 Step4(MapScene渲染改造)，屆時舊欄位會逐步棄用
+    // 區域制狀態
     regionsPerRun: 3,
     regionsCompleted: 0,
     currentRegionId: null,
@@ -40,8 +36,6 @@ export const gameState = {
         this.hero = JSON.parse(JSON.stringify(charData));
         this._restoreFunctionFields(this.hero, charData);   // 🟢 取代原本只救 diceSkills 那行
         this.deckSys = new DeckSystem(charDeck);
-        this.mapData = generateProceduralMap(5);
-        this.currentFloor = 1;
         this.regionsCompleted = 0;
         this.currentRegionId = null;
         this.lastCompletedRegionId = null;
@@ -55,13 +49,11 @@ export const gameState = {
     },
 
         // 🟢 離開本輪回主選單：只清記憶體中的 run 狀態，不動存檔。
-    // 之後按「繼續」時 MapScene 會因 mapData 為 null 而重新 tryLoadSave()，
+    // 之後按「繼續」時 MapScene 會因 hero 為 null 而重新 tryLoadSave()，
     // 避免把戰鬥中已被修改的 hero 當成存檔內容
     unloadRun() {
         this.hero = null;
         this.deckSys = null;
-        this.mapData = null;
-        this.currentFloor = 1;
         this.regionsCompleted = 0;
         this.currentRegionId = null;
         this.lastCompletedRegionId = null;
@@ -93,10 +85,6 @@ export const gameState = {
         Object.assign(this.hero, saved.hero);
 
         this.deckSys = new DeckSystem(saved.deck.length > 0 ? saved.deck : getCharacterDeck(characterId));
-        this.mapData = saved.mapData;
-        this.currentFloor = saved.currentFloor;
-
-        // 🟢 階段5新增：還原區域制狀態
         this.regionsCompleted = saved.regionsCompleted;
         this.currentRegionId = saved.currentRegionId;
         this.lastCompletedRegionId = saved.lastCompletedRegionId || null;
@@ -166,8 +154,7 @@ export const gameState = {
     },
 
         // ============================================================
-    // 🟢 節點結算後的統一入口：供 MapScene(REST/EVENT) 與 BattleScene(BATTLE/BATTLE_FINAL) 共用，
-    // 取代舊的 nextFloor()（nextFloor() 本身保留不刪，作為舊系統相容路徑）
+    // 🟢 節點結算後的統一入口：供 MapScene(REST/EVENT) 與 BattleScene(BATTLE/BATTLE_FINAL) 共用
     // ============================================================
     advanceAfterNode(node) {
         if (!node) {
@@ -214,10 +201,4 @@ export const gameState = {
     hasSeenEvent(eventId) {
         return this.seenEventIds.includes(eventId);
     },
-
-    nextFloor() {
-        this.currentFloor += 1;
-        SaveSystem.save(this);
-        console.log(`🗺️ 全域樓層推進至第 ${this.currentFloor} 層`);
-    }
 };

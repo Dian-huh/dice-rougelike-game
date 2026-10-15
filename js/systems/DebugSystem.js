@@ -71,10 +71,6 @@ export const DebugSystem = {
 
         gameState.hero = hero;
         gameState.deckSys = deckSys;
-        if (!gameState.mapData) {
-            gameState.mapData = [[{ id: 'debug_node', floor: 1, type: 'BATTLE', difficulty: 1, visited: true }]];
-            gameState.currentFloor = 1;
-        }
 
         // 🟢 修正：game.scene.start() 不會自動停掉其他場景，
         // 需要明確 stop 掉 MapScene / 舊的 BattleScene，避免底下畫面殘留、按鈕仍可互動

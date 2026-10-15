@@ -5,7 +5,7 @@ import { REWARD_CARD_ID_MIGRATIONS, STARTER_CARD_ID_MIGRATIONS } from '../data/c
 import { DeckSystem } from './DeckSystem.js';
 
 const SAVE_KEY = 'dice_roguelike_save_v1';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;   // v2：移除舊地圖欄位 mapData/currentFloor，舊存檔會被乾淨捨棄
 
 // 🟢 白名單：只有這些欄位屬於「永久」性質，才會被存進存檔
 // （對應 heroData.js 欄位生命週期稽核結果，'id' 同時也用來識別存檔屬於哪個角色）
@@ -32,9 +32,6 @@ export const SaveSystem = {
                 schemaVersion: SCHEMA_VERSION,
                 hero: heroSnapshot,
                 deck: this._serializeDeck(gameState.deckSys),
-                mapData: gameState.mapData,
-                currentFloor: gameState.currentFloor,
-                // 🟢 階段5新增：區域制狀態，皆為純資料可直接序列化
                 regionsCompleted: gameState.regionsCompleted,
                 currentRegionId: gameState.currentRegionId,
                 lastCompletedRegionId: gameState.lastCompletedRegionId,
@@ -82,9 +79,6 @@ export const SaveSystem = {
         return {
             hero: payload.hero,
             deck,
-            mapData: payload.mapData,
-            currentFloor: payload.currentFloor,
-            // 🟢 階段5新增：舊存檔沒有這些欄位時，用合理預設值防呆（避免讀到 undefined）
             regionsCompleted: payload.regionsCompleted || 0,
             currentRegionId: payload.currentRegionId || null,
             lastCompletedRegionId: payload.lastCompletedRegionId || null,
