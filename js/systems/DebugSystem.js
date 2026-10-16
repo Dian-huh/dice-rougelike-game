@@ -9,7 +9,26 @@ export const DebugSystem = {
     init(game) { this._game = game; },
 
     listEnemies() {
-        console.log('可用敵人 id：', Object.keys(ENEMY_DATABASE).concat(['black_dragon']));
+        console.log('可用敵人 id：', Object.keys(ENEMY_DATABASE));
+    },
+
+   // 🟢 整理後的冒煙測試：每隻敵人在一般/Break 狀態各抽 30 次意圖，確認不會丟錯且有 id/desc
+    checkEnemies() {
+        let bad = 0;
+        Object.keys(ENEMY_DATABASE).forEach(id => {
+            try {
+                const e = createEnemyInstance(id, 0);
+                for (const brk of [false, true]) {
+                    e.isBreak = brk;
+                    e.ct = e.maxCt;   // 讓滿 CT 技也有機會被抽到
+                    for (let i = 0; i < 30; i++) {
+                       const it = e.getIntent(1, 1, e);
+                       if (!it || !it.id || !it.desc) throw new Error(`意圖缺欄位: ${JSON.stringify(it)}`);
+                    }
+                }
+            } catch (err) { bad++; console.error(`❌ ${id}`, err); }
+        });
+        console.log(bad === 0 ? `✅ ${Object.keys(ENEMY_DATABASE).length} 隻敵人意圖檢查通過` : `⚠️ ${bad} 隻有問題`);
     },
 
     listCharacters() {
