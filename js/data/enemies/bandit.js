@@ -1,6 +1,6 @@
 import { BASE_ENEMY } from './baseEnemy.js';
 import { CombatSystem } from '../../systems/CombatSystem.js';
-
+import { BOSS_CHARGE } from './sharedMoves.js';
 
 const FLAME_GLASS_DATA = Object.assign(Object.create(BASE_ENEMY), {
     id: 'flame_glass',
@@ -61,13 +61,14 @@ export const BANDIT_ENEMIES = {
             if (!this.isBreak && this.ct >= this.maxCt) {
                 return {
                     id: 'KIDNAP', type: 'ATTACK', value: this.atk, canCrit: true, consumeCt: this.maxCt,
+                    effects: ['attack'],
                     statusEffect: { type: 'stun', turns: 2 },
                     desc: `🪢 綁架 (消耗全部CT，造成 ${this.atk} 點傷害並施加暈眩)`
                 };
             }
             const pool = [
                 this.basicAttack(),
-                { id: 'ROB', type: 'SPECIAL', value: 30, desc: '💰 搶劫 (盜取 30 金幣)' }
+                { id: 'ROB', type: 'SPECIAL', value: 30, effects: ['steal'], desc: '💰 搶劫 (盜取 30 金幣)' }
             ];
             return Phaser.Utils.Array.GetRandom(pool);
         }
@@ -152,7 +153,7 @@ export const BANDIT_ENEMIES = {
 
             // CT>=2 時 50% 機率蓄力
             if (this.ct >= 2 && Math.random() < 0.5) {
-                return { id: 'BOSS_CHARGE', type: 'SPECIAL', consumeCt: 2, desc: '🔋 蓄力 (消耗2CT，攻擊力與爆擊增益+2，下回合必定發動特殊行動)' };
+                return { ...BOSS_CHARGE };
             }
 
             return Phaser.Utils.Array.GetRandom([
@@ -183,13 +184,18 @@ export const BANDIT_ENEMIES = {
             }
 
             if (this.ct >= 2 && Math.random() < 0.5) {
-                return { id: 'BOSS_CHARGE', type: 'SPECIAL', consumeCt: 2, desc: '🔋 蓄力 (消耗2CT，攻擊力與爆擊增益+2，下回合必定發動特殊行動)' };
+                return { ...BOSS_CHARGE };
             }
 
             return Phaser.Utils.Array.GetRandom([
                 normalAttack,
-                { id: 'ICE_WALL', type: 'SPECIAL', desc: '🧱 冰壁 (我方全體下次受傷傷害變為0)' },
-                { id: 'FROSTBITE_CAST', type: 'SPECIAL', desc: '🧊 冰天雪地 (給予敵方5T凍傷)' }
+                { id: 'ICE_WALL', type: 'SPECIAL', desc: '🧱 冰壁 (我方全體下次受傷傷害變為0)',
+                  effects: ['dodge'], dodgeTo: 'allies',
+                  dodgeMsg: (c) => `🧱 ${c.attacker.name} 展開【冰壁】！我方全體下次受到的傷害變為 0！` },
+                { id: 'FROSTBITE_CAST', type: 'SPECIAL', desc: '🧊 冰天雪地 (給予敵方5T凍傷)',
+                  effects: ['effect'], effectTo: 'hero', effect: [{ id: 'debuff_frostbite', n: 5, mode: 'refresh' }],
+                  effectMsg: (c) => `🧊 ${c.attacker.name} 發動【冰天雪地】！${c.target.name} 陷入【凍傷】(5 回合)！` 
+                }
             ]);
         }
     }),

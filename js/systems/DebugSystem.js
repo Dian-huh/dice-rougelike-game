@@ -357,6 +357,10 @@ export const DebugSystem = {
         console.log(`🧪 探測到 ${cases.length} 個招式案例（×3 個 scaleTier = ${cases.length * 3} 次執行）`);
         console.table(coverage);
 
+        const migrated = cases.filter(c => c.intent.effects || c.intent.run).map(c => `${c.enemyId}:${c.intent.id}`);
+        console.log(`🔀 其中 ${migrated.length} 個案例走 MoveRunner 新路徑`);
+        if (migrated.length) console.log(migrated.join(', '));
+
         const passA = runAll(cases, false);
         const passB = runAll(cases, false);
         const self = diffSnapshots(passA, passB);

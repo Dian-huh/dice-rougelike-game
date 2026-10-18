@@ -3,6 +3,7 @@ import { EffectEngine } from './EffectEngine.js';
 import { EFFECT_REGISTRY } from '../data/effectRegistry.js';
 import { DOT_TYPES } from '../data/dotRegistry.js'; 
 import { MoveRunner } from './MoveRunner.js';
+import './moveHandlers.js';   // 註冊 MoveRunner 基本 handlers（僅副作用）
 // js/systems/CombatSystem.js
 export class CombatSystem {
 

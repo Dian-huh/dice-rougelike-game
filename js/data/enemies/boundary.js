@@ -24,7 +24,14 @@ export const BOUNDARY_ENEMIES = {
             if (this.ct >= this.maxCt) {
                 return {
                     id: 'FULL_GUARD', type: 'SPECIAL', consumeCt: this.maxCt,
-                    desc: '🛡️ 全體保護 (消耗全部CT，己方全體+10格擋，自己獲得嘲諷、盾反，直到自己格擋歸零)'
+                    desc: '🛡️ 全體保護 (消耗全部CT，己方全體+10格擋，自己獲得嘲諷、盾反，直到自己格擋歸零)',
+                    effects: ['block', 'effect'],
+                    block: 10, blockTo: 'allies',
+                    effect: [
+                        { id: 'taunt', mode: 'push', props: { clearOnBlockZero: true } },
+                        { id: 'guardian_counter', mode: 'push', props: { clearOnBlockZero: true } }
+                    ],
+                    effectMsg: (c) => `🛡️ ${c.attacker.name} 發動【全體保護】！己方全體獲得 10 點格擋，自己獲得【嘲諷】與【盾反】(直到格擋歸零)！`
                 };
             }
 
@@ -56,15 +63,22 @@ export const BOUNDARY_ENEMIES = {
                 return this.basicAttack();
             }
             if (this.ct >= this.maxCt) {
-                return { id: 'TRIPLE_SLASH', type: 'ATTACK', value: this.atk, hits: 3, canCrit: true, consumeCt: this.maxCt, desc: `🗡️ 連續劈砍 (消耗全部CT，造成3次${this.atk}點普攻傷害)` };
+                return { id: 'TRIPLE_SLASH', type: 'ATTACK', value: this.atk, hits: 3, canCrit: true, consumeCt: this.maxCt, effects: ['attack'], desc: `🗡️ 連續劈砍 (消耗全部CT，造成3次${this.atk}點普攻傷害)` };
             }
             const pool = [
                 this.basicAttack(),
-                { id: 'SLASH', type: 'ATTACK', value: 4, canCrit: true, desc: '🗡️ 劈砍 (造成單體4點傷害)' },
-                { id: 'GAIN_COUNTER', type: 'SPECIAL', desc: '🛡️ 獲得1層反擊' }
+                { id: 'SLASH', type: 'ATTACK', value: 4, canCrit: true, effects: ['attack'], desc: '🗡️ 劈砍 (造成單體4點傷害)' },
+                { id: 'GAIN_COUNTER', type: 'SPECIAL', desc: '🛡️ 獲得1層反擊',
+                  effects: ['effect'], effect: [{ id: 'counter_stack', n: 1 }],
+                  effectMsg: (c) => `🛡️ ${c.attacker.name} 獲得 1 層【反擊】！` }
             ];
             if (this.ct >= 1) {
-                pool.push({ id: 'FOCUS', type: 'SPECIAL', consumeCt: 1, desc: '🎯 專注 (攻擊力+1，爆擊率+5%)' });
+                pool.push({ id: 'FOCUS', type: 'SPECIAL', consumeCt: 1, desc: '🎯 專注 (攻擊力+1，爆擊率+5%)',
+                    effects: ['selfBuff', 'setFlag'],
+                    selfBuff: { atk: 1 },
+                    setFlag: { critChance: (c) => (c.attacker.critChance || 0.15) + 0.05 },
+                    setFlagMsg: (c) => `🎯 ${c.attacker.name} 發動【專注】，攻擊力+1、爆擊率+5%（永久生效）` 
+                });
             }
             return Phaser.Utils.Array.GetRandom(pool);
         }
@@ -90,17 +104,28 @@ export const BOUNDARY_ENEMIES = {
 
             const pool = [
                 this.basicAttack(),
-                { id: 'HEAL_LOWEST', type: 'SPECIAL', desc: '💚 治療 (血量百分比最低的我方回復5)' }
+                { id: 'HEAL_LOWEST', type: 'SPECIAL', desc: '💚 治療 (血量百分比最低的我方回復5)',
+                  effects: ['heal'], healTo: 'lowestAlly', heal: 5,
+                  healMsg: (c) => `💚 ${c.attacker.name} 治療 ${c.healTarget.name}，回復 5 點HP！` 
+                }
             ];
             if (this.ct >= 1) {
                 pool.push({ id: 'AREA_HEAL_CAST', type: 'SPECIAL', consumeCt: 1, desc: '✨ 範圍治療 (下回合輪到自己行動時發動)' });
-                pool.push({ id: 'SAGE_BLESS', type: 'SPECIAL', consumeCt: 1, desc: '🔮 賢者加護 (除自己外我方獲得賢者加護2回合)' });
+                pool.push({ id: 'SAGE_BLESS', type: 'SPECIAL', consumeCt: 1, desc: '🔮 賢者加護 (除自己外我方獲得賢者加護2回合)',
+                    effects: ['effect'], effectTo: 'otherAllies', effect: [{ id: 'sage_blessing', n: 2 }],
+                    effectMsg: (c) => `🔮 ${c.attacker.name} 發動【賢者加護】，其他友軍獲得加護2回合！` 
+                });
             }
             if (this.ct >= 3) {
-                pool.push({ id: 'BLAST_MAGIC', type: 'SPECIAL', consumeCt: 3, value: 10, desc: '💥 爆破魔法 (對玩家造成10點傷害)' });
+                pool.push({ id: 'BLAST_MAGIC', type: 'SPECIAL', consumeCt: 3, value: 10, desc: '💥 爆破魔法 (對玩家造成10點傷害)',
+                    effects: ['damage'],
+                    damageMsg: (c) => `💥 ${c.attacker.name} 發動【爆破魔法】，對 ${c.target.name} 造成 ${c.dmg} 點傷害！` 
+                });
             }
             if (this.ct >= 2) {
-                pool.push({ id: 'FREEZE', type: 'SPECIAL', consumeCt: 2, value: 2, desc: '❄️ 冰結 (敵方單體獲得冰結2回合並造成2點傷害)' });
+                pool.push({ id: 'FREEZE', type: 'SPECIAL', consumeCt: 2, value: 2, desc: '❄️ 冰結 (敵方單體獲得冰結2回合並造成2點傷害)',
+                    effects: ['status', 'damage'], status: [{ type: 'freeze', turns: 2 }] 
+                });
             }
             return Phaser.Utils.Array.GetRandom(pool);
         }
@@ -118,15 +143,25 @@ export const BOUNDARY_ENEMIES = {
                 return this.basicAttack();
             }
             if (this.ct >= this.maxCt) {
-                return { id: 'ARMOR_PIERCE', type: 'SPECIAL', value: 5, consumeCt: this.maxCt, desc: '🎯 破甲箭 (消耗全部CT，敵方單體護甲值歸零並造成5點傷害、流血2層)' };
+                return { id: 'ARMOR_PIERCE', type: 'SPECIAL', value: 5, consumeCt: this.maxCt, desc: '🎯 破甲箭 (消耗全部CT，敵方單體護甲值歸零並造成5點傷害、流血2層)',
+                    effects: ['breakArmor', 'damage', 'status'],
+                    breakArmorMsg: (c) => `🎯 ${c.attacker.name} 發動【破甲箭】！${c.target.name} 護甲值歸零並進入【破防】狀態！`,
+                    status: [{ type: 'bleed', stacks: 2, msg: (c) => `🩸 ${c.target.name} 附加2層【流血】！` }],
+                    statusWhen: (c) => c.target.hp > 0 
+                };
             }
             const pool = [
                 this.basicAttack(),
-                { id: 'DODGE', type: 'SPECIAL', desc: '🌀 閃避' },
-                { id: 'RAPID_FIRE', type: 'ATTACK', value: 1, hits: 3, canCrit: true, desc: '🏹 連射 (造成3次1點傷害)' }
+                { id: 'DODGE', type: 'SPECIAL', desc: '🌀 閃避',
+                  effects: ['dodge'], dodgeMsg: (c) => `🌀 ${c.attacker.name} 準備【閃避】！` 
+                },
+                { id: 'RAPID_FIRE', type: 'ATTACK', value: 1, hits: 3, canCrit: true, effects: ['attack'], desc: '🏹 連射 (造成3次1點傷害)' }
             ];
             if (this.ct >= 1) {
-                pool.push({ id: 'RESUPPLY', type: 'SPECIAL', consumeCt: 1, desc: '🎯 補充箭矢 (下次造成傷害提升2點)' });
+                pool.push({ id: 'RESUPPLY', type: 'SPECIAL', consumeCt: 1, desc: '🎯 補充箭矢 (下次造成傷害提升2點)',
+                    effects: ['selfBuff'], selfBuff: { nextDamageBonus: 2 },
+                    selfBuffMsg: (c) => `🎯 ${c.attacker.name} 【補充箭矢】，下次造成傷害提升2點！` 
+                });
             }
             return Phaser.Utils.Array.GetRandom(pool);
         }

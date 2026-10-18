@@ -22,7 +22,7 @@ export const BASE_ENEMY = Object.assign(Object.create(ENEMY_TEMPLATE), {
 
     // 🟢 通用普攻意圖。desc 必須維持「造成 N 點傷害」格式，getIntentDisplayDesc 的正則才換算得到
     basicAttack() {
-       return { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
+       return { id: 'ATTACK', type: 'ATTACK', value: this.atk, canCrit: true, effects: ['attack'], desc: `⚔️ 普攻 (造成 ${this.atk} 點傷害)` };
     },
 
     executeAction(self, intent, target, combatSys, log, enemies) {

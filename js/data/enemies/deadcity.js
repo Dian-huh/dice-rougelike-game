@@ -22,7 +22,10 @@ export const DEADCITY_ENEMIES = {
             }
             const pool = [
                 this.basicAttack(),
-                { id: 'SPIRIT_STRIKE', type: 'SPECIAL', value: this.atk, desc: `💀 死靈衝擊 (單體破防並造成 ${this.atk} 點傷害)` }
+                { id: 'SPIRIT_STRIKE', type: 'SPECIAL', value: this.atk, desc: `💀 死靈衝擊 (單體破防並造成 ${this.atk} 點傷害)`,
+                  effects: ['breakArmor', 'damage'],
+                  breakArmorMsg: (c) => `💀 ${c.attacker.name} 發動【死靈衝擊】！${c.target.name} 護甲值歸零並進入【破防】狀態！` 
+                }
             ];
             if (this.ct >= 1) {
                 pool.push({ id: 'SUMMON', type: 'SPECIAL', summonIds: ['ghost_small'], consumeCt: 1, desc: '👻 分靈體 (消耗1CT，召喚一個小亡靈)' });
@@ -192,7 +195,11 @@ export const DEADCITY_ENEMIES = {
                 const general = [
                     this.basicAttack(),
                     { id: 'ASSAULT', type: 'SPECIAL', desc: '🗡️ 突襲 (單體爆擊傷害並使目標破防，再對全體造成1點傷害)' },
-                    { id: 'TERROR', type: 'SPECIAL', desc: '😱 恐懼 (單體陷入威壓2T、凍傷4T)' },
+                    { id: 'TERROR', type: 'SPECIAL', desc: '😱 恐懼 (單體陷入威壓2T、凍傷4T)',
+                      effects: ['effect'], effectTo: 'hero',
+                      effect: [{ id: 'debuff_pressure', n: 2, mode: 'refresh' }, { id: 'debuff_frostbite', n: 4, mode: 'refresh' }],
+                      effectMsg: (c) => `😱 ${c.attacker.name} 發動【恐懼】！${c.target.name} 陷入【威壓】(2回合)與【凍傷】(4回合)！` 
+                    },
                     { id: 'UNDEAD_SLASH', type: 'SPECIAL', desc: '💀 亡靈斬擊 (處死其他死寂之城小怪，重複X+1次造成全體4點傷害並獲得4點格擋)' }
                 ];
                 if (this.isBreak) return Phaser.Utils.Array.GetRandom(general);
