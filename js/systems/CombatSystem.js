@@ -2,6 +2,7 @@ import { createEnemyInstance } from '../data/enemyData.js';
 import { EffectEngine } from './EffectEngine.js';
 import { EFFECT_REGISTRY } from '../data/effectRegistry.js';
 import { DOT_TYPES } from '../data/dotRegistry.js'; 
+import { MoveRunner } from './MoveRunner.js';
 // js/systems/CombatSystem.js
 export class CombatSystem {
 
@@ -117,6 +118,11 @@ export class CombatSystem {
                 attacker.activeEffects = attacker.activeEffects.filter(e => e !== stunEntry);
                 safeLog(`✨ ${attacker.name} 發動滿CT技，強行掙脫【暈眩】狀態！`);
             }
+        }
+
+        // 🟢 MoveRunner 分流：有 effects / run 宣告的招式走通用執行器，其餘維持下方舊 if 鏈
+        if (Array.isArray(intent.effects) || typeof intent.run === 'function') {
+            return MoveRunner.execute(this, attacker, target, intent, safeLog, enemies);
         }
 
         //友軍增益型招式（薩滿的加護/部落英雄）
