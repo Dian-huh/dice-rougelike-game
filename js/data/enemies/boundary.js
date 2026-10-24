@@ -1,5 +1,6 @@
 import { BASE_ENEMY } from './baseEnemy.js';
 import { EffectEngine } from '../../systems/EffectEngine.js';
+import { allyMsg } from './sharedMoves.js';
 
 // 境界衛士招式（module 層級，getIntent 內多處共用，避免重複貼同一份宣告）
 const BG = {
@@ -111,13 +112,15 @@ export const BOUNDARY_ENEMIES = {
 
             const pool = [
                 this.basicAttack(),
-                { id: 'KEY_GUARD', type: 'ALLY_BUFF', effect: 'RANDOM_SELF_BLOCK', value: 3, desc: '🛡️ 關鍵守護 (自己與隨機1位友軍各獲得3點格擋)' }
+                { id: 'KEY_GUARD', type: 'ALLY_BUFF', desc: '🛡️ 關鍵守護 (自己與隨機1位友軍各獲得3點格擋)',
+                  effects: ['block'], blockTo: 'selfAndRandomAlly', block: 3,
+                  blockMsg: (c) => `🛡️ ${c.attacker.name} 發動【${c.intent.desc}】，自己獲得 3 點格擋`
+                      + (c.targets[1] ? `，並讓 ${c.targets[1].name} 一同獲得 3 點格擋！` : `！（沒有其他友軍可分享效果）`) 
+                }
             ];
             // CT-1盾擊：需要目前格擋 >= 5 才會被納入選招池，避免發動失敗
                 pool.push({
                     id: 'SHIELD_BASH', type: 'SPECIAL', consumeCt: 1, value: 3,
-                    selfBlockCost: 5,
-                    statusEffect: { type: 'stun', turns: 2 },
                     desc: '🛡️ 盾擊 (消耗5點格擋，對敵方單體造成3點傷害並施加暈眩2回合)',
                     effects: ['selfCost', 'damage', 'status'],
                     selfCost: { block: 5 },

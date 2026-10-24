@@ -979,6 +979,8 @@ export class BattleScene extends Phaser.Scene {
         if (step.type === 'NEED_TARGET') {
             // 等戰報播完、畫面刷新後才跳出選目標（否則敵人清單可能還是舊的，新召喚的敵人會點不到）
             this.whenLogIdle(() => {
+                this._uiDirty = true;
+                this._flushUI();
                 const session = UIInteractionSystem.createTargetPickerSession(
                     this, this.enemies, step.candidates,
                     (target) => { this._beginSequence(); this._runAttackStep(resumeFn({ target }), resumeFn, onDone); }

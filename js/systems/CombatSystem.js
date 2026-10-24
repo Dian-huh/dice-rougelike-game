@@ -126,93 +126,9 @@ export class CombatSystem {
             return MoveRunner.execute(this, attacker, target, intent, safeLog, enemies);
         }
 
-        //友軍增益型招式（薩滿的加護/部落英雄）
-        if (intent.type === 'ALLY_BUFF') {
-            this.applyAllyBuff(attacker, intent, enemies, safeLog);
-            if (intent.consumeCt) attacker.ct = Math.max(0, attacker.ct - intent.consumeCt);
-            return;
-        }
-
-
-
         // 所有招式都應已宣告 effects/run，或在上方有專屬分支；走到這裡代表有招式漏掛
         console.error(`⚠️ 招式 [${intent.id}] 沒有 effects/run，也沒有對應的舊分支，已略過`);
 
-    }
-
-
-// 🟢 通用「友軍增益」招式解析器
-    static applyAllyBuff(attacker, intent, enemies, safeLog) {
-        const allAllies = Array.isArray(enemies) ? enemies.filter(e => e && e.hp > 0) : [];
-        const otherAllies = allAllies.filter(e => e !== attacker);
-
-        switch (intent.effect) {
-            case 'BLOCK': {
-                if (otherAllies.length === 0) {
-                    safeLog(`🔮 ${attacker.name} 發動【${intent.desc}】，但沒有其他友軍在場，效果落空`);
-                    break;
-                }
-                otherAllies.forEach(ally => { ally.block = (ally.block || 0) + intent.value; });
-                safeLog(`🛡️ ${attacker.name} 發動【${intent.desc}】，其他友軍全部獲得 ${intent.value} 點格擋！`);
-                break;
-            }
-            case 'CHARGE_BUFF': {
-                if (otherAllies.length === 0) {
-                    safeLog(`🔮 ${attacker.name} 發動【${intent.desc}】，但沒有其他友軍在場，效果落空`);
-                    break;
-                }
-                otherAllies.forEach(ally => this.applyChargeBuff(ally, intent.turns));
-                safeLog(`⚡ ${attacker.name} 發動【${intent.desc}】，其他友軍獲得【衝鋒】效果 ${intent.turns} 回合！`);
-                break;
-            }
-            case 'HEAL_ALL': {
-                allAllies.forEach(ally => { ally.hp = Math.min(ally.maxHp, ally.hp + intent.value); });
-                safeLog(`✨ ${attacker.name} 發動【${intent.desc}】，友軍全體回復 ${intent.value} 點HP！`);
-                break;
-            }
-            case 'HEROIC_BUFF': {
-                // 部落英雄：自己必定獲得，並隨機挑一位其他友軍一起獲得
-                this.applyHeroicBuff(attacker, intent.turns);
-                let logMsg = `🔥 ${attacker.name} 發動【${intent.desc}】，自己獲得【英勇】效果 ${intent.turns} 回合`;
-                if (otherAllies.length > 0) {
-                    const chosen = otherAllies[Math.floor(Math.random() * otherAllies.length)];
-                    this.applyHeroicBuff(chosen, intent.turns);
-                    logMsg += `，並讓 ${chosen.name} 一同獲得【英勇】效果！`;
-                } else {
-                    logMsg += `！（沒有其他友軍可分享效果）`;
-                }
-                safeLog(logMsg);
-                break;
-            }
-            case 'RAGE_BUFF': {
-                allAllies.forEach(ally => this.applyRageBuff(ally, intent.turns || 2, intent.value || 2));
-                safeLog(`💢 ${attacker.name} 發動【${intent.desc}】，我方全體攻擊力、速度加值 +${intent.value || 2} (${intent.turns || 2}回合)！`);
-                break;
-            }
-            case 'RANDOM_SELF_BLOCK': {
-                attacker.block = (attacker.block || 0) + intent.value;
-                let msg = `🛡️ ${attacker.name} 發動【${intent.desc}】，自己獲得 ${intent.value} 點格擋`;
-                if (otherAllies.length > 0) {
-                    const randomAlly = otherAllies[Math.floor(Math.random() * otherAllies.length)];
-                    randomAlly.block = (randomAlly.block || 0) + intent.value;
-                    msg += `，並讓 ${randomAlly.name} 一同獲得 ${intent.value} 點格擋！`;
-                } else {
-                    msg += `！（沒有其他友軍可分享效果）`;
-                }
-                safeLog(msg);
-                break;
-            }
-                case 'BLOCK_HEAL_ALL': {   // 骨氣：我方全體（含自己）獲得格擋並回復
-                allAllies.forEach(ally => {
-                    ally.block = (ally.block || 0) + (intent.value || 0);
-                    ally.hp = Math.min(ally.maxHp, ally.hp + (intent.healValue || 0));
-                });
-                safeLog(`🦴 ${attacker.name} 發動【${intent.desc}】，我方全體獲得 ${intent.value || 0} 點格擋並回復 ${intent.healValue || 0} 點HP！`);
-                break;
-            }
-            default:
-                safeLog(`⚠️ 未知的友軍增益效果類型: ${intent.effect}`);
-        }
     }
 
     // 🟢 套用「衝鋒」：首次生效才疊加 OD上限+1 / 爆擊增益+1，重複觸發只刷新回合數，避免無限疊加

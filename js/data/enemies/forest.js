@@ -1,13 +1,13 @@
 // js/data/enemies/forest.js
 import { BASE_ENEMY } from './baseEnemy.js';
-import { summonMove } from './sharedMoves.js';
+import { summonMove, allyMsg } from './sharedMoves.js';
 
 
 // 黑龍招式（Break 池與常規池共用，避免重複貼同一份宣告）
 const BD = {
     claw: () => ({ id: 'CLAW', type: 'ATTACK', value: 3, hits: 2, canCrit: true, effects: ['attack'], desc: '🐾 爪擊 (造成 2 次 3 點傷害)' }),
     charge: () => ({
-        id: 'CHARGE', type: 'BUFF', healValue: 7, addCt: 1, desc: '✨ 蓄力 (獲得 1CT，回復 7 點血量)',
+        id: 'CHARGE', type: 'BUFF', desc: '✨ 蓄力 (獲得 1CT，回復 7 點血量)',
         effects: ['ct', 'heal'], ct: 1, heal: 7,
         openMsg: (c) => `🐉 ${c.attacker.name} 展開【${c.intent.desc || '蓄力'}】，回復 7 點 HP 並累積 1CT！`
     }),
@@ -164,17 +164,26 @@ export const FOREST_ENEMIES = {
             // 部落英雄：CT 達 2 時，50% 機率優先發動
             if (this.ct >= 2 && Math.random() < 0.5) {
                 return {
-                    id: 'TRIBAL_HERO', type: 'ALLY_BUFF', effect: 'HEROIC_BUFF', turns: 2, consumeCt: 2,
-                    desc: '部落英雄 (自己與1名友軍獲得英勇效果2回合)'
+                    id: 'TRIBAL_HERO', type: 'ALLY_BUFF', consumeCt: 2,
+                    desc: '部落英雄 (自己與1名友軍獲得英勇效果2回合)',
+                    effects: ['buff'], buffTo: 'selfAndRandomAlly', buff: { type: 'heroic', turns: 2 },
+                    buffMsg: (c) => `🔥 ${c.attacker.name} 發動【${c.intent.desc}】，自己獲得【英勇】效果 2 回合`
+                        + (c.targets[1] ? `，並讓 ${c.targets[1].name} 一同獲得【英勇】效果！` : `！（沒有其他友軍可分享效果）`)
                 };
             }
 
             // 一般行動池：普攻 + 3 種薩滿加護，隨機抽取
             const pool = [
                 this.basicAttack(),
-                { id: 'SHAMAN_GUARD', type: 'ALLY_BUFF', effect: 'BLOCK', value: 4, desc: '薩滿加護-守護 (其他友軍獲得4點格擋)' },
-                { id: 'SHAMAN_CHARGE', type: 'ALLY_BUFF', effect: 'CHARGE_BUFF', turns: 2, desc: '薩滿加護-衝鋒 (其他友軍獲得衝鋒效果2回合)' },
-                { id: 'SHAMAN_HOLY', type: 'ALLY_BUFF', effect: 'HEAL_ALL', value: 3, desc: '薩滿加護-聖光 (友軍全體回復3點HP)' }
+                { id: 'SHAMAN_GUARD', type: 'ALLY_BUFF', desc: '薩滿加護-守護 (其他友軍獲得4點格擋)',
+                  effects: ['block'], blockTo: 'otherAllies', block: 4,
+                  blockMsg: allyMsg((c) => `🛡️ ${c.attacker.name} 發動【${c.intent.desc}】，其他友軍全部獲得 4 點格擋！`) },
+                { id: 'SHAMAN_CHARGE', type: 'ALLY_BUFF', desc: '薩滿加護-衝鋒 (其他友軍獲得衝鋒效果2回合)',
+                  effects: ['buff'], buffTo: 'otherAllies', buff: { type: 'charge', turns: 2 },
+                  buffMsg: allyMsg((c) => `⚡ ${c.attacker.name} 發動【${c.intent.desc}】，其他友軍獲得【衝鋒】效果 2 回合！`) },
+                { id: 'SHAMAN_HOLY', type: 'ALLY_BUFF', desc: '薩滿加護-聖光 (友軍全體回復3點HP)',
+                  effects: ['heal', 'log'], healTo: 'allies', heal: 3,
+                  logMsg: (c) => `✨ ${c.attacker.name} 發動【${c.intent.desc}】，友軍全體回復 3 點HP！` }
             ];
             return Phaser.Utils.Array.GetRandom(pool);
         }

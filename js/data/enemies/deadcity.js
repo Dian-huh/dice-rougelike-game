@@ -1,7 +1,7 @@
 import { BASE_ENEMY } from './baseEnemy.js';
 import { CombatSystem } from '../../systems/CombatSystem.js';
 import { ENEMY_TEMPLATE } from '../enemyTemplate.js';
-import { critDamage, summonMove } from './sharedMoves.js';
+import { critDamage, summonMove, allyMsg } from './sharedMoves.js';
 import { EffectEngine } from '../../systems/EffectEngine.js';
 
 const aliveSoldiers = (c) => (c.enemies || []).filter(e => e.hp > 0 && e.id === 'skeleton_soldier').length;
@@ -84,7 +84,7 @@ export const DEADCITY_ENEMIES = {
                 return this.basicAttack();
             }
             if (this.ct >= this.maxCt) {
-                return { id: 'SPIRIT_BOMB', type: 'SPECIAL', summonIds: ['undead'], consumeCt: this.maxCt, desc: '💥 靈體炸彈 (消耗全部CT，召喚亡靈，自己死亡並對玩家造成爆擊傷害)',
+                return { id: 'SPIRIT_BOMB', type: 'SPECIAL', consumeCt: this.maxCt, desc: '💥 靈體炸彈 (消耗全部CT，召喚亡靈，自己死亡並對玩家造成爆擊傷害)',
                     consumeCtTiming: 'before',
                     effects: ['summon', 'selfDestruct'],
                     summon: ['undead'], summonIcon: '👻', summonSilentCap: true 
@@ -92,7 +92,10 @@ export const DEADCITY_ENEMIES = {
             }
             const pool = [
                 this.basicAttack(),
-                { id: 'GHOST_IMPACT', type: 'ALLY_BUFF', effect: 'RAGE_BUFF', turns: 2, value: 2, desc: '怨靈衝擊 (我方全體攻擊力、速度加值+2，2回合)' }
+                { id: 'GHOST_IMPACT', type: 'ALLY_BUFF', desc: '怨靈衝擊 (我方全體攻擊力、速度加值+2，2回合)',
+                  effects: ['buff'], buffTo: 'allies', buff: { type: 'rage', turns: 2, value: 2 },
+                  buffMsg: (c) => `💢 ${c.attacker.name} 發動【${c.intent.desc}】，我方全體攻擊力、速度加值 +2 (2回合)！` 
+                }
             ];
             return Phaser.Utils.Array.GetRandom(pool);
         }
@@ -137,8 +140,10 @@ export const DEADCITY_ENEMIES = {
         getIntent(turnCount, speedDice, self) {
             const pool = [
                 this.basicAttack(),
-                { id: 'BONE_SPIRIT', type: 'ALLY_BUFF', effect: 'BLOCK_HEAL_ALL', value: 4, healValue: 10,
-                  desc: '骨氣 (我方全體獲得4點格擋並回復10)' }
+                { id: 'BONE_SPIRIT', type: 'ALLY_BUFF', desc: '骨氣 (我方全體獲得4點格擋並回復10)',
+                  effects: ['block', 'heal', 'log'], blockTo: 'allies', block: 4, healTo: 'allies', heal: 10,
+                  logMsg: (c) => `🦴 ${c.attacker.name} 發動【${c.intent.desc}】，我方全體獲得 4 點格擋並回復 10 點HP！` 
+                }
             ];
             return Phaser.Utils.Array.GetRandom(pool);
         }
@@ -260,7 +265,7 @@ export const DEADCITY_ENEMIES = {
     
                 const pool = [...general];
                 if (this.ct >= 2 && aliveCount < 4) {
-                    pool.push({ id: 'NECRO_SUMMON', type: 'SPECIAL', consumeCt: 2, summonIds: ['undead', 'skeleton_soldier', 'skeleton_soldier'],
+                    pool.push({ id: 'NECRO_SUMMON', type: 'SPECIAL', consumeCt: 2,
                     desc: '💀 死靈招喚 (消耗2CT，招喚亡靈與2個骷髏士兵)',
                     effects: ['summon'], summon: ['undead', 'skeleton_soldier', 'skeleton_soldier'],
                     summonMsg: (c) => `💀 ${c.attacker.name} 發動【死靈招喚】！` });

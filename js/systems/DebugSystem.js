@@ -133,7 +133,7 @@ function discoverCases(enemyId) {
     return [...found.values()];
 }
 
-function runCase(c, tier, legacy, variant = 'base') {
+function runCase(c, tier, variant = 'base') {
     const key = caseKey(c, tier, variant);
     const prev = { hero: CombatSystem._activeHero, enemies: CombatSystem._activeEnemies, log: CombatSystem._battleLog };
     const logs = [];
@@ -155,7 +155,6 @@ function runCase(c, tier, legacy, variant = 'base') {
         let err = null;
         try {
             const intent = cloneIntent(c.intent);
-            if (legacy) { delete intent.effects; delete intent.run; }
             attacker.executeAction(attacker, intent, hero, CombatSystem, log, enemies);
         } catch (e) { err = String((e && e.message) || e); }
         return { err, log: logs, hero: snapEntity(hero), enemies: enemies.map(snapEntity) };
@@ -166,10 +165,10 @@ function runCase(c, tier, legacy, variant = 'base') {
     return [key, result];
 }
 
-function runAll(cases, legacy) {
+function runAll(cases) {
     const out = {};
     cases.forEach(c => [0, 1, 2].forEach(t => VARIANTS.forEach(v => {
-        const [k, r] = runCase(c, t, legacy, v);
+        const [k, r] = runCase(c, t, v);
         out[k] = r;
     })));
     return out;
@@ -208,23 +207,40 @@ export const DebugSystem = {
         console.log('可用敵人 id：', Object.keys(ENEMY_DATABASE));
     },
 
-   // 🟢 整理後的冒煙測試：每隻敵人在一般/Break 狀態各抽 30 次意圖，確認不會丟錯且有 id/desc
+       // 🧪 冒煙測試：每隻敵人的每個可到達招式，在 tier 0/2 各實際執行一次
+    // 判定失敗：getIntent 缺 id/desc、招式沒有 effects/run、執行丟例外、執行期間出現 console.error
     checkEnemies() {
-        let bad = 0;
-        Object.keys(ENEMY_DATABASE).forEach(id => {
-            try {
-                const e = createEnemyInstance(id, 0);
-                for (const brk of [false, true]) {
-                    e.isBreak = brk;
-                    e.ct = e.maxCt;   // 讓滿 CT 技也有機會被抽到
-                    for (let i = 0; i < 30; i++) {
-                       const it = e.getIntent(1, 1, e);
-                       if (!it || !it.id || !it.desc) throw new Error(`意圖缺欄位: ${JSON.stringify(it)}`);
-                    }
-                }
-            } catch (err) { bad++; console.error(`❌ ${id}`, err); }
-        });
-        console.log(bad === 0 ? `✅ ${Object.keys(ENEMY_DATABASE).length} 隻敵人意圖檢查通過` : `⚠️ ${bad} 隻有問題`);
+        let bad = 0, runs = 0;
+        const origErr = console.error;
+        const captured = [];
+        console.error = (...a) => { captured.push(a.map(String).join(' ')); };
+        try {
+            Object.keys(ENEMY_DATABASE).forEach(id => {
+                try {
+                    discoverCases(id).forEach(c => {
+                        if (!c.intent.id || !c.intent.desc) throw new Error(`意圖缺欄位: ${JSON.stringify(c.intent)}`);
+                        if (!Array.isArray(c.intent.effects) && typeof c.intent.run !== 'function') {
+                            throw new Error(`招式 ${c.intent.id} 沒有 effects/run`);
+                        }
+                        [0, 2].forEach(t => {
+                            captured.length = 0;
+                            const [key, r] = runCase(c, t, 'base');
+                            runs += 1;
+                            if (r.err || captured.length) {
+                                bad++;
+                                origErr(`❌ ${key}`, r.err || captured[0]);
+                            }
+                        });
+                    });
+                } catch (err) { bad++; origErr(`❌ ${id}`, err); }
+            });
+        } finally {
+            console.error = origErr;
+        }
+        console.log(bad === 0
+            ? `✅ ${Object.keys(ENEMY_DATABASE).length} 隻敵人、${runs} 次招式執行檢查通過`
+            : `⚠️ ${bad} 個問題`);
+        return bad === 0;
     },
 
     listCharacters() {
@@ -377,8 +393,8 @@ export const DebugSystem = {
         console.log(`🔀 其中 ${migrated.length} 個案例走 MoveRunner 新路徑`);
         if (migrated.length) console.log(migrated.join(', '));
 
-        const passA = runAll(cases, false);
-        const passB = runAll(cases, false);
+        const passA = runAll(cases);
+        const passB = runAll(cases);
         const self = diffSnapshots(passA, passB);
         if (self.length > 0) {
             console.error(`❌ 種子自洽失敗：同一批案例兩次結果不同（${self.length} 筆），隨機來源沒被完全固定`);
@@ -412,18 +428,10 @@ export const DebugSystem = {
             cases.forEach(c => [0, 1, 2].forEach(t => VARIANTS.forEach(v => {
                 if (!other[caseKey(c, t, v)]) missing.push([c, t, v]);
             })));
-            if (missing.length && opts.growBaseline) {
-                const grown = {};
-                missing.forEach(([c, t, v]) => { const [k, r] = runCase(c, t, true, v); grown[k] = r; });
-                Object.assign(other, grown); Object.assign(full, grown);
-                localStorage.setItem(MOVE_SNAP_PREFIX + opts.against, JSON.stringify(full));
-                console.log(`📈 基準新增 ${missing.length} 筆（以舊路徑結果補入）`);
-            } else if (missing.length) {
+            if (missing.length) {
                 missingCount = missing.length;
-                console.warn(`ℹ️ 基準缺 ${missing.length} 筆新案例，尚未比對；舊分支還在時加 growBaseline:true 補入`);
+                console.warn(`ℹ️ 基準缺 ${missing.length} 筆新案例，尚未比對；確認新招式行為正確後，用 save: 'baseline' 重建基準`);
             }
-        } else if (opts.legacyVsNew) {
-            other = runAll(cases, true); label = '舊路徑（移除 effects/run）';
         }
         if (other) {
             const diffs = diffSnapshots(passA, other).filter(d => d.what !== '只存在於 A');

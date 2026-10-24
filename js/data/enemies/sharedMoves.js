@@ -16,7 +16,12 @@ export const BOSS_CHARGE = {
 
 // 舊 SUMMON 的戰報格式（📢 呼叫 + 👺 圖示 + 滿場時一次性提示），搬遷時原樣保留
 export const summonMove = (ids, consumeCt, desc) => ({
-    id: 'SUMMON', type: 'SPECIAL', summonIds: [...ids], consumeCt, desc,
+    id: 'SUMMON', type: 'SPECIAL', consumeCt, desc,
     effects: ['summon'], summon: [...ids], summonIcon: '👺', summonCapNotice: true,
     summonMsg: (c) => `📢 ${c.attacker.name} 大聲呼叫，召喚了同伴支援！`
 });
+
+// 友軍增益招式的戰報：沒有可作用的友軍時輸出「效果落空」，否則輸出 okMsg
+export const allyMsg = (okMsg) => (c) => c.targets.length === 0
+    ? `🔮 ${c.attacker.name} 發動【${c.intent.desc}】，但沒有其他友軍在場，效果落空`
+    : okMsg(c);

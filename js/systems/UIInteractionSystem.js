@@ -36,21 +36,30 @@ export class UIInteractionSystem {
             // 🔧 改為操作 scene.enemyDisplays（BattleScene 的持久清單），
             // 不再自行渲染一份獨立副本，避免畫面上出現重複的敵人資訊
             show() {
-                if (!scene.enemyDisplays || scene.enemyDisplays.length === 0) {
-                    scene.renderEnemyUI();
-                }
+                // 🟢 每次都依「當下的 enemies」重建顯示，不信任可能過期的 enemyDisplays
+                //    （召喚、死亡後畫面可能還沒刷新）
+                scene.isPickingTarget = false;
+                scene.renderEnemyUI();
 
                 this.isActive = true;
-                scene.isPickingTarget = true;   // 🟢 新增：讓 renderEnemyUI() 的防呆真正生效
+                scene.isPickingTarget = true;   // renderEnemyUI() 的防呆：選目標期間不重繪
                 scene.appendLog(`🎯 請點選要攻擊的敵人目標...`, 'system');
 
+                let enabled = 0;
                 scene.enemyDisplays.forEach(display => {
                     if (display.enemy.hp > 0 && this.aliveEnemies.includes(display.enemy)) {
                         display.bg.setFillStyle(0x333355, 0.35).setStrokeStyle(S(2), 0xffff00);
                         display.bg.setInteractive({ useHandCursor: true });
                         display.bg.on('pointerdown', () => this._onTargetChosen(display.enemy));
+                        enabled += 1;
                     }
                 });
+
+                // 🟢 保險：理論上不會發生；萬一沒有任何可點的目標，自動選第一個候選，避免整個流程卡死
+                if (enabled === 0 && this.aliveEnemies.length > 0) {
+                    scene.appendLog(`⚠️ 找不到可點選的目標，自動選定第一個候選`, 'system');
+                    this._onTargetChosen(this.aliveEnemies[0]);
+                }
             },
 
             hide() {

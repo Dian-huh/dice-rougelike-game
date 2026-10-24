@@ -101,7 +101,7 @@ export const BANDIT_ENEMIES = {
         getIntent(turnCount, speedDice, self) {
             // 逃亡失敗後最優先；旗標在「執行」時才清除，避免 Break 重新解析意圖時遺失
             const sacrifice = {
-                id: 'SACRIFICE_STRIKE', type: 'SPECIAL', selfHpCost: 10, damageFromTargetMaxHpRatio: 0.5,
+                id: 'SACRIFICE_STRIKE', type: 'SPECIAL',
                 desc: '💢 捨身一擊 (自身HP-10，造成目標最大生命值1/2的傷害)',
                 effects: ['setFlag', 'selfLoss', 'damage'],
                 setFlag: { forceSacrificeNext: false },
@@ -113,11 +113,11 @@ export const BANDIT_ENEMIES = {
 
             if (!this.isBreak && this.ct >= this.maxCt) {
                 return {
-                    id: 'ESCAPE', type: 'SPECIAL', consumeCt: this.maxCt, escapeChance: 0.3,
+                    id: 'ESCAPE', type: 'SPECIAL', consumeCt: this.maxCt,
                     desc: '🏃 逃亡 (消耗全部CT，30%機率脫離戰鬥，失敗則下次必定發動捨身一擊)',
                     consumeCtTiming: 'before',   // 舊程式先消耗 CT 再擲機率
                     effects: ['roll', 'escape', 'setFlag'],
-                    roll: 0.3,//之後改為40%機率
+                    roll: 0.4,
                     escapeWhen: (c) => c.rolled,
                     setFlag: { forceSacrificeNext: true },
                     setFlagWhen: (c) => !c.rolled,
@@ -142,7 +142,7 @@ export const BANDIT_ENEMIES = {
         getIntent(turnCount, speedDice, self) {
             if (!this.isBreak && this.ct >= this.maxCt) {
                 return {
-                    id: 'SUMMON', type: 'SPECIAL', summonIds: ['wanted_criminal', 'bandit'], consumeCt: this.maxCt,
+                    id: 'SUMMON', type: 'SPECIAL', consumeCt: this.maxCt,
                     desc: '🐕 放狗咬人 (消耗全部CT，召喚通緝犯與山賊)',
                     effects: ['summon'], summon: ['wanted_criminal', 'bandit'], summonIcon: '👺', summonCapNotice: true,
                     summonMsg: (c) => `📢 ${c.attacker.name} 大聲呼叫，召喚了同伴支援！`
@@ -150,7 +150,7 @@ export const BANDIT_ENEMIES = {
             }
             const pool = [
                 this.basicAttack(),
-                { id: 'SUMMON', type: 'SPECIAL', summonIds: ['bandit'], desc: '📢 召喚小弟 (召喚一個山賊)',
+                { id: 'SUMMON', type: 'SPECIAL', desc: '📢 召喚小弟 (召喚一個山賊)',
                   effects: ['summon'], summon: ['bandit'], summonIcon: '👺', summonCapNotice: true,
                   summonMsg: (c) => `📢 ${c.attacker.name} 大聲呼叫，召喚了同伴支援！` 
                 }

@@ -281,3 +281,16 @@ MOVE_HANDLERS.log.defaultTo = 'self';
 
 // selfDestruct：引爆自身對目標造成爆擊傷害後死亡（走 SELF_DESTRUCT，可觸發怨氣，不給詛咒）
 MOVE_HANDLERS.selfDestruct = (ctx) => ctx.cs.selfDestruct(ctx.attacker, ctx.target, ctx.enemies, ctx.log);
+
+// buff：限時增益，buff: { type: 'charge' | 'heroic' | 'rage', turns, value? }，對每個目標各套一次
+MOVE_HANDLERS.buff = (ctx, intent) => {
+    const b = R(intent.buff, ctx) || {};
+    ctx.targets.forEach(t => {
+        if (b.type === 'charge') ctx.cs.applyChargeBuff(t, b.turns);
+        else if (b.type === 'heroic') ctx.cs.applyHeroicBuff(t, b.turns);
+        else if (b.type === 'rage') ctx.cs.applyRageBuff(t, b.turns || 2, b.value || 2);
+        else console.error(`⚠️ [MoveRunner] 未知的 buff type: ${b.type}`);
+    });
+    say(ctx, 'buff');
+};
+MOVE_HANDLERS.buff.defaultTo = 'self';

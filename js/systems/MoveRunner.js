@@ -29,6 +29,10 @@ export class MoveRunner {
             case 'otherAllies': return others;
             case 'randomAlly':   // 沿用舊程式的 Math.random 寫法，測試固定種子時抽法一致
                 return others.length ? [others[Math.floor(Math.random() * others.length)]] : [];
+            case 'selfAndRandomAlly': {   // 自己 + 隨機一位其他友軍（沒有其他友軍時只有自己）
+                const r = others.length ? [others[Math.floor(Math.random() * others.length)]] : [];
+                return [attacker, ...r];
+            }
             case 'lowestAlly': {
                 const t = cs.getLowestHpPercentAlly(alive);
                 return t ? [t] : [];
