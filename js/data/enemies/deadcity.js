@@ -1,6 +1,11 @@
 import { BASE_ENEMY } from './baseEnemy.js';
 import { CombatSystem } from '../../systems/CombatSystem.js';
 import { ENEMY_TEMPLATE } from '../enemyTemplate.js';
+import { critDamage, summonMove } from './sharedMoves.js';
+import { EffectEngine } from '../../systems/EffectEngine.js';
+
+const aliveSoldiers = (c) => (c.enemies || []).filter(e => e.hp > 0 && e.id === 'skeleton_soldier').length;
+
 
 export const DEADCITY_ENEMIES = {
     'undead': Object.assign(Object.create(BASE_ENEMY), {
@@ -18,7 +23,7 @@ export const DEADCITY_ENEMIES = {
                 return this.basicAttack();
             }
             if (this.ct >= this.maxCt) {
-                return { id: 'SUMMON', type: 'SPECIAL', summonIds: ['undead', 'ghost_small'], consumeCt: this.maxCt, desc: '👻 亡靈聚集 (消耗全部CT，召喚一個亡靈與小亡靈)' };
+                return summonMove(['undead', 'ghost_small'], this.maxCt, '👻 亡靈聚集 (消耗全部CT，召喚一個亡靈與小亡靈)');
             }
             const pool = [
                 this.basicAttack(),
@@ -28,7 +33,7 @@ export const DEADCITY_ENEMIES = {
                 }
             ];
             if (this.ct >= 1) {
-                pool.push({ id: 'SUMMON', type: 'SPECIAL', summonIds: ['ghost_small'], consumeCt: 1, desc: '👻 分靈體 (消耗1CT，召喚一個小亡靈)' });
+                pool.push(summonMove(['ghost_small'], 1, '👻 分靈體 (消耗1CT，召喚一個小亡靈)'));
             }
             return Phaser.Utils.Array.GetRandom(pool);
         }
@@ -49,11 +54,14 @@ export const DEADCITY_ENEMIES = {
                 return this.basicAttack();
             }
             if (this.ct >= this.maxCt) {
-                return { id: 'SPIRIT_BOMB', type: 'SPECIAL', consumeCt: this.maxCt, desc: '💥 靈體炸彈 (消耗全部CT，自己死亡並對玩家造成爆擊傷害)' };
+                return { id: 'SPIRIT_BOMB', type: 'SPECIAL', consumeCt: this.maxCt, desc: '💥 靈體炸彈 (消耗全部CT，自己死亡並對玩家造成爆擊傷害)',
+                    consumeCtTiming: 'before',   // 舊程式先消耗 CT 再自爆（怨氣復活時 CT 已扣）
+                    effects: ['selfDestruct'] 
+                };
             }
             const pool = [
                 this.basicAttack(),
-                { id: 'SPIRIT_STRIKE_MULTI', type: 'ATTACK', value: this.atk, hits: 2, canCrit: true, desc: `💀 死靈衝擊 (造成 2 次 ${this.atk} 點傷害)` }
+                { id: 'SPIRIT_STRIKE_MULTI', type: 'ATTACK', value: this.atk, hits: 2, canCrit: true, effects: ['attack'], desc: `💀 死靈衝擊 (造成 2 次 ${this.atk} 點傷害)` }
             ];
             return Phaser.Utils.Array.GetRandom(pool);
         }
@@ -76,7 +84,11 @@ export const DEADCITY_ENEMIES = {
                 return this.basicAttack();
             }
             if (this.ct >= this.maxCt) {
-                return { id: 'SPIRIT_BOMB', type: 'SPECIAL', summonIds: ['undead'], consumeCt: this.maxCt, desc: '💥 靈體炸彈 (消耗全部CT，召喚亡靈，自己死亡並對玩家造成爆擊傷害)' };
+                return { id: 'SPIRIT_BOMB', type: 'SPECIAL', summonIds: ['undead'], consumeCt: this.maxCt, desc: '💥 靈體炸彈 (消耗全部CT，召喚亡靈，自己死亡並對玩家造成爆擊傷害)',
+                    consumeCtTiming: 'before',
+                    effects: ['summon', 'selfDestruct'],
+                    summon: ['undead'], summonIcon: '👻', summonSilentCap: true 
+                };
             }
             const pool = [
                 this.basicAttack(),
@@ -102,7 +114,7 @@ export const DEADCITY_ENEMIES = {
                 this.basicAttack()
             ];
             if (this.ct >= 1) {
-                pool.push({ id: 'SUMMON', type: 'SPECIAL', summonIds: ['skeleton', 'skeleton'], consumeCt: 1, desc: '💀 亡靈呼喚 (消耗1CT，召喚2個骷髏)' });
+                pool.push(summonMove(['skeleton', 'skeleton'], 1, '💀 亡靈呼喚 (消耗1CT，召喚2個骷髏)'));
             }
             return Phaser.Utils.Array.GetRandom(pool);
         }
@@ -194,13 +206,38 @@ export const DEADCITY_ENEMIES = {
     
                 const general = [
                     this.basicAttack(),
-                    { id: 'ASSAULT', type: 'SPECIAL', desc: '🗡️ 突襲 (單體爆擊傷害並使目標破防，再對全體造成1點傷害)' },
+                    { id: 'ASSAULT', type: 'SPECIAL', desc: '🗡️ 突襲 (單體爆擊傷害並使目標破防，再對全體造成1點傷害)',
+                      effects: ['breakArmor', 'damage'],
+                      breakArmorMsg: (c) => `🗡️ ${c.attacker.name} 發動【突襲】！${c.target.name} 護甲值歸零並進入【破防】狀態！`,
+                      damage: [critDamage, 1] 
+                    },
+
                     { id: 'TERROR', type: 'SPECIAL', desc: '😱 恐懼 (單體陷入威壓2T、凍傷4T)',
                       effects: ['effect'], effectTo: 'hero',
                       effect: [{ id: 'debuff_pressure', n: 2, mode: 'refresh' }, { id: 'debuff_frostbite', n: 4, mode: 'refresh' }],
                       effectMsg: (c) => `😱 ${c.attacker.name} 發動【恐懼】！${c.target.name} 陷入【威壓】(2回合)與【凍傷】(4回合)！` 
                     },
-                    { id: 'UNDEAD_SLASH', type: 'SPECIAL', desc: '💀 亡靈斬擊 (處死其他死寂之城小怪，重複X+1次造成全體4點傷害並獲得4點格擋)' }
+
+                    { id: 'UNDEAD_SLASH', type: 'SPECIAL', desc: '💀 亡靈斬擊 (處死其他死寂之城小怪，重複X+1次造成全體4點傷害並獲得4點格擋)',
+                        run: (c) => {
+                            const victims = (c.enemies || []).filter(e => e !== c.attacker && e.hp > 0 && e.faction === 'deadcity');
+                            c.log(`💀 ${c.attacker.name} 發動【亡靈斬擊】！`);
+                            victims.forEach(v => {
+                              if (v.hp <= 0) return;
+                              v.hp = 0;
+                              c.log(`💀 ${v.name} 被斬殺！`);
+                              c.cs._handleEnemyDeath(v, c.attacker, c.log, c.enemies, { cause: 'DAMAGE' });
+                            });
+                            const repeats = victims.filter(v => v.hp <= 0).length + 1;   // 連鎖(覺醒)造成的死亡也算
+                            c.log(`💀 亡靈斬擊重複 ${repeats} 次：每次對全體造成 4 點傷害並獲得 4 點格擋！`);
+                            for (let i = 0; i < repeats; i++) {
+                              if (c.target.hp <= 0 || c.attacker.hp <= 0) break;
+                              c.cs.applyDamageToTarget(c.target, 4, c.log, c.enemies, c.attacker);
+                              c.attacker.block = (c.attacker.block || 0) + 4;
+                            }
+                        } 
+                    },
+
                 ];
                 if (this.isBreak) return Phaser.Utils.Array.GetRandom(general);
     
@@ -211,7 +248,12 @@ export const DEADCITY_ENEMIES = {
                     if (this.ct >= this.maxCt) {
                         return {
                             id: 'SWORD_AWAKEN', type: 'SPECIAL', consumeCt: this.maxCt,
-                            desc: '🗡️ 魔劍覺醒 (消耗全部CT，獲得靈體化；下回合CT補至上限、失去靈體化並必定發動弒滅劍)'
+                            desc: '🗡️ 魔劍覺醒 (消耗全部CT，獲得靈體化；下回合CT補至上限、失去靈體化並必定發動弒滅劍)',
+                            effects: ['effect', 'setFlag'],
+                            effect: [{ id: 'spirit_form', n: 1 }],
+                            effectWhen: (c) => !EffectEngine.getEntry(c.attacker, 'spirit_form'),
+                            setFlag: { awakenPending: true },
+                            setFlagMsg: (c) => `🗡️ ${c.attacker.name} 發動【魔劍覺醒】！獲得【靈體化】，下回合 CT 將補至上限並發動【弒滅劍】！`
                         };
                     }
                 }
@@ -219,16 +261,39 @@ export const DEADCITY_ENEMIES = {
                 const pool = [...general];
                 if (this.ct >= 2 && aliveCount < 4) {
                     pool.push({ id: 'NECRO_SUMMON', type: 'SPECIAL', consumeCt: 2, summonIds: ['undead', 'skeleton_soldier', 'skeleton_soldier'],
-                        desc: '💀 死靈招喚 (消耗2CT，招喚亡靈與2個骷髏士兵)' });
+                    desc: '💀 死靈招喚 (消耗2CT，招喚亡靈與2個骷髏士兵)',
+                    effects: ['summon'], summon: ['undead', 'skeleton_soldier', 'skeleton_soldier'],
+                    summonMsg: (c) => `💀 ${c.attacker.name} 發動【死靈招喚】！` });
                 }
+
                 if (this.ct >= 2) {
                     pool.push({ id: 'UNDEAD_RAID', type: 'SPECIAL', consumeCt: 2,
-                        desc: '⚔️ 亡靈突襲 (消耗2CT，造成單體4點傷害，其他死寂之城小怪立刻各發動一次普通攻擊)' });
+                        desc: '⚔️ 亡靈突襲 (消耗2CT，造成單體4點傷害，其他死寂之城小怪立刻各發動一次普通攻擊)',
+                        effects: ['damage'], damage: 4,
+                        openMsg: (c) => `⚔️ ${c.attacker.name} 發動【亡靈突襲】！`,
+                        run: (c) => {
+                            const minions = (c.enemies || []).filter(e => e !== c.attacker && e.hp > 0 && e.faction === 'deadcity');
+                            minions.forEach(m => {
+                                if (m.hp <= 0 || c.target.hp <= 0) return;
+                                c.log(`👊 ${m.name} 受令立刻發動一次普通攻擊！`);
+                                c.cs.executeEnemyIntent(m, { id: 'ATTACK', type: 'ATTACK', value: m.atk, canCrit: true, effects: ['attack'], desc: '普通攻擊' }, c.target, c.log, c.enemies);
+                            });
+                        } 
+                    });
                 }
+
                 if (this.ct >= 1 && (aliveCount < 4 || soldierCount > 0)) {
                     pool.push({ id: 'SKELETON_ARMY', type: 'SPECIAL', consumeCt: 1,
-                        desc: '🦴 骷髏大軍 (消耗1CT，招喚骷髏士兵直到滿場，我方全體獲得 4×骷髏士兵數 點格擋)' });
+                        desc: '🦴 骷髏大軍 (消耗1CT，招喚骷髏士兵直到滿場，我方全體獲得 4×骷髏士兵數 點格擋)',
+                        effects: ['summon', 'block'],
+                        openMsg: (c) => `🦴 ${c.attacker.name} 發動【骷髏大軍】！`,
+                        summon: (c) => Array(Math.max(0, 4 - (c.enemies || []).filter(e => e.hp > 0).length)).fill('skeleton_soldier'),
+                        blockTo: 'allies',
+                        block: (c) => 4 * aliveSoldiers(c),   // 召喚完成後才計算
+                        blockMsg: (c) => `🛡️ 場上 ${aliveSoldiers(c)} 個骷髏士兵，我方全體獲得 ${4 * aliveSoldiers(c)} 點格擋！` 
+                    });
                 }
+
                 if (this.phase === 2 && this.ct >= 1) pool.push(this._slayerIntent());
                 return Phaser.Utils.Array.GetRandom(pool);
             },
@@ -237,7 +302,25 @@ export const DEADCITY_ENEMIES = {
                 const x = this.ct;
                 return {
                     id: 'ANNIHILATE_SWORD', type: 'SPECIAL', consumeCt: x,
-                    desc: `🗡️ 弒滅劍 (消耗全部CT[${x}]，使目標血量變為${Math.max(0, 50 - x * 10)}%最大血量，覺醒${x}回合)`
+                    desc: `🗡️ 弒滅劍 (消耗全部CT[${x}]，使目標血量變為${Math.max(0, 50 - x * 10)}%最大血量，覺醒${x}回合)`,
+                    effects: ['ct', 'setFlag', 'damage', 'log', 'effect'],
+                    // 全部以「執行當下」的 CT 與目標血量結算，不是預告時的數字
+                    capture: {
+                        x: (c) => Math.max(1, c.attacker.ct || 0),
+                        targetPct: (c) => Math.max(0, 50 - c.x * 10),
+                        need: (c) => Math.max(0, c.target.hp - Math.max(1, Math.floor(c.target.maxHp * c.targetPct / 100)))
+                    },
+                    ct: (c) => -c.attacker.ct,
+                    ctMsg: (c) => `🗡️ ${c.attacker.name} 發動【弒滅劍】(消耗 ${c.x} CT)！要將 ${c.target.name} 的血量斬至 ${c.targetPct}%！`,
+                    setFlag: { forceSlayerNext: false },
+                    damageWhen: (c) => c.need > 0,
+                    damage: (c) => c.need,
+                    damageOpts: (c) => ({ fixedDamage: c.need, noScale: true }),
+                    damageMsg: '',
+                    logWhen: (c) => c.need <= 0,
+                    logMsg: (c) => `🗡️ ${c.target.name} 的血量已低於 ${c.targetPct}%，這一劍沒有造成傷害。`,
+                    effect: [{ id: 'death_awakening', n: (c) => c.x, mode: 'refresh' }],
+                    effectMsg: (c) => `⚔️ ${c.attacker.name} 進入【覺醒】狀態 (${c.x} 回合)！`
                 };
             },
         }),

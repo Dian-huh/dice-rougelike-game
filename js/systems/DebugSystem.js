@@ -71,6 +71,12 @@ function buildAttacker(enemyId, tier, state) {
     return inst;
 }
 
+const VARIANTS = ['base', 'alt'];   // alt：反向分支（玩家沒錢/沒流血/沒護甲受擊；攻擊者受傷）
+
+function caseKey(c, tier, variant = 'base') {
+    return `${c.enemyId}|${c.intent.id}|${c.intent.desc}|t${tier}${variant === 'base' ? '' : '|' + variant}`;
+}
+
 function makeTestHero() {
     const d = getCharacterData('hero');
     const h = JSON.parse(JSON.stringify(d));
@@ -92,7 +98,6 @@ function snapEntity(e) {
     return o;
 }
 
-// 探測：在多種狀態下反覆呼叫 getIntent，依 id+desc 去重，收集該敵人所有可到達的招式
 function discoverCases(enemyId) {
     const probe = createEnemyInstance(enemyId, 0);
     const phases = (probe.phaseThresholds && probe.phaseThresholds.length) ? [1, 2] : [1];
@@ -103,12 +108,13 @@ function discoverCases(enemyId) {
     const found = new Map();
 
     CombatSystem.setActiveHero(null);
-    phases.forEach(phase => [false, true].forEach(brk => {
-        flagSets.forEach((flags, fi) => {
+    // tag 空字串 = 第一輪（種子字串與舊版完全相同，既有案例的狀態不變）；第二輪只補「新發現」的招式
+    const sweep = (sets, tag) => phases.forEach(phase => [false, true].forEach(brk => {
+        sets.forEach((flags, fi) => {
             for (let ct = 0; ct <= maxCt; ct++) {
                 const state = { phase, brk, flags, ct };
                 for (let k = 0; k < 8; k++) {
-                    withSeed(`probe|${enemyId}|${phase}|${brk}|${fi}|${ct}|${k}`, () => {
+                    withSeed(`probe|${tag}${enemyId}|${phase}|${brk}|${fi}|${ct}|${k}`, () => {
                         try {
                             const e = buildAttacker(enemyId, 0, state);
                             const it = e.getIntent(1, 3, e);
@@ -121,11 +127,14 @@ function discoverCases(enemyId) {
             }
         });
     }));
+    sweep(flagSets, '');
+    sweep([{ block: 6 }], 'b|');   // 盾擊等「格擋夠才出現」的招式
+    sweep([{ isOD: true }], 'o|');   // OD 狂暴才會出現的招式（黑龍威壓）
     return [...found.values()];
 }
 
-function runCase(c, tier, legacy) {
-    const key = `${c.enemyId}|${c.intent.id}|${c.intent.desc}|t${tier}`;
+function runCase(c, tier, legacy, variant = 'base') {
+    const key = caseKey(c, tier, variant);
     const prev = { hero: CombatSystem._activeHero, enemies: CombatSystem._activeEnemies, log: CombatSystem._battleLog };
     const logs = [];
     const log = (m) => logs.push(String(m));
@@ -137,6 +146,10 @@ function runCase(c, tier, legacy) {
         allies[0].hp = Math.max(1, Math.ceil(allies[0].maxHp / 2));
         const enemies = [attacker, ...allies];
         const hero = makeTestHero();
+        if (variant === 'alt') {
+            Object.assign(hero, { gold: 10, bleedStacks: 0, armorHits: 0 });
+            attacker.hp = Math.max(1, Math.ceil(attacker.maxHp / 3));
+        }
         CombatSystem.setActiveHero(hero);
         CombatSystem.setActiveEnemies(enemies);
         let err = null;
@@ -155,7 +168,10 @@ function runCase(c, tier, legacy) {
 
 function runAll(cases, legacy) {
     const out = {};
-    cases.forEach(c => [0, 1, 2].forEach(t => { const [k, r] = runCase(c, t, legacy); out[k] = r; }));
+    cases.forEach(c => [0, 1, 2].forEach(t => VARIANTS.forEach(v => {
+        const [k, r] = runCase(c, t, legacy, v);
+        out[k] = r;
+    })));
     return out;
 }
 
@@ -381,21 +397,39 @@ export const DebugSystem = {
             } catch (e) { console.error('⚠️ 存入 localStorage 失敗（可能超過容量）：', e); }
         }
 
-        let other = null, label = '';
+        let other = null, label = '', missingCount = 0;
         if (opts.against) {
             const raw = localStorage.getItem(MOVE_SNAP_PREFIX + opts.against);
             if (!raw) { console.error(`⚠️ 找不到快照 [${opts.against}]`); return { ok: false }; }
-            other = JSON.parse(raw); label = `快照 [${opts.against}]`;
-            // 只測單一敵人時，只比對該敵人的案例
-            if (opts.enemyId) Object.keys(other).forEach(k => { if (!k.startsWith(opts.enemyId + '|')) delete other[k]; });
+            const full = JSON.parse(raw);
+            other = opts.enemyId
+                ? Object.fromEntries(Object.entries(full).filter(([k]) => k.startsWith(opts.enemyId + '|')))
+                : { ...full };
+            label = `快照 [${opts.against}]`;
+
+            // 基準沒有的新案例：growBaseline 以「舊路徑」結果補入（須在舊分支刪除前做）
+            const missing = [];
+            cases.forEach(c => [0, 1, 2].forEach(t => VARIANTS.forEach(v => {
+                if (!other[caseKey(c, t, v)]) missing.push([c, t, v]);
+            })));
+            if (missing.length && opts.growBaseline) {
+                const grown = {};
+                missing.forEach(([c, t, v]) => { const [k, r] = runCase(c, t, true, v); grown[k] = r; });
+                Object.assign(other, grown); Object.assign(full, grown);
+                localStorage.setItem(MOVE_SNAP_PREFIX + opts.against, JSON.stringify(full));
+                console.log(`📈 基準新增 ${missing.length} 筆（以舊路徑結果補入）`);
+            } else if (missing.length) {
+                missingCount = missing.length;
+                console.warn(`ℹ️ 基準缺 ${missing.length} 筆新案例，尚未比對；舊分支還在時加 growBaseline:true 補入`);
+            }
         } else if (opts.legacyVsNew) {
             other = runAll(cases, true); label = '舊路徑（移除 effects/run）';
         }
         if (other) {
-            const diffs = diffSnapshots(passA, other);
-            if (diffs.length === 0) console.log(`✅ 與${label}比對：零差異（${Object.keys(passA).length} 筆）`);
+            const diffs = diffSnapshots(passA, other).filter(d => d.what !== '只存在於 A');
+            if (diffs.length === 0) console.log(`✅ 與${label}比對：零差異（${Object.keys(passA).length} 筆${missingCount ? `，其中 ${missingCount} 筆基準缺漏未比對` : ''}）`);
             else { console.error(`❌ 與${label}比對：${diffs.length} 筆差異`); console.table(diffs); }
-            return { ok: diffs.length === 0, diffs };
+            return { ok: diffs.length === 0 && missingCount === 0, diffs };
         }
         return { ok: true, cases: cases.length };
     },
@@ -492,6 +526,24 @@ export const DebugSystem = {
         const ok = results.every(r => r.結果 === '✅');
         console.log(ok ? '✅ MoveRunner 骨架測試全數通過' : '❌ 有測試失敗');
         return ok;
+    },
+
+        // 🧪 列出尚未宣告化（沒有 effects/run）的招式：剩下的應該只有 B 類與 ALLY_BUFF
+    listLegacyMoves() {
+        const seen = new Set();
+        const rows = [];
+        Object.keys(ENEMY_DATABASE).forEach(id => {
+            discoverCases(id).forEach(c => {
+                if (c.intent.effects || typeof c.intent.run === 'function') return;
+                const k = `${id}|${c.intent.id}`;
+                if (seen.has(k)) return;
+                seen.add(k);
+                rows.push({ 敵人: id, 招式: c.intent.id, type: c.intent.type });
+            });
+        });
+        console.table(rows);
+        console.log(`📋 尚未宣告化的招式：${rows.length} 種`);
+        return rows;
     },
 
 };

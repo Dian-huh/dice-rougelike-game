@@ -1,4 +1,78 @@
 import { BASE_ENEMY } from './baseEnemy.js';
+import { EffectEngine } from '../../systems/EffectEngine.js';
+
+// 境界衛士招式（module 層級，getIntent 內多處共用，避免重複貼同一份宣告）
+const BG = {
+    prayer: () => ({
+        id: 'PRAYER_BLESSING', type: 'SPECIAL', desc: '🙏 祈求加護 (回復15%最大生命，過量轉格擋)',
+        effects: ['heal'], heal: (c) => Math.floor(c.attacker.maxHp * 0.15), healOverflowToBlock: true,
+        healMsg: (c) => `🙏 ${c.attacker.name} 發動【祈求加護】，回復 ${c.healed} 點HP！`
+    }),
+    thrust: () => ({ id: 'THRUST', type: 'ATTACK', value: 4, canCrit: true, statusEffect: { type: 'bleed', stacks: 2 }, effects: ['attack'], desc: '🗡️ 突刺 (造成4點傷害並給予流血2)' }),
+    sweep: () => ({ id: 'SWEEP', type: 'ATTACK', value: 4, canCrit: true, effects: ['attack'], desc: '💫 橫掃 (造成4點傷害)' }),
+    ascend: () => ({
+        id: 'ASCEND', type: 'BUFF', desc: '🦅 展翼 (進入飛行狀態)',
+        effects: ['setFlag'], setFlag: { isFlying: true },
+        setFlagMsg: (c) => `🦅 ${c.attacker.name} 振翅升空進入【飛翔】狀態！`
+    }),
+    danceFlower: () => ({ id: 'DANCE_FLOWER', type: 'ATTACK', value: 2, hits: 4, canCrit: true, consumeCt: 2, bossHeal: true, effects: ['attack'], desc: '🌸 舞花 (造成4次2點傷害)' }),
+    groundSlam: (maxCt) => ({
+        id: 'GROUND_SLAM', type: 'SPECIAL', consumeCt: maxCt, bossHeal: true,
+        desc: '💥 裂地擊 (消耗全部CT，全體暈眩+7點傷害，自己+7格擋)',
+        effects: ['status', 'damage', 'block'],
+        openMsg: (c) => `💥 ${c.attacker.name} 發動【裂地擊】！`,
+        status: [{ type: 'stun', turns: 2, msg: '' }],
+        damage: 7,
+        block: 7, blockTo: 'self',
+        blockMsg: (c) => `🛡️ ${c.attacker.name} 獲得 7 點格擋！`
+    }),
+    continuousThrust: () => ({
+        id: 'CONTINUOUS_THRUST', type: 'SPECIAL', consumeCt: 2, bossHeal: true,
+        desc: '🗡️ 連續刺擊 (護甲歸零+流血3，若已有流血則追加2次1點傷害)',
+        effects: ['breakArmor', 'status', 'damage'],
+        breakArmorMsg: '',
+        status: [{ type: 'bleed', stacks: 3,
+            msg: (c) => `🗡️ ${c.attacker.name} 發動【連續刺擊】！${c.target.name} 護甲歸零、進入【破防】，附加3層【流血】！` }],
+        // 流血剛加了 3 層，所以「原本就有流血」⟺ 現在 > 3
+        damage: 1, hits: 2, damageWhen: (c) => (c.target.bleedStacks || 0) > 3,
+        damageMsg: (c) => `🩸 ${c.target.name} 已有流血在身，追加造成2次1點傷害！`
+    }),
+    groundThunder: (maxCt) => ({
+        id: 'GROUND_THUNDER', type: 'SPECIAL', consumeCt: maxCt, bossHeal: true,
+        desc: '⚡ 憾地洛雷 (消耗全部CT，解除飛行，全體暈眩+電擊，單體10點傷害)',
+        effects: ['setFlag', 'status', 'damage'],
+        openMsg: (c) => `⚡ ${c.attacker.name} 發動【憾地洛雷】！`,
+        setFlag: { isFlying: false, lockedBeforeGroundThunder: false },
+        status: [{ type: 'stun', turns: 2, msg: '' }, { type: 'bleed', stacks: 2, msg: '' }, { type: 'shock', stacks: 2 }],
+        damage: 10
+    }),
+    lightningSpear: () => ({
+        id: 'LIGHTNING_SPEAR', type: 'SPECIAL', consumeCt: 3, bossHeal: true,
+        desc: '⚡ 引雷槍 (7點傷害+電擊，若目標有流血則追加暈眩)',
+        effects: ['damage', 'status', 'selfBuff', 'setFlag'],
+        openMsg: (c) => `⚡ ${c.attacker.name} 發動【引雷槍】！`,
+        damage: 7,
+        status: [
+            { type: 'shock', stacks: 2 },
+            { type: 'stun', turns: 2, when: (c) => (c.target.bleedStacks || 0) > 0,
+              msg: (c) => `🩸 ${c.target.name} 已有流血，追加施加【暈眩】(2回合)！` }
+        ],
+        selfBuff: { nextDamageBonus: 2 },
+        setFlag: { pendingLightningRecall: true }
+    }),
+    thunderThrust: () => ({
+        id: 'THUNDER_THRUST', type: 'SPECIAL', consumeCt: 1, bossHeal: true,
+        desc: '⚡ 天雷突刺 (傷害=4+流血層數+電擊層數)',
+        effects: ['damage', 'status'],
+        // 傷害依「加流血之前」的層數，所以 damage 排在 status 前面
+        damage: (c) => {
+            const s = EffectEngine.getEntry(c.target, 'debuff_shock');
+            return 6 + (c.target.bleedStacks || 0) + (s ? s.stacks : 0);
+        },
+        damageMsg: (c) => `⚡ ${c.attacker.name} 發動【天雷突刺】，給予3層流血並造成 ${c.dmg} 點傷害！`,
+        status: [{ type: 'bleed', stacks: 3, msg: '' }]
+    })
+};
 
 export const BOUNDARY_ENEMIES = {
     'shield_guardian': Object.assign(Object.create(BASE_ENEMY), {
@@ -40,14 +114,17 @@ export const BOUNDARY_ENEMIES = {
                 { id: 'KEY_GUARD', type: 'ALLY_BUFF', effect: 'RANDOM_SELF_BLOCK', value: 3, desc: '🛡️ 關鍵守護 (自己與隨機1位友軍各獲得3點格擋)' }
             ];
             // CT-1盾擊：需要目前格擋 >= 5 才會被納入選招池，避免發動失敗
-            if (this.ct >= 1 && (this.block || 0) >= 5) {
                 pool.push({
                     id: 'SHIELD_BASH', type: 'SPECIAL', consumeCt: 1, value: 3,
                     selfBlockCost: 5,
                     statusEffect: { type: 'stun', turns: 2 },
-                    desc: '🛡️ 盾擊 (消耗5點格擋，對敵方單體造成3點傷害並施加暈眩2回合)'
+                    desc: '🛡️ 盾擊 (消耗5點格擋，對敵方單體造成3點傷害並施加暈眩2回合)',
+                    effects: ['selfCost', 'damage', 'status'],
+                    selfCost: { block: 5 },
+                    selfCostFailMsg: (c) => `🛡️ ${c.attacker.name} 格擋不足，【盾擊】發動失敗！`,
+                    selfCostMsg: (c) => `🛡️ ${c.attacker.name} 消耗 5 點格擋，發動【盾擊】！`,
+                    status: [{ type: 'stun', turns: 2 }]
                 });
-            }
             return Phaser.Utils.Array.GetRandom(pool);
         }
     }),
@@ -95,7 +172,13 @@ export const BOUNDARY_ENEMIES = {
             // 🟢 最優先：上次「範圍治療」預約的延遲治療，輪到自己行動時觸發
             if (this.pendingDelayedHeal) {
                 this.pendingDelayedHeal = false;
-                return { id: 'DELAYED_HEAL_RESOLVE', type: 'SPECIAL', desc: '✨ 範圍治療發動 (血量百分比最低的我方回復5，其餘回復2)' };
+                return { id: 'DELAYED_HEAL_RESOLVE', type: 'SPECIAL', desc: '✨ 範圍治療發動 (血量百分比最低的我方回復5，其餘回復2)',
+                    effects: ['heal', 'log'],
+                    capture: { lowest: (c) => c.cs.getLowestHpPercentAlly((c.enemies || []).filter(e => e.hp > 0)) },
+                    healTo: 'allies',
+                    heal: (c) => c.cur === c.lowest ? 5 : 2,
+                    logMsg: (c) => `✨ ${c.attacker.name} 的【範圍治療】發動！${c.lowest ? c.lowest.name + '回復5' : ''}，其餘我方回復2` 
+                };
             }
 
             if (this.isBreak) {
@@ -110,7 +193,10 @@ export const BOUNDARY_ENEMIES = {
                 }
             ];
             if (this.ct >= 1) {
-                pool.push({ id: 'AREA_HEAL_CAST', type: 'SPECIAL', consumeCt: 1, desc: '✨ 範圍治療 (下回合輪到自己行動時發動)' });
+                pool.push({ id: 'AREA_HEAL_CAST', type: 'SPECIAL', consumeCt: 1, desc: '✨ 範圍治療 (下回合輪到自己行動時發動)',
+                    effects: ['setFlag'], setFlag: { pendingDelayedHeal: true },
+                    setFlagMsg: (c) => `✨ ${c.attacker.name} 詠唱【範圍治療】，將在下次行動時發動！` 
+                });
                 pool.push({ id: 'SAGE_BLESS', type: 'SPECIAL', consumeCt: 1, desc: '🔮 賢者加護 (除自己外我方獲得賢者加護2回合)',
                     effects: ['effect'], effectTo: 'otherAllies', effect: [{ id: 'sage_blessing', n: 2 }],
                     effectMsg: (c) => `🔮 ${c.attacker.name} 發動【賢者加護】，其他友軍獲得加護2回合！` 
@@ -202,64 +288,37 @@ export const BOUNDARY_ENEMIES = {
         getIntent(turnCount, speedDice, self) {
             if (this.pendingLightningRecall) {
                 this.pendingLightningRecall = false;
-                return { id: 'LIGHTNING_RECALL', type: 'ATTACK', value: this.atk, canCrit: true, desc: '⚡ 回收雷槍 (延遲傷害+2)' };
+                return { id: 'LIGHTNING_RECALL', type: 'ATTACK', value: this.atk, canCrit: true, effects: ['attack'], desc: '⚡ 回收雷槍 (延遲傷害+2)' };
             }
 
             if (this.isBreak) {
                 return this.basicAttack();
             }
 
-            // 🟢 新增：飛行狀態下，特動只會選擇憾地洛雷（不論CT是否滿，一律等待CT滿才發動；未滿CT只能一般行動）
+            // 飛行狀態下，特動只會選擇憾地洛雷；CT 未滿只能一般行動
             if (this.isFlying) {
-                if (this.ct >= this.maxCt) {
-                    return { id: 'GROUND_THUNDER', type: 'SPECIAL', consumeCt: this.maxCt, desc: '⚡ 憾地洛雷 (消耗全部CT，解除飛行，全體暈眩+電擊，單體10點傷害)' };
-                }
-                const flyingGeneralPool = [
-                    this.basicAttack(),
-                    { id: 'SWEEP', type: 'ATTACK', value: 4, canCrit: true, desc: '💫 橫掃 (造成4點傷害)' }
-                ];
-                return Phaser.Utils.Array.GetRandom(flyingGeneralPool);
+                if (this.ct >= this.maxCt) return BG.groundThunder(this.maxCt);
+                return Phaser.Utils.Array.GetRandom([this.basicAttack(), BG.sweep()]);
             }
 
+            const generalPool = [this.basicAttack(), BG.prayer(), BG.thrust(), BG.sweep()];
+
             if (this.phase === 2 && this.lockedBeforeGroundThunder) {
-                if (this.ct >= this.maxCt) {
-                    return { id: 'GROUND_THUNDER', type: 'SPECIAL', consumeCt: this.maxCt, desc: '⚡ 憾地洛雷 (消耗全部CT，解除飛行，全體暈眩+電擊，單體10點傷害)' };
-                }
-                const generalPool = [
-                    this.basicAttack(),
-                    { id: 'PRAYER_BLESSING', type: 'SPECIAL', desc: '🙏 祈求加護 (回復15%最大生命，過量轉格擋)' },
-                    { id: 'THRUST', type: 'ATTACK', value: 4, canCrit: true, statusEffect: { type: 'bleed', stacks: 2 }, desc: '🗡️ 突刺 (造成4點傷害並給予流血2)' },
-                    { id: 'SWEEP', type: 'ATTACK', value: 4, canCrit: true, desc: '💫 橫掃 (造成4點傷害)' }
-                ];
+                if (this.ct >= this.maxCt) return BG.groundThunder(this.maxCt);
                 return Phaser.Utils.Array.GetRandom(generalPool);
             }
 
-            const generalPool = [
-                this.basicAttack(),
-                { id: 'PRAYER_BLESSING', type: 'SPECIAL', desc: '🙏 祈求加護 (回復15%最大生命，過量轉格擋)' },
-                { id: 'THRUST', type: 'ATTACK', value: 4, canCrit: true, statusEffect: { type: 'bleed', stacks: 2 }, desc: '🗡️ 突刺 (造成4點傷害並給予流血2)' },
-                { id: 'SWEEP', type: 'ATTACK', value: 4, canCrit: true, desc: '💫 橫掃 (造成4點傷害)' }
-            ];
-
             if (this.phase === 1) {
-                if (this.ct >= this.maxCt) {
-                    generalPool.push({ id: 'GROUND_SLAM', type: 'SPECIAL', consumeCt: this.maxCt, desc: '💥 裂地擊 (消耗全部CT，全體暈眩+7點傷害，自己+7格擋)' });
-                }
+                if (this.ct >= this.maxCt) generalPool.push(BG.groundSlam(this.maxCt));
                 if (this.ct >= 2) {
-                    generalPool.push({ id: 'DANCE_FLOWER', type: 'ATTACK', value: 2, hits: 4, canCrit: true, consumeCt: 2, desc: '🌸 舞花 (造成4次2點傷害)' });
-                    generalPool.push({ id: 'CONTINUOUS_THRUST', type: 'SPECIAL', consumeCt: 2, desc: '🗡️ 連續刺擊 (護甲歸零+流血3，若已有流血則追加2次1點傷害)' });
+                    generalPool.push(BG.danceFlower());
+                    generalPool.push(BG.continuousThrust());
                 }
             } else {
-                if (this.ct >= this.maxCt) {
-                    generalPool.push({ id: 'GROUND_THUNDER', type: 'SPECIAL', consumeCt: this.maxCt, desc: '⚡ 憾地洛雷 (消耗全部CT，解除飛行，全體暈眩+電擊，單體10點傷害)' });
-                }
-                if (this.ct >= 3) {
-                    generalPool.push({ id: 'LIGHTNING_SPEAR', type: 'SPECIAL', consumeCt: 3, desc: '⚡ 引雷槍 (7點傷害+電擊，若目標有流血則追加暈眩)' });
-                }
-                if (this.ct >= 1) {
-                    generalPool.push({ id: 'THUNDER_THRUST', type: 'SPECIAL', consumeCt: 1, desc: '⚡ 天雷突刺 (傷害=4+流血層數+電擊層數)' });
-                }
-                generalPool.push({ id: 'ASCEND', type: 'BUFF', desc: '🦅 展翼 (進入飛行狀態)' });   // 🟢 新增：二階特動池新增飛行
+                if (this.ct >= this.maxCt) generalPool.push(BG.groundThunder(this.maxCt));
+                if (this.ct >= 3) generalPool.push(BG.lightningSpear());
+                if (this.ct >= 1) generalPool.push(BG.thunderThrust());
+                generalPool.push(BG.ascend());
             }
 
             return Phaser.Utils.Array.GetRandom(generalPool);

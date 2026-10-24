@@ -48,6 +48,17 @@ export class MoveRunner {
             targets: [], to: 'hero', halt: false
         };
 
+        // capture：出手當下把狀態存進 ctx（例如 { spent: c => c.attacker.ct }），供後續函式型欄位讀取
+        if (intent.capture) {
+            Object.keys(intent.capture).forEach(k => { ctx[k] = this.resolve(intent.capture[k], ctx); });
+        }
+
+        // 開場文字（舊分支多半以「發動【招式名】」開頭）
+        if (intent.openMsg) {
+            const m = this.resolve(intent.openMsg, ctx);
+            if (m) safeLog(m);
+        }
+
         // consumeCt 時機：預設 after；烈焰琉璃的 ct setter 有副作用，必要時可指定 'before'
         const timing = intent.consumeCtTiming === 'before' ? 'before' : 'after';
         const consume = () => {

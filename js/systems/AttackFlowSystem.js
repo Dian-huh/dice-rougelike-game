@@ -312,13 +312,22 @@ export const AttackFlowSystem = {
         }
 
         if (scope === 'SELF') {
+            // 🟢 SELF 行動也要比速度：比玩家快的敵人先出手 → 玩家行動 → 其餘敵人（含速度平手）
+            const before = [], after = [];
+            enemies.forEach(e => {
+                if (e.hp <= 0) return;
+                const order = CombatSystem.resolveTurnOrder(ctx.playerSpeedDice, e.speedDice);
+                (order === 'ENEMY_FIRST' ? before : after).push(e);   // 平手 → after：玩家行動先生效
+            });
+            before.sort((a, b) => (b.speedDice || 0) - (a.speedDice || 0))
+                  .forEach(e => { if (e.hp > 0 && hero.hp > 0) this._resolveBystanderEnemy(ctx, e); });
+
             for (let r = 0; r < repeatCount; r++) {
                 if (hero.hp <= 0) break;
                 this._executePlayerDiceAction(ctx, actionDice, null);
             }
-            enemies.forEach(enemy => {
-                if (enemy.hp > 0 && hero.hp > 0) this._resolveBystanderEnemy(ctx, enemy);
-            });
+
+            after.forEach(e => { if (e.hp > 0 && hero.hp > 0) this._resolveBystanderEnemy(ctx, e); });
         } else if (scope === 'ALL_ENEMIES') {
             enemies.forEach(enemy => this._resolvePlayerVsEnemy(ctx, enemy, actionDice, repeatCount));
         } else {

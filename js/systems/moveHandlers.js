@@ -136,12 +136,16 @@ MOVE_HANDLERS.damage = (ctx, intent) => {
 // status：陣列，每項 { type, turns?, stacks?, msg? }，turns/stacks 可為函式
 MOVE_HANDLERS.status = (ctx, intent) => {
     const entries = R(intent.status, ctx) || [];
-    ctx.targets.forEach(t => entries.forEach(e => applyStatusEntry(ctx, t, e)));
+    ctx.targets.forEach(t => entries.forEach(e => {
+        if (typeof e.when === 'function' && !e.when(ctx)) return;
+        applyStatusEntry(ctx, t, e);
+    }));
 };
 
 // heal：預設對自己；ctx.healed / ctx.overflow / ctx.healTarget 供訊息使用；healOverflowToBlock 把溢出轉格擋(1:1)
 MOVE_HANDLERS.heal = (ctx, intent) => {
     ctx.targets.forEach(t => {
+        ctx.cur = t;   // 供函式型 heal 依目標決定量（例：血量最低者回5、其餘回2）
         const amount = R(intent.heal, ctx);
         const before = t.hp;
         const healed = Math.max(0, Math.min(t.maxHp - before, amount));
@@ -194,10 +198,10 @@ MOVE_HANDLERS.steal = (ctx, intent) => {
     ctx.targets.forEach(t => ctx.cs.stealGold(ctx.attacker, t, n, ctx.log));
 };
 
-// 注意：呼叫 cs.summonEnemies（含 onSpawn、上限 4）。舊 SUMMON/SPIRIT_BOMB 的召喚文字與 onSpawn 行為不同，搬遷時再處理
 MOVE_HANDLERS.summon = (ctx, intent) => {
     say(ctx, 'summon');
-    ctx.cs.summonEnemies(ctx.attacker, R(intent.summon, ctx) || [], ctx.enemies, ctx.log);
+    ctx.cs.summonEnemies(ctx.attacker, R(intent.summon, ctx) || [], ctx.enemies, ctx.log,
+        { icon: intent.summonIcon, capNotice: intent.summonCapNotice, silentCap: intent.summonSilentCap });
 };
 MOVE_HANDLERS.summon.defaultTo = 'self';
 
@@ -232,3 +236,48 @@ MOVE_HANDLERS.effect = (ctx, intent) => {
     say(ctx, 'effect');
 };
 MOVE_HANDLERS.effect.defaultTo = 'self';
+
+// selfCost：{ block: 5 } 扣自身欄位；任一不足 → 輸出 selfCostFailMsg、ctx.halt = true
+MOVE_HANDLERS.selfCost = (ctx, intent) => {
+    const cost = R(intent.selfCost, ctx) || {};
+    const a = ctx.attacker;
+    for (const k of Object.keys(cost)) {
+        if ((a[k] || 0) < R(cost[k], ctx)) {
+            say(ctx, 'selfCostFail');
+            ctx.halt = true;
+            return;
+        }
+    }
+    Object.keys(cost).forEach(k => { a[k] = (a[k] || 0) - R(cost[k], ctx); });
+    say(ctx, 'selfCost');
+};
+MOVE_HANDLERS.selfCost.defaultTo = 'self';
+
+// selfLoss：自己扣欄位，不低於 selfLossMin（預設 0），不會失敗。例：{ hp: 10 } + selfLossMin: { hp: 1 }
+MOVE_HANDLERS.selfLoss = (ctx, intent) => {
+    const loss = R(intent.selfLoss, ctx) || {};
+    const mins = R(intent.selfLossMin, ctx) || {};
+    const a = ctx.attacker;
+    Object.keys(loss).forEach(k => { a[k] = Math.max(mins[k] || 0, (a[k] || 0) - R(loss[k], ctx)); });
+    say(ctx, 'selfLoss');
+};
+MOVE_HANDLERS.selfLoss.defaultTo = 'self';
+
+// roll：擲一次機率，結果存 ctx.rolled，後續 effect 用 [effect]When 分支
+MOVE_HANDLERS.roll = (ctx, intent) => {
+    ctx.rolled = Math.random() < (R(intent.roll, ctx) || 0);
+};
+MOVE_HANDLERS.roll.defaultTo = 'self';
+
+// escape：脫離戰鬥（不算擊殺，跳過賞金/返還/詛咒）
+MOVE_HANDLERS.escape = (ctx) => {
+    ctx.targets.forEach(t => ctx.cs.escapeFromBattle(t, ctx.log));
+};
+MOVE_HANDLERS.escape.defaultTo = 'self';
+
+// log：純輸出一行訊息（用 logWhen 決定要不要輸出，logMsg 寫內容）
+MOVE_HANDLERS.log = (ctx) => say(ctx, 'log');
+MOVE_HANDLERS.log.defaultTo = 'self';
+
+// selfDestruct：引爆自身對目標造成爆擊傷害後死亡（走 SELF_DESTRUCT，可觸發怨氣，不給詛咒）
+MOVE_HANDLERS.selfDestruct = (ctx) => ctx.cs.selfDestruct(ctx.attacker, ctx.target, ctx.enemies, ctx.log);

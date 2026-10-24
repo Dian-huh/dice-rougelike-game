@@ -1,5 +1,35 @@
 // js/data/enemies/forest.js
 import { BASE_ENEMY } from './baseEnemy.js';
+import { summonMove } from './sharedMoves.js';
+
+
+// 黑龍招式（Break 池與常規池共用，避免重複貼同一份宣告）
+const BD = {
+    claw: () => ({ id: 'CLAW', type: 'ATTACK', value: 3, hits: 2, canCrit: true, effects: ['attack'], desc: '🐾 爪擊 (造成 2 次 3 點傷害)' }),
+    charge: () => ({
+        id: 'CHARGE', type: 'BUFF', healValue: 7, addCt: 1, desc: '✨ 蓄力 (獲得 1CT，回復 7 點血量)',
+        effects: ['ct', 'heal'], ct: 1, heal: 7,
+        openMsg: (c) => `🐉 ${c.attacker.name} 展開【${c.intent.desc || '蓄力'}】，回復 7 點 HP 並累積 1CT！`
+    }),
+    fly: () => ({
+        id: 'FLY', type: 'BUFF', desc: '🦅 飛翔 (進入飛行狀態)',
+        effects: ['setFlag'], setFlag: { isFlying: true },
+        setFlagMsg: (c) => `🐉 ${c.attacker.name} 振翅升空進入【飛翔】狀態！`
+    }),
+    // 同時改玩家與自己兩個對象，現有 handler 一次只能一種目標，直接用 run
+    pressure: () => ({
+        id: 'PRESSURE', type: 'DEBUFF', desc: '😱 威壓 (下次攻擊骰鎖定為1，本回合無法使用主動技)',
+        run: (c) => {
+            c.target.isPressured = true;
+            c.attacker.pressureUsedThisOD = true;
+            c.log(`😱 ${c.attacker.name} 發動【威壓】！${c.target.name} 下次攻擊骰鎖定為 1，且本回合無法使用主動技能！`);
+        }
+    }),
+    dive: (ct) => ({ id: 'DIVE', type: 'ATTACK', value: 7 + ct, canCrit: true, effects: ['attack'], desc: `💥 墜擊 (造成 ${7 + ct} 點傷害，解除飛行)` }),
+    judgment: (od) => ({ id: 'JUDGMENT', type: 'SPECIAL', value: 5 + od, trueDamage: true, consumeCt: 3, effects: ['attack'], desc: `⚡ 制裁 (造成 ${5 + od} 點真實傷害)` }),
+    breath: () => ({ id: 'BREATH', type: 'ATTACK', value: 7, consumeCt: 1, statusEffect: { type: 'poison', turns: 3 }, effects: ['attack'], desc: '☠️ 吐息 (消耗1CT，造成 7 點傷害並附加劇毒3回合)' })
+};
+
 
 const BLACK_DRAGON_DATA = Object.assign(Object.create(BASE_ENEMY), {
     id: 'black_dragon',
@@ -20,46 +50,26 @@ const BLACK_DRAGON_DATA = Object.assign(Object.create(BASE_ENEMY), {
     getIntent(turnCount, speedDice, self) {
         // Break 狀態：僅能執行一般行動
         if (this.isBreak) {
-            const generalPool = [
-                this.basicAttack(),
-                { id: 'CLAW', type: 'ATTACK', value: 3, hits: 2, canCrit: true, desc: '🐾 爪擊 (造成 2 次 3 點傷害)' },
-                { id: 'CHARGE', type: 'BUFF', healValue: 7, addCt: 1, desc: '✨ 蓄力 (獲得 1CT，回復 7 點血量)' }
-            ];
-            return Phaser.Utils.Array.GetRandom(generalPool);
+            return Phaser.Utils.Array.GetRandom([this.basicAttack(), BD.claw(), BD.charge()]);
         }
 
         // OD 狂暴：首次進入發動威壓
-        if (this.isOD && !this.pressureUsedThisOD) {
-            return { id: 'PRESSURE', type: 'DEBUFF', desc: '😱 威壓 (下次攻擊骰鎖定為1，本回合無法使用主動技)' };
-        }
+        if (this.isOD && !this.pressureUsedThisOD) return BD.pressure();
 
         // 飛行中：下回合必定發動墜擊
-        if (this.isFlying) {
-            return { id: 'DIVE', type: 'ATTACK', value: 7 + this.ct, canCrit: true, desc: `💥 墜擊 (造成 ${7 + this.ct} 點傷害，解除飛行)` };
-        }
+        if (this.isFlying) return BD.dive(this.ct);
 
         // CT 滿：發動制裁大招 (無視閃避與格擋的真實傷害)
-        if (this.ct >= this.maxCt) {
-            return { id: 'JUDGMENT', type: 'SPECIAL', value: 5 + this.od, trueDamage: true, consumeCt: 3, desc: `⚡ 制裁 (造成 ${5 + this.od} 點真實傷害)` };
-        }
+        if (this.ct >= this.maxCt) return BD.judgment(this.od);
 
-        // 機率發動吐息 (附加劇毒，消耗 1CT)[cite: 1]
-        if (this.ct >= 1 && Math.random() < 0.25) {
-            return { id: 'BREATH', type: 'ATTACK', value: 7, consumeCt: 1, statusEffect: { type: 'poison', turns: 3 }, desc: '☠️ 吐息 (消耗1CT，造成 7 點傷害並附加劇毒3回合)' };
-        }
+        // 機率發動吐息 (附加劇毒，消耗 1CT)
+        if (this.ct >= 1 && Math.random() < 0.25) return BD.breath();
 
-        // 機率起飛[cite: 1]
-        if (Math.random() < 0.3) {
-            return { id: 'FLY', type: 'BUFF', desc: '🦅 飛翔 (進入飛行狀態)' };
-        }
+        // 機率起飛
+        if (Math.random() < 0.3) return BD.fly();
 
-        // 常規招式池[cite: 1]
-        const pool = [
-            this.basicAttack(),
-            { id: 'CLAW', type: 'ATTACK', value: 3, hits: 2, canCrit: true, desc: '🐾 爪擊 (造成 2 次 3 點傷害)' },
-            { id: 'CHARGE', type: 'BUFF', healValue: 7, addCt: 1, desc: '✨ 蓄力 (獲得 1CT，回復 7 點血量)' }
-        ];
-        return Phaser.Utils.Array.GetRandom(pool);
+        // 常規招式池
+        return Phaser.Utils.Array.GetRandom([this.basicAttack(), BD.claw(), BD.charge()]);
     },
 
     // 🟢 對齊契約受擊機制[cite: 1]
@@ -110,25 +120,20 @@ export const FOREST_ENEMIES = {
             if (this.isBreak) {
                 const normalPool = [
                     this.basicAttack(),
-                    { id: 'ROCK_THROW', type: 'ATTACK', value: 1, hits: 2, canCrit: true, desc: '🪨 投石 (造成 2 次 1 點傷害)' }
+                    { id: 'ROCK_THROW', type: 'ATTACK', value: 1, hits: 2, canCrit: true, effects: ['attack'], desc: '🪨 投石 (造成 2 次 1 點傷害)' }
                 ];
                 return Phaser.Utils.Array.GetRandom(normalPool);
             }
 
             // 2. 特殊行動：2CT 時有 50% 概率發動【呼朋引伴】
             if (this.ct >= 2 && Math.random() < 0.5) {
-                return { 
-                    id: 'SUMMON', 
-                    type: 'SPECIAL', 
-                    consumeCt: 2, 
-                    desc: '📢 呼朋引伴 (消耗 2CT，召喚一隻哥布林加入戰鬥)' 
-                };
+                return summonMove(['goblin'], 2, '📢 呼朋引伴 (消耗 2CT，召喚一隻哥布林加入戰鬥)');
             }
 
             // 3. 一般行動池
             const generalPool = [
                 this.basicAttack(),
-                { id: 'ROCK_THROW', type: 'ATTACK', value: 1, hits: 2, canCrit: true, desc: '🪨 投石 (造成 2 次 1 點傷害)' }
+                { id: 'ROCK_THROW', type: 'ATTACK', value: 1, hits: 2, canCrit: true, effects: ['attack'], desc: '🪨 投石 (造成 2 次 1 點傷害)' }
             ];
             return Phaser.Utils.Array.GetRandom(generalPool);
         }
