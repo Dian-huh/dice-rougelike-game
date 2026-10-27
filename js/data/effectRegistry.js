@@ -1,4 +1,5 @@
 // js/data/effectRegistry.js
+import { DEBUFF_REGISTRY } from './debuffRegistry.js';
 //
 // 🟢 階段A1定案版：純資料骨架 + hook清單，尚未搬邏輯（TODO標記處對應A2/A3要搬的原始位置）
 // hero.activeEffects 直接取代現有散落欄位，範例：
@@ -197,12 +198,6 @@ export const EFFECT_REGISTRY = {
         }
     },
 
-    taunt: {
-        category: 'DEBUFF_LIKE',
-        displayName: '嘲諷',
-        getStatusText: () => `嘲諷 (敵方攻擊被強制鎖定至此)`
-        // 無 hook：純粹供 AttackFlowSystem 查詢是否存在
-    },
 
         // 🟢 門衛四天王：盾之守衛「全體保護」專用盾反，跟玩家的 shield_counter 分開
     // （解除時機不同：這個是格擋歸零時解除，不是回合倒數）
@@ -214,101 +209,6 @@ export const EFFECT_REGISTRY = {
             if (!(ctx.blockedAmount > 0) || !ctx.attacker || ctx.attacker.hp <= 0) return;
             ctx.log(`🔁 [盾反] ${self.name} 對 ${ctx.attacker.name} 反擊 ${ctx.blockedAmount} 點傷害！`);
             ctx.combatSys.applyDamageToTarget(ctx.attacker, ctx.blockedAmount, ctx.log, ctx.enemies);
-        }
-    },
-
-    debuff_freeze: {
-        category: 'DEBUFF_LIKE',
-        displayName: '冰結',
-        getStatusText: (entry) => `冰結 (剩餘 ${entry.stacks} 回合，速度-2、攻擊力-2)`,
-        liveStatModifier: (entity, entry, statName) => ['atk', 'speed'].includes(statName) ? -2 : 0,
-        onTurnStart: (entity, entry, ctx) => {
-            entry.stacks -= 1;
-            if (entry.stacks <= 0) {
-                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
-                ctx.log(`❄️ [冰結] 效果已結束`);
-            }
-        }
-    },
-
-    debuff_shock: {
-        category: 'DEBUFF_LIKE',
-        displayName: '電擊',
-        getStatusText: (entry) => `電擊 x${entry.stacks} (回合開始受${entry.stacks * 1}點傷害，魔力/CT-${entry.stacks})`,
-        onTurnStart: (entity, entry, ctx) => {
-            const dmg = entry.stacks * 1;
-            entity.hp = Math.max(0, entity.hp - dmg);
-            ctx.log(`⚡ [電擊] ${entity.name} 受到 ${dmg} 點傷害！`, 'system');
-
-            if (entity.mana !== undefined) {
-                const before = entity.mana;
-                entity.mana = Math.max(0, entity.mana - entry.stacks);
-                ctx.log(`⚡ [電擊] 魔力 -${entry.stacks} (${before} → ${entity.mana})`, 'system');
-            } else if (entity.maxCt > 0) {
-                const before = entity.ct || 0;
-                entity.ct = Math.max(0, before - entry.stacks);
-                ctx.log(`⚡ [電擊] CT -${entry.stacks} (${before} → ${entity.ct})`, 'system');
-            }
-
-            entry.stacks -= 1;
-            if (entry.stacks <= 0) {
-                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
-                ctx.log(`⚡ [電擊] 效果已結束`, 'system');
-            }
-        }
-    },
-
-    debuff_stun: {
-        category: 'DEBUFF_LIKE',
-        displayName: '暈眩',
-        getStatusText: (entry) => `暈眩 (剩餘 ${entry.stacks} 回合，無法出卡)`,
-        onTurnStart: (hero, entry, ctx) => {
-            entry.stacks -= 1;
-            if (entry.stacks <= 0) {
-                hero.activeEffects = hero.activeEffects.filter(e => e !== entry);
-                ctx.log(`💫 [暈眩] 效果已結束`, 'system');
-            }
-        }
-    },
-
-    debuff_curse: {
-        category: 'DEBUFF_LIKE',
-        displayName: '詛咒',
-        getStatusText: (entry) => `詛咒 x${entry.stacks} (回合開始隨機獲得流血/劇毒/電擊其中一種2層，詛咒-1層)`,
-        onTurnStart: (entity, entry, ctx) => {
-            const choice = Phaser.Utils.Array.GetRandom(['bleed', 'poison', 'shock']);
-            if (choice === 'bleed') {
-                entity.bleedStacks = (entity.bleedStacks || 0) + 2;
-                ctx.log(`☠️ [詛咒] 隨機發作：附加 2 層【流血】！`, 'system');
-            } else if (choice === 'poison') {
-                entity.poisonTurns = (entity.poisonTurns || 0) + 2;
-                ctx.log(`☠️ [詛咒] 隨機發作：附加 2 層【劇毒】！`, 'system');
-            } else {
-                // 不直接 import EffectEngine（避免循環依賴），沿用本檔案其他效果一致的直接操作寫法
-                entity.activeEffects = entity.activeEffects || [];
-                let shockEntry = entity.activeEffects.find(e => e.id === 'debuff_shock');
-                if (!shockEntry) { shockEntry = { id: 'debuff_shock', stacks: 0 }; entity.activeEffects.push(shockEntry); }
-                shockEntry.stacks += 2;
-                ctx.log(`☠️ [詛咒] 隨機發作：附加 2 層【電擊】！`, 'system');
-            }
-            entry.stacks -= 1;
-            if (entry.stacks <= 0) {
-                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
-                ctx.log(`☠️ [詛咒] 效果已結束`, 'system');
-            }
-        }
-    },
-
-    debuff_pressure: {
-        category: 'DEBUFF_LIKE',
-        displayName: '威壓',
-        getStatusText: (entry) => `威壓 (剩餘 ${entry.stacks} 回合，攻擊骰鎖定為1，無法使用主動技能)`,
-        onTurnStart: (entity, entry, ctx) => {
-            entry.stacks -= 1;
-            if (entry.stacks <= 0) {
-                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
-                ctx.log(`😱 [威壓] 效果已結束`, 'system');
-            }
         }
     },
 
@@ -356,35 +256,6 @@ export const EFFECT_REGISTRY = {
             ctx.enemies.filter(e => e.hp > 0).forEach(e =>
                 cs.applyDamageToTarget(e, 2, ctx.log, ctx.enemies, self, { noProc: true, noScale: true })
             );
-        }
-    },
-
-    debuff_burn: {
-        category: 'DEBUFF_LIKE',
-        displayName: '灼燒',
-        getStatusText: (entry) => `灼燒 (剩餘 ${entry.stacks} 回合，回合開始受 2 點傷害)`,
-        onTurnStart: (entity, entry, ctx) => {
-            entity.hp = Math.max(0, entity.hp - 2);   // 持續傷害：不走 applyDamageToTarget
-            ctx.log(`🔥 [灼燒] ${entity.name} 受到 2 點傷害！`, 'system');
-            entry.stacks -= 1;
-            if (entry.stacks <= 0) {
-                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
-                ctx.log(`🔥 [灼燒] 效果已結束`, 'system');
-            }
-        }
-    },
-
-    debuff_frostbite: {
-        category: 'DEBUFF_LIKE',
-        displayName: '凍傷',
-        getStatusText: (entry) => `凍傷 (剩餘 ${entry.stacks} 回合，每次受傷 +${entry.stacks} 點)`,
-        liveStatModifier: (entity, entry, statName) => (statName === 'damageTaken' ? entry.stacks : 0),
-        onTurnStart: (entity, entry, ctx) => {
-            entry.stacks -= 1;
-            if (entry.stacks <= 0) {
-                entity.activeEffects = entity.activeEffects.filter(e => e !== entry);
-                ctx.log(`🧊 [凍傷] 效果已結束`, 'system');
-            }
         }
     },
 
@@ -487,7 +358,10 @@ export const EFFECT_REGISTRY = {
 
     // ================= DICE（純計數器，不掛hook，引擎用通用函式處理） =================
     reroll_attack_dice: { category: 'DICE', type: 'COUNTER' },
-    reroll_speed_dice:  { category: 'DICE', type: 'COUNTER' }
+    reroll_speed_dice:  { category: 'DICE', type: 'COUNTER' },
+
+    // 🟢 Debuff 定義已遷移至 debuffRegistry.js，透過展開合併回來
+    ...DEBUFF_REGISTRY,
 };
 
 // TODO A2起：引擎通用函式（掛在 TurnSystem/CombatSystem 或獨立 EffectEngine.js，位置下次確認）

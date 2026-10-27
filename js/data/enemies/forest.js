@@ -44,6 +44,7 @@ const BLACK_DRAGON_DATA = Object.assign(Object.create(BASE_ENEMY), {
     critBonus: 5,
     critChance: 0.15,
     pressureUsedThisOD: false,
+    dragonPride: true,               // 常駐被動：龍王的傲氣
     speedDiceSides: 10,
 
     // 🎯 意圖決策 AI：改用標籤描述招式特性

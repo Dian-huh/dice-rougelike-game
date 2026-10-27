@@ -163,6 +163,8 @@ export const DEADCITY_ENEMIES = {
             onDamagedSummonIds: ['skeleton_soldier'],
             onDealDamageAoeChance: 0.44,     // 死神氣息
             onDealDamageAoeValue: 1,
+            deathCtDamage: true,             // 同歸於盡：死亡時給予全場自身CT數*10的制裁傷害
+            hasUsedEmperorWay: false,        // 死帝的王道：二階段後當血量第一次歸零時重生
             forceSlayerNext: false,          // Step 4：魔劍覺醒後必發弒滅劍
             awakenPending: false,            // Step 4
     

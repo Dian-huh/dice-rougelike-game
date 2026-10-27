@@ -40,9 +40,9 @@ function applyStatusEntry(ctx, t, entry) {
         }
         case 'burn': {
             if (t.hp <= 0) break;
-            const n = turns || 5;
-            cs.addTimedStatus(t, 'debuff_burn', n, 'REFRESH');
-            out(`🔥 ${t.name} 陷入【灼燒】(${n} 回合)！`);
+            const n = stacks || turns || 3;
+            EffectEngine.addStacks(t, 'debuff_burn', n);
+            out(`🔥 ${t.name} 獲得 ${n} 層【灼燒】！`);
             break;
         }
         case 'frostbite': {
@@ -59,9 +59,16 @@ function applyStatusEntry(ctx, t, entry) {
             break;
         }
         case 'freeze': {
-            const n = turns || 2;
-            EffectEngine.addStacks(t, 'debuff_freeze', n);
-            out(`❄️ ${t.name} 被施加【冰結】(${n}回合)！`);
+            const n = stacks || turns || 2;
+            cs.applyFreeze(t, n, 2, log);
+            out(`❄️ ${t.name} 被施加 ${n} 層【冰結】(2回合)！`);
+            break;
+        }
+        case 'vulnerability': {
+            if (t.hp <= 0) break;
+            const n = stacks || 1;
+            cs.applyVulnerability(t, n, 2, log);
+            out(`💔 ${t.name} 被施加 ${n} 層【易傷】(2回合)！`);
             break;
         }
         case 'pressure': {

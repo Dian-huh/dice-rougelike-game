@@ -9,7 +9,7 @@ const FLAME_GLASS_DATA = Object.assign(Object.create(BASE_ENEMY), {
     maxHp: 200, hp: 200, atk: 8, critBonus: 4, critChance: 0.3,
     maxCt: 4, od: 0, maxOd: 7, speedDiceSides: 15,
     forceSpecialNext: false,
-    hitBurnChance: 0.5, hitBurnTurns: 2,                 // 造成傷害時
+    hitBurnChance: 0.5, hitBurnStacks: 2,                // 造成傷害時給予2層灼燒
     takeHitFrostbiteChance: 0.5, takeHitFrostbiteTurns: 2, // 受到傷害時
     ctChangeFreezeChance: 0.5,                           // CT 變動時
 
@@ -22,17 +22,17 @@ const FLAME_GLASS_DATA = Object.assign(Object.create(BASE_ENEMY), {
 
         const heatWave = {
             id: 'HEAT_WAVE', type: 'SPECIAL', bossSpecial: true, consumeCt: this.ct,
-            desc: `🌡️ 膨冷熱波 (消耗全部CT，全體爆擊傷害並給予 ${1 + this.ct}T 灼燒與凍傷)`,
+            desc: `🌡️ 膨冷熱波 (消耗全部CT，全體爆擊傷害並給予灼燒 ${2 + this.ct} 層與凍傷 ${2 + this.ct}T)`,
             effects: ['ct', 'damage', 'effect'],
             capture: { spent: (c) => c.attacker.ct },          // 以「執行當下」的 CT 結算，不是預告時的數字
             ct: (c) => -c.spent,
             ctMsg: (c) => `🌡️ ${c.attacker.name} 發動【膨冷熱波】！消耗 ${c.spent} 點 CT！`,
             damage: critDamage,
             effectTo: 'hero',
-            effect: [{ id: 'debuff_burn', n: (c) => 1 + c.spent, mode: 'refresh' },
-                     { id: 'debuff_frostbite', n: (c) => 1 + c.spent, mode: 'refresh' }],
+            effect: [{ id: 'debuff_burn', n: (c) => 2 + c.spent, mode: 'add' },
+                     { id: 'debuff_frostbite', n: (c) => 2 + c.spent, mode: 'extend' }],
             effectWhen: (c) => c.target.hp > 0,
-            effectMsg: (c) => `🌡️ ${c.target.name} 陷入【灼燒】與【凍傷】(各 ${1 + c.spent} 回合)！`
+            effectMsg: (c) => `🌡️ ${c.target.name} 獲得 ${2 + c.spent} 層【灼燒】與 ${2 + c.spent} 回合【凍傷】！`
         };
 
         // 蓄力後：必定發動膨冷熱波（CT 被戰意喪失壓到 0 時退回一般行動，旗標保留）
@@ -179,7 +179,7 @@ export const BANDIT_ENEMIES = {
             // 蓄力後的下一回合：必定發動蓄力外的隨機特殊行動
             if (this.forceSpecialNext) {
                 return Phaser.Utils.Array.GetRandom([
-                    { id: 'ANNIHILATE_FIST', type: 'SPECIAL', bossSpecial: true, desc: '🔥 湮滅焰拳 (全體爆擊傷害，目標灼燒中則變2倍，並延長灼燒2T)',
+                    { id: 'ANNIHILATE_FIST', type: 'SPECIAL', bossSpecial: true, desc: '🔥 湮滅焰拳 (全體爆擊傷害，若目標有灼燒效果變為2倍爆擊傷害，敵方灼燒增加2層)',
                       effects: ['damage', 'effect'],
                       // 灼燒判定在傷害之前（openMsg 先執行），延長灼燒沿用同一個判定結果
                       openMsg: (c) => {
@@ -188,17 +188,17 @@ export const BANDIT_ENEMIES = {
                       },
                       damage: (c) => c.hadBurn ? critDamage(c) * 2 : critDamage(c),
                       effectTo: 'hero',
-                      effect: [{ id: 'debuff_burn', n: 2, mode: 'extend' }],
-                      effectWhen: (c) => c.target.hp > 0 && c.hadBurn,
-                      effectMsg: (c) => `🔥 ${c.target.name} 的【灼燒】延長 2 回合！` 
+                      effect: [{ id: 'debuff_burn', n: 2, mode: 'add' }],
+                      effectWhen: (c) => c.target.hp > 0,
+                      effectMsg: (c) => `🔥 ${c.target.name} 的【灼燒】增加 2 層！` 
                     },
-                    { id: 'JET_FLAME', type: 'SPECIAL', bossSpecial: true, desc: '🔥 噴流熾炎 (造成攻擊力傷害並延長灼燒2T，再造成灼燒剩餘回合數的傷害)',
+                    { id: 'JET_FLAME', type: 'SPECIAL', bossSpecial: true, desc: '🔥 噴流熾炎 (造成單體攻擊力傷害並使目標灼燒增加2層，再造成目標灼燒層數的傷害)',
                         run: (c) => {
                           c.log(`🔥 ${c.attacker.name} 發動【噴流熾炎】！`);
                           c.cs.applyDamageToTarget(c.target, c.cs.getEffectiveEnemyAtk(c.attacker), c.log, c.enemies, c.attacker);
                           if (c.target.hp > 0) {
-                              const burn = c.cs.addTimedStatus(c.target, 'debuff_burn', 2, 'EXTEND');
-                              c.log(`🔥 ${c.target.name} 的【灼燒】延長 2 回合 (剩餘 ${burn.stacks} 回合)，餘焰爆發！`);
+                              const burn = EffectEngine.addStacks(c.target, 'debuff_burn', 2);
+                              c.log(`🔥 ${c.target.name} 的【灼燒】增加 2 層 (現為 ${burn.stacks} 層)，餘焰爆發！`);
                               c.cs.applyDamageToTarget(c.target, burn.stacks, c.log, c.enemies, c.attacker);
                           }
                         } 
@@ -213,7 +213,7 @@ export const BANDIT_ENEMIES = {
 
             return Phaser.Utils.Array.GetRandom([
                 normalAttack,
-                { id: 'FLAME_FIST', type: 'ATTACK', value: this.atk, canCrit: true, statusEffect: { type: 'burn', turns: 5 }, effects: ['attack'], desc: `🔥 炎拳 (造成 ${this.atk} 點傷害並給予5T灼燒)` }
+                { id: 'FLAME_FIST', type: 'ATTACK', value: this.atk, canCrit: true, statusEffect: { type: 'burn', stacks: 3 }, effects: ['attack'], desc: `🔥 炎拳 (造成 ${this.atk} 點傷害並給予3層灼燒)` }
             ]);
         }
     }),

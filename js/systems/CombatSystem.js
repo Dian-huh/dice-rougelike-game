@@ -15,6 +15,38 @@ export class CombatSystem {
         this._activeEnemies = enemies;
     }
 
+    // 易傷施加：預設持續2T，可疊加層數
+    static applyVulnerability(target, stacks = 1, turns = 2, logCallback = null) {
+        let entry = EffectEngine.getEntry(target, 'debuff_vulnerability');
+        if (!entry) {
+            entry = EffectEngine.addStacks(target, 'debuff_vulnerability', stacks);
+            entry.turns = turns;
+        } else {
+            entry.stacks += stacks;
+            entry.turns = Math.max(entry.turns || 0, turns);
+        }
+        if (typeof logCallback === 'function') {
+            logCallback(`💔 ${target.name} 獲得 ${stacks} 層【易傷】(現有 ${entry.stacks} 層，持續 ${entry.turns} 回合)！`);
+        }
+        return entry;
+    }
+
+    // 冰結施加：預設持續2T，每層使速度-3、攻擊力-3
+    static applyFreeze(target, stacks = 1, turns = 2, logCallback = null) {
+        let entry = EffectEngine.getEntry(target, 'debuff_freeze');
+        if (!entry) {
+            entry = EffectEngine.addStacks(target, 'debuff_freeze', stacks);
+            entry.turns = turns;
+        } else {
+            entry.stacks += stacks;
+            entry.turns = Math.max(entry.turns || 0, turns);
+        }
+        if (typeof logCallback === 'function') {
+            logCallback(`❄️ ${target.name} 獲得 ${stacks} 層【冰結】(現有 ${entry.stacks} 層，持續 ${entry.turns} 回合)！`);
+        }
+        return entry;
+    }
+
     // 通用「持續回合型」狀態施加：REFRESH＝取較大值（重複只刷新）；EXTEND＝累加回合
     static addTimedStatus(target, id, turns, mode = 'REFRESH') {
         const entry = EffectEngine.getEntry(target, id);
@@ -28,30 +60,41 @@ export class CombatSystem {
         this._battleLog = fn;
     }
 
-    // 烈焰琉璃：CT 值每次變動，有機率給玩家 1 層冰結
+    // 烈焰琉璃：每次CT值變動時50%機率給予對方2層冰結
     static onEnemyCtChanged(enemy) {
         const hero = this._activeHero;
         if (!hero || !enemy.ctChangeFreezeChance || enemy.hp <= 0) return;
         if (Math.random() < enemy.ctChangeFreezeChance) {
-            EffectEngine.addStacks(hero, 'debuff_freeze', 1);
-            if (this._battleLog) this._battleLog(`❄️ ${enemy.name} 的 CT 變動，${hero.name} 被施加 1 層【冰結】！`, 'enemy');
+            CombatSystem.applyFreeze(hero, 2, 2, this._battleLog);
         }
     }
 
     // 造成傷害時／受到傷害時的機率附加狀態（烈焰琉璃）
     static _applyHitProcs(target, attacker, log) {
         const safeLog = typeof log === 'function' ? log : () => {};
+        // 烈焰琉璃：每次造成傷害時50%機率給予對方2層灼燒，若已有灼燒再給予2點傷害
         if (attacker && attacker.hitBurnChance && target.hp > 0 && Math.random() < attacker.hitBurnChance) {
-            const turns = attacker.hitBurnTurns || 2;
-            this.addTimedStatus(target, 'debuff_burn', turns, 'EXTEND');
-            safeLog(`🔥 ${attacker.name} 造成傷害，${target.name} 的【灼燒】+${turns} 回合！`);
+            const hadBurn = !!EffectEngine.getEntry(target, 'debuff_burn');
+            const burnStacks = attacker.hitBurnStacks || 2;
+            EffectEngine.addStacks(target, 'debuff_burn', burnStacks);
+            safeLog(`🔥 ${attacker.name} 造成傷害，${target.name} 獲得 ${burnStacks} 層【灼燒】！`);
+            if (hadBurn) {
+                this.applyDamageToTarget(target, 2, safeLog, this._activeEnemies || [], attacker, { noProc: true });
+                safeLog(`🔥 ${target.name} 身上已有灼燒，額外受到 2 點傷害！`);
+            }
         }
+        // 烈焰琉璃：每次受到傷害時50%機率給予對方2T凍傷，若已有凍傷則延長3T
         if (target.takeHitFrostbiteChance && Math.random() < target.takeHitFrostbiteChance) {
             const src = attacker || this._activeHero;
             if (src && src !== target && src.hp > 0) {
-                const turns = target.takeHitFrostbiteTurns || 2;
-                this.addTimedStatus(src, 'debuff_frostbite', turns, 'EXTEND');
-                safeLog(`🧊 ${target.name} 受到傷害，${src.name} 的【凍傷】+${turns} 回合！`);
+                const frostEntry = EffectEngine.getEntry(src, 'debuff_frostbite');
+                if (frostEntry && frostEntry.stacks > 0) {
+                    this.addTimedStatus(src, 'debuff_frostbite', 3, 'EXTEND');
+                    safeLog(`🧊 ${target.name} 受到傷害，${src.name} 已有凍傷，【凍傷】延長 3 回合！`);
+                } else {
+                    this.addTimedStatus(src, 'debuff_frostbite', 2, 'EXTEND');
+                    safeLog(`🧊 ${target.name} 受到傷害，${src.name} 獲得 2 回合【凍傷】！`);
+                }
             }
         }
     }
@@ -75,7 +118,12 @@ export class CombatSystem {
 
             const hero = this._activeHero;
             const dmg = this.getEffectiveEnemyAtk(fused) + (fused.critBonus || 0) + EffectEngine.getLiveStatBonus(fused, 'crit');
-            safeLog(`💥 ${fused.name} 出場，對全體造成爆擊傷害！`);
+            safeLog(`💥 ${fused.name} 出場，對全體造成破防並給予爆擊傷害！`);
+            if (hero && hero.hp > 0) {
+                hero.armorHits = hero.armorMax || 0;
+                hero.isVulnerable = true;
+                safeLog(`⚠️ ${hero.name} 受到猛烈衝擊，護甲歸零並進入【破防】狀態！`);
+            }
             this.applyDamageToTarget(hero, dmg, safeLog, enemies, fused);
             return fused;
         }
@@ -243,6 +291,16 @@ export class CombatSystem {
             logDetails.push(`玩家破防+2`);
         }
 
+        // 黑龍常駐被動: 龍王的傲氣（防禦面：自身血量每有10%，自身獲得5%減傷）
+        if (target.dragonPride && target.hp > 0 && target.maxHp > 0) {
+            const hpTenths = Math.floor((target.hp / target.maxHp) * 10);
+            const reduction = Math.min(0.9, hpTenths * 0.05);
+            if (reduction > 0) {
+                finalDmg = Math.max(1, Math.round(finalDmg * (1 - reduction)));
+                logDetails.push(`龍王的傲氣減傷${Math.round(reduction * 100)}%`);
+            }
+        }
+
         // 凍傷：每次受傷額外增加（剩餘回合數）點
         const takenBonus = EffectEngine.getLiveStatBonus(target, 'damageTaken');
         if (takenBonus > 0 && finalDmg > 0) {
@@ -288,6 +346,12 @@ export class CombatSystem {
 
         // 5. 扣除 HP 與 受傷次數判定
         if (finalDmg > 0) {
+            // 易傷：每層使自身在受到傷害時額外使自身血量減少1
+            const vulnBonus = EffectEngine.getLiveStatBonus(target, 'vulnerability');
+            if (vulnBonus > 0) {
+                finalDmg += vulnBonus;
+                logDetails.push(`易傷+${vulnBonus}`);
+            }
             const wasAliveBefore = target.hp > 0;
             const hpBefore = target.hp;
             let newHp = Math.max(0, hpBefore - finalDmg);
@@ -341,20 +405,54 @@ export class CombatSystem {
         return spawned;
     }
 
-    // 🟢 傷害被動：受傷召喚（亡靈軍勢）、造傷附帶全體傷害（死神氣息）。內部傷害請傳 noProc 避免遞迴
+    // 🟢 傷害被動：受傷召喚（亡靈軍勢）、造傷附帶全體傷害（死神氣息）、龍王傲氣。內部傷害請傳 noProc 避免遞迴
     static _applyDamageProcs(target, attacker, enemies, log) {
         const safeLog = typeof log === 'function' ? log : () => {};
         const pool = enemies || this._activeEnemies;
+        // 亡靈軍勢強化：每次受到傷害有44%機率召喚一個骷髏士兵並給予攻擊者1層詛咒
         if (target.onDamagedSummonChance && target.hp > 0 && Math.random() < target.onDamagedSummonChance) {
             safeLog(`💀 ${target.name} 的【亡靈軍勢】發動！`);
             this.summonEnemies(target, target.onDamagedSummonIds || [], pool, safeLog);
+            if (attacker && attacker.hp > 0) {
+                EffectEngine.addStacks(attacker, 'debuff_curse', 1);
+                safeLog(`☠️ ${target.name} 的【亡靈軍勢】使 ${attacker.name} 獲得 1 層【詛咒】！`);
+            }
         }
         const hero = this._activeHero;
-        if (attacker && attacker.onDealDamageAoeChance && attacker.hp > 0 && hero && hero.hp > 0
+        // 死神氣息強化：每次造成傷害(包含死神氣息所造成的傷害)有44%機率給予自身以外所有人1層易傷並造成一次全體1點傷害
+        if (attacker && attacker.onDealDamageAoeChance && attacker.hp > 0
             && Math.random() < attacker.onDealDamageAoeChance) {
-            const v = attacker.onDealDamageAoeValue || 1;
-            safeLog(`☠️ ${attacker.name} 的【死神氣息】發動，對全體造成 ${v} 點傷害！`);
-            this.applyDamageToTarget(hero, v, safeLog, pool, attacker, { noProc: true });
+            safeLog(`☠️ ${attacker.name} 的【死神氣息】發動！給予全場（自身以外）1層【易傷】並造成全體 1 點傷害！`);
+            if (hero && hero.hp > 0 && hero !== attacker) {
+                CombatSystem.applyVulnerability(hero, 1, 2, safeLog);
+            }
+            (pool || []).filter(e => e.hp > 0 && e !== attacker).forEach(e => {
+                CombatSystem.applyVulnerability(e, 1, 2, safeLog);
+            });
+            attacker._breathDepth = (attacker._breathDepth || 0) + 1;
+            if (attacker._breathDepth <= 5) {
+                if (hero && hero.hp > 0 && hero !== attacker) {
+                    this.applyDamageToTarget(hero, 1, safeLog, pool, attacker);
+                }
+                (pool || []).filter(e => e.hp > 0 && e !== attacker).forEach(e => {
+                    this.applyDamageToTarget(e, 1, safeLog, pool, attacker, { noScale: true });
+                });
+            }
+            attacker._breathDepth = 0;
+        }
+
+        // 黑龍常駐被動: 龍王的傲氣（攻擊面：造成傷害時血量每少10%額外給予2點傷害與2層電擊）
+        if (attacker && attacker.dragonPride && attacker.hp > 0 && target.hp > 0) {
+            const missingTenths = Math.floor(((attacker.maxHp - attacker.hp) / attacker.maxHp) * 10);
+            if (missingTenths > 0) {
+                const bonusDmg = missingTenths * 2;
+                const bonusShock = missingTenths * 2;
+                safeLog(`🐉 ${attacker.name} 的【龍王的傲氣】發動（已損失 ${missingTenths * 10}% 血量），額外造成 ${bonusDmg} 點傷害與 ${bonusShock} 層【電擊】！`);
+                this.applyDamageToTarget(target, bonusDmg, safeLog, pool, attacker, { noProc: true, noScale: true });
+                if (target.hp > 0) {
+                    EffectEngine.addStacks(target, 'debuff_shock', bonusShock);
+                }
+            }
         }
     }
 
@@ -368,6 +466,20 @@ export class CombatSystem {
         const safeLog = typeof log === 'function' ? log : console.log;
         if (target === this._activeHero) return;
         if (opts.cause === 'ESCAPE' || opts.cause === 'FUSE') return;
+
+        // 死骸騎士常駐被動: 死帝的王道（二階段後當血量第一次歸零時，立即恢復10%最大生命並獲得100%靈體化與補充CT到上限，且下次行動必定發動弒滅劍）
+        if (target.id === 'corpse_knight' && (target.phase || 1) >= 2 && !target.hasUsedEmperorWay) {
+            target.hasUsedEmperorWay = true;
+            const reviveHp = Math.max(1, Math.floor(target.maxHp * 0.1));
+            target.hp = reviveHp;
+            target.damageImmuneChance = 1.0;
+            EffectEngine.addStacks(target, 'spirit_form', 1);
+            target.ct = target.maxCt;
+            target.forceSlayerNext = true;
+            target.awakenPending = false;
+            safeLog(`👑 ${target.name} 發動【死帝的王道】！血量第一次歸零時重生，立即恢復 ${reviveHp} 點HP(10%)，獲得 100%【靈體化】，CT補滿至 ${target.ct}，下次行動必定發動【弒滅劍】！`);
+            return;
+        }
 
         // 復活（怨氣：不限次數，40%機率）
         if (target.reviveChance && Math.random() < target.reviveChance) {
@@ -417,6 +529,38 @@ export class CombatSystem {
                 if (eff.heal) ally.hp = Math.min(ally.maxHp, ally.hp + eff.heal);
                 safeLog(`💀 ${target.name} 的【回歸死城】發動：${ally.name} CT+${eff.ct || 0}、格擋+${eff.block || 0}、回復${eff.heal || 0}！`);
             }
+        }
+
+        // 死骸騎士常駐被動: 死之民的祈願與哀怨
+        if (target.faction === 'deadcity' && target.id !== 'corpse_knight') {
+            const knight = pool.find(e => e.hp > 0 && e.id === 'corpse_knight');
+            if (knight) {
+                // 死之民的哀怨: 獲得 1 層易傷
+                CombatSystem.applyVulnerability(knight, 1, 2, safeLog);
+                safeLog(`💔 ${target.name} 倒下，【死之民的哀怨】使 ${knight.name} 獲得 1 層【易傷】！`);
+
+                // 死之民的祈願: 15%機率 CT上限+1, 回復10%最大生命, 獲得40格擋
+                if (Math.random() < 0.15) {
+                    knight.maxCt = (knight.maxCt || 0) + 1;
+                    const healHp = Math.floor(knight.maxHp * 0.1);
+                    knight.hp = Math.min(knight.maxHp, knight.hp + healHp);
+                    knight.block = (knight.block || 0) + 40;
+                    safeLog(`🙏 【死之民的祈願】發動！${knight.name} CT上限+1(現為 ${knight.maxCt})，回復 ${healHp} 點HP，獲得 40 點格擋！`);
+                }
+            }
+        }
+
+        // 死骸騎士常駐被動: 同歸於盡（死亡時給予全場自身CT數*10的制裁傷害）
+        if (target.deathCtDamage && (target.ct || 0) > 0) {
+            const deathDmg = (target.ct || 0) * 10;
+            safeLog(`💀 ${target.name} 發動【同歸於盡】！對全場造成 ${deathDmg} 點制裁傷害 (自身CT: ${target.ct})！`);
+            const hero = this._activeHero;
+            if (hero && hero.hp > 0) {
+                this.applyDamageToTarget(hero, deathDmg, safeLog, pool, target, { noProc: true, noScale: true });
+            }
+            pool.filter(e => e !== target && e.hp > 0).forEach(e => {
+                this.applyDamageToTarget(e, deathDmg, safeLog, pool, target, { noProc: true, noScale: true });
+            });
         }
 
         // 友軍死亡連動（覺醒等）：通知所有仍存活敵人身上的 onAllyDeath hook
@@ -546,7 +690,7 @@ export class CombatSystem {
         if (hero.activeEffects && hero.activeEffects.length > 0) {
             hero.activeEffects = hero.activeEffects.filter(entry => {
                 const def = EFFECT_REGISTRY[entry.id];
-                return !(def && (def.category === 'CARD_EFFECT' || def.category === 'DEBUFF_LIKE'));
+                return !(def && (def.category === 'CARD_EFFECT' || def.category === 'DEBUFF_LIKE' || def.category === 'DEBUFF'));
             });
         }
 

@@ -247,7 +247,7 @@ export class BattleScene extends Phaser.Scene {
         (h.activeEffects || []).forEach(entry => {
             const def = EFFECT_REGISTRY[entry.id];
             if (!def || !def.displayName || typeof def.getStatusText !== 'function') return;
-            if (def.category !== 'DEBUFF_LIKE' && def.category !== 'CARD_EFFECT') return;
+            if (def.category !== 'DEBUFF_LIKE' && def.category !== 'CARD_EFFECT' && def.category !== 'DEBUFF') return;
             list.push(`• ${def.getStatusText(entry)}`);
         });
         return list;

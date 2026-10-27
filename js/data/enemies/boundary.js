@@ -72,6 +72,25 @@ const BG = {
         },
         damageMsg: (c) => `⚡ ${c.attacker.name} 發動【天雷突刺】，給予3層流血並造成 ${c.dmg} 點傷害！`,
         status: [{ type: 'bleed', stacks: 3, msg: '' }]
+    }),
+    thunderSpear: () => ({
+        id: 'THUNDER_SPEAR', type: 'SPECIAL', consumeCt: 1, consumeCtTiming: 'before', bossHeal: true,
+        desc: '⚡ 天雷槍 (消耗1CT，執行X+1次，對隨機敵單體造成2點傷害+1層電擊+1層雷槍印記)',
+        run: (c) => {
+            const x = c.attacker.ct || 0;
+            const times = x + 1;
+            c.log(`⚡ ${c.attacker.name} 發動【天雷槍】(自身CT=${x})，執行 ${times} 次！`);
+            for (let i = 0; i < times; i++) {
+                if (c.target.hp <= 0) break;
+                const hpBefore = c.target.hp;
+                c.cs.applyDamageToTarget(c.target, 2, c.log, c.enemies, c.attacker);
+                if (c.target.hp < hpBefore || c.target.hp > 0) {
+                    EffectEngine.addStacks(c.target, 'debuff_shock', 1);
+                    c.target.thunderSpearMark = (c.target.thunderSpearMark || 0) + 1;
+                    c.log(`⚡ ${c.target.name} 受到傷害，獲得 1 層【電擊】與 1 層【雷槍印記】(現有${c.target.thunderSpearMark}層)！`);
+                }
+            }
+        }
     })
 };
 
@@ -291,7 +310,26 @@ export const BOUNDARY_ENEMIES = {
         getIntent(turnCount, speedDice, self) {
             if (this.pendingLightningRecall) {
                 this.pendingLightningRecall = false;
-                return { id: 'LIGHTNING_RECALL', type: 'ATTACK', value: this.atk, canCrit: true, effects: ['attack'], desc: '⚡ 回收雷槍 (延遲傷害+2)' };
+                return {
+                    id: 'LIGHTNING_RECALL', type: 'SPECIAL', bossHeal: true,
+                    desc: '⚡ 回收雷槍 (自身CT+2，給予雷槍印記目標5點傷害與2層電擊，自身下次傷害+4)',
+                    run: (c) => {
+                        c.log(`⚡ ${c.attacker.name} 發動【回收雷槍】！`);
+                        c.attacker.ct = Math.min(c.attacker.maxCt, (c.attacker.ct || 0) + 2);
+                        c.log(`⚡ ${c.attacker.name} CT +2 (現為 ${c.attacker.ct}/${c.attacker.maxCt})！`);
+                        const targets = [c.target, ...(c.enemies || [])].filter(t => t && t.hp > 0 && t.thunderSpearMark);
+                        targets.forEach(t => {
+                            c.cs.applyDamageToTarget(t, 5, c.log, c.enemies, c.attacker);
+                            if (t.hp > 0) {
+                                EffectEngine.addStacks(t, 'debuff_shock', 2);
+                                c.log(`⚡ ${t.name} 的雷槍印記引爆，受到 5 點傷害並附加 2 層【電擊】！`);
+                            }
+                            t.thunderSpearMark = 0;
+                        });
+                        c.attacker.nextDamageBonus = (c.attacker.nextDamageBonus || 0) + 4;
+                        c.log(`⚡ ${c.attacker.name} 下次造成的傷害 +4！`);
+                    }
+                };
             }
 
             if (this.isBreak) {
@@ -305,6 +343,7 @@ export const BOUNDARY_ENEMIES = {
             }
 
             const generalPool = [this.basicAttack(), BG.prayer(), BG.thrust(), BG.sweep()];
+            if (this.ct >= 1) generalPool.push(BG.thunderSpear());
 
             if (this.phase === 2 && this.lockedBeforeGroundThunder) {
                 if (this.ct >= this.maxCt) return BG.groundThunder(this.maxCt);
