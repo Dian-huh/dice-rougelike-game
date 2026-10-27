@@ -19,12 +19,12 @@ export const REGION_REGISTRY = {
     },
     region_boundary: {
         id: 'region_boundary',
-        name: '⚔️ 門衛邊境',
+        name: '⚔️ 神殿底層邊境',
         floorRange: [5, 10],
         nodeCountRange: [1, 4],
         nodeTypeWeights: { BATTLE: 2, EVENT: 1, REST: 1 },
         enemyPool: { theme: ['shield_guardian', 'sword_guardian', 'staff_guardian', 'crossbow_guardian'] },
-        eliteEnemy: 'sword_guardian',  // 🟢 暫定四天王之一當菁英，可改成隨機抽或指定其他隻
+        eliteEnemy: ['shield_guardian', 'sword_guardian', 'staff_guardian', 'crossbow_guardian'],
         regionBoss: 'boundary_guardian',
         finalRunPenultimate: {
             label: '👥 四天王齊上',
