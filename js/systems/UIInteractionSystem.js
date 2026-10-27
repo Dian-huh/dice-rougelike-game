@@ -49,6 +49,9 @@ export class UIInteractionSystem {
                 scene.enemyDisplays.forEach(display => {
                     if (display.enemy.hp > 0 && this.aliveEnemies.includes(display.enemy)) {
                         display.bg.setFillStyle(0x333355, 0.35).setStrokeStyle(S(2), 0xffff00);
+                        display.bg.removeAllListeners('pointerdown');
+                        display.bg.removeAllListeners('pointerover');
+                        display.bg.removeAllListeners('pointerout');
                         display.bg.setInteractive({ useHandCursor: true });
                         display.bg.on('pointerdown', () => this._onTargetChosen(display.enemy));
                         enabled += 1;
@@ -67,12 +70,15 @@ export class UIInteractionSystem {
 
                 scene.enemyDisplays.forEach(display => {
                     display.bg.removeAllListeners('pointerdown');
+                    display.bg.removeAllListeners('pointerover');
+                    display.bg.removeAllListeners('pointerout');
                     display.bg.disableInteractive();
                     display.bg.setFillStyle(0x000000, 0).setStrokeStyle(0);
                 });
 
                 this.isActive = false;
                 scene.isPickingTarget = false;   // 🟢 新增：解除防呆，恢復正常重繪
+                scene.renderEnemyUI();           // 恢復正常敵方點擊狀態視窗
             },
 
             // 🔧 不再銷毀 enemyDisplays，那是 scene 的持久狀態，session 只負責解除互動

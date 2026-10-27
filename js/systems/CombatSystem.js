@@ -395,6 +395,15 @@ export class CombatSystem {
             if (aliveCount >= 4) { if (!opts.capNotice && !opts.silentCap) safeLog(capMsg); break; }
             const e = createEnemyInstance(id, summoner.scaleTier || 0);
             if (!e) continue;
+            if (e.faction === 'deadcity') {
+                const auraTurns = enemies
+                    .filter(ally => ally.hp > 0 && ally.faction === 'deadcity')
+                    .reduce((maxTurns, ally) => {
+                        const aura = EffectEngine.getEntry(ally, 'deadcity_aura');
+                        return Math.max(maxTurns, aura ? aura.stacks : 0);
+                    }, 0);
+                if (auraTurns > 0) this.addTimedStatus(e, 'deadcity_aura', auraTurns, 'REFRESH');
+            }
             enemies.push(e);
             aliveCount += 1;
             spawned.push(e);

@@ -10,7 +10,7 @@ import { UIInteractionSystem } from '../systems/UIInteractionSystem.js';
 import { BattleFlowSystem } from '../systems/BattleFlowSystem.js';
 import { PauseMenu } from '../systems/PauseMenu.js';
 import { EFFECT_REGISTRY } from '../data/effectRegistry.js';
-import { fullOverlay, CX, X, Y, S, px } from '../config/layout.js';
+import { fullOverlay, GAME_W, CX, X, Y, S, px } from '../config/layout.js';
 
 // ============================================================
 // 🟢 戰報逐行播放：遊戲邏輯仍是「一瞬間結算完」，但訊息會排隊、一句一句慢慢顯示。
@@ -227,7 +227,7 @@ export class BattleScene extends Phaser.Scene {
         const list = [];
         const add = (icon, name, detail) => list.push(`${icon} ${name}：${detail}`);
 
-        if (h.poisonTurns > 0) add('🤢', '劇毒', `剩餘 ${h.poisonTurns} 次，每次行動受 1 點傷害`);
+        if (h.poisonTurns > 0) add('🤢', '劇毒', `剩餘 ${h.poisonTurns} 次，每次行動受 3 點傷害`);
         if (h.bleedStacks > 0) add('🩸', '流血', `${h.bleedStacks} 層，每次行動受 ${h.bleedStacks} 點傷害，之後 -1 層`);
         if (h.isPressured) add('😱', '威壓', '下次攻擊骰鎖定為 1，本回合無法使用主動技能');
         if (h.isVulnerable) add('⚠️', '破防', '受到的傷害 +2');
@@ -286,6 +286,88 @@ export class BattleScene extends Phaser.Scene {
             this.statusPanelContainer.destroy();
             this.statusPanelContainer = null;
         }
+    }
+
+    // 收集敵方身上目前所有狀態與效果，回傳可直接顯示的文字陣列
+    collectEnemyStatuses(enemy) {
+        const list = [];
+        const add = (icon, name, detail) => list.push(`${icon} ${name}：${detail}`);
+
+        // 1. 基礎數值狀態
+        if (enemy.block > 0) add('🛡️', '格擋', `目前擁有 ${enemy.block} 點格擋，可吸收等量傷害`);
+        if (enemy.dodgeCount > 0) add('🌀', '閃避', `剩餘 ${enemy.dodgeCount} 次，完全免疫下一次傷害`);
+        if (enemy.isBreak) add('💫', 'Break癱瘓', '處於癱瘓狀態，受到的傷害 +2，且只能使用普通攻擊');
+        if (enemy.isOD) add('🔥', 'OD狂暴', '處於狂暴狀態，攻擊必定暴擊，受擊會減少OD值直至Break');
+        if (enemy.isFlying) add('🦅', '飛翔', '處於空中飛行狀態');
+        if (enemy.isVulnerable) add('⚠️', '破防', '受到的傷害 +2');
+
+        // 2. DOT 與數值型減益 / 增益
+        if (enemy.poisonTurns > 0) add('🤢', '劇毒', `剩餘 ${enemy.poisonTurns} 回合，每次行動受 3 點傷害`);
+        if (enemy.bleedStacks > 0) add('🩸', '流血', `${enemy.bleedStacks} 層，每次行動受 ${enemy.bleedStacks} 點傷害，之後 -1 層`);
+        if (enemy.thunderSpearMark > 0) add('🔱', '雷槍印記', `${enemy.thunderSpearMark} 層，被【回收雷槍】命中時受到 5 點傷害並附加 2 層電擊`);
+        if (enemy.chargeTurns > 0) add('⚡', '衝鋒', `剩餘 ${enemy.chargeTurns} 回合，OD上限+1、暴擊加成+1`);
+        if (enemy.heroicTurns > 0) add('🌟', '英勇', `剩餘 ${enemy.heroicTurns} 回合，回合結束時獲得治療與格擋`);
+        if (enemy.rageTurns > 0) add('💢', '狂怒', `剩餘 ${enemy.rageTurns} 回合，攻擊力與速度加成各 +${enemy.rageBonus || 2}`);
+        if (enemy.nextDamageBonus > 0) add('🎯', '蓄力加傷', `下次造成的傷害提升 ${enemy.nextDamageBonus} 點`);
+        if (enemy.stolenGold > 0) add('💰', '掠奪金幣', `身上帶著 ${enemy.stolenGold} 金幣（擊敗時返還一半）`);
+        if (enemy.bountyStacks > 0) add('🏆', '懸賞犯', `擊敗後可獲得額外懸賞金 (${enemy.bountyStacks * 50} 金幣)`);
+
+        // 3. activeEffects 陣列中的所有效果（DEBUFF, DEBUFF_LIKE, BLESSING 等）
+        (enemy.activeEffects || []).forEach(entry => {
+            const def = EFFECT_REGISTRY[entry.id];
+            if (!def || !def.displayName || typeof def.getStatusText !== 'function') return;
+            list.push(`• ${def.getStatusText(entry)}`);
+        });
+
+        // 4. 特殊被動 (黑龍、死骸騎士等)
+        if (enemy.dragonPride) {
+            const tenths = Math.floor((enemy.hp / enemy.maxHp) * 10);
+            const redPct = Math.round(Math.min(0.9, tenths * 0.05) * 100);
+            const missingTenths = Math.floor(((enemy.maxHp - enemy.hp) / enemy.maxHp) * 10);
+            add('🐉', '龍王的傲氣', `每有10%血量獲得5%減傷(目前${redPct}%)；造成傷害時血量每少10%額外給予2點傷害與2層電擊(目前+${missingTenths * 2}傷/+${missingTenths * 2}電擊)`);
+        }
+        if (enemy.id === 'corpse_knight') {
+            add('💀', '死之民的祈願', '死寂之城小怪死亡時15%機率CT上限+1、回復10%生命、獲得40格擋');
+            add('😢', '死之民的哀怨', '死寂之城小怪死亡時自身獲得 1 層易傷');
+            add('👑', '死帝的王道', enemy.hasUsedEmperorWay ? '（本場已觸發）' : '二階段血量首次歸零時重生回復10%生命、獲得100%靈體化、CT補至上限，下次必發動弒滅劍');
+            add('💥', '同歸於盡', `死亡時對全場造成自身CT數×10的制裁傷害 (目前 ${(enemy.ct || 0) * 10} 點)`);
+            add('☠️', '死神氣息', '造成傷害時44%機率給予全場(自身外)1層易傷並造成全體1點傷害');
+            add('🦴', '亡靈軍勢', '受到傷害時44%機率召喚骷髏士兵並給予攻擊者1層詛咒');
+        }
+
+        return list;
+    }
+
+    toggleEnemyStatusPanel(enemy) {
+        if (this.statusPanelContainer) { this.closeStatusPanel(); return; }
+        if (this.isPickingTarget || this.rerollPromptContainer || this._logBusy()) return;
+
+        const lines = this.collectEnemyStatuses(enemy);
+        const body = lines.length > 0 ? lines.join('\n') : '目前沒有任何狀態效果。';
+
+        const container = this.add.container(0, 0).setDepth(1800);
+        // 全螢幕點擊層：點任何地方關閉
+        const catcher = fullOverlay(this, 0.35).on('pointerdown', () => this.closeStatusPanel());
+
+        const pad = 24;
+        const w = 800;
+        const x = Math.max(40, GAME_W - w - 40);
+        const y = 80;
+
+        const title = this.add.text(0, 0, `📋 😈 ${enemy.name} 目前狀態`, { fontSize: px(15), fill: '#ff8888' });
+        const text = this.add.text(0, 0, body, {
+            fontSize: px(13), fill: '#eeeeee', wordWrap: { width: w - pad * 2 }, lineSpacing: S(6)
+        });
+        const hint = this.add.text(0, 0, '（點擊任意處關閉）', { fontSize: px(11), fill: '#888888' });
+
+        const h = pad * 2 + title.height + 20 + text.height + 20 + hint.height;
+        const bg = this.add.rectangle(x, y, w, h, 0x1f1118, 0.97).setOrigin(0, 0).setStrokeStyle(S(2), 0xff4444);
+        title.setPosition(x + pad, y + pad);
+        text.setPosition(x + pad, y + pad + title.height + 20);
+        hint.setPosition(x + pad, y + h - pad - hint.height);
+
+        container.add([catcher, bg, title, text, hint]);
+        this.statusPanelContainer = container;
     }
 
     toggleDeckPanel() {
@@ -879,6 +961,20 @@ export class BattleScene extends Phaser.Scene {
 
             const panelH = Math.max(minPanelH, Math.ceil(text.height) + 16);
             const bg = this.add.rectangle(0, 0, w, panelH, 0x000000, 0).setOrigin(0, 0).setStrokeStyle(0);
+
+            if (!this.isPickingTarget) {
+                bg.setInteractive({ useHandCursor: true });
+                bg.on('pointerover', () => {
+                    if (!this.isPickingTarget) bg.setStrokeStyle(S(1), 0x555577);
+                });
+                bg.on('pointerout', () => {
+                    if (!this.isPickingTarget) bg.setStrokeStyle(0);
+                });
+                bg.on('pointerdown', () => {
+                    if (this.isPickingTarget || this.rerollPromptContainer || this._logBusy()) return;
+                    this.toggleEnemyStatusPanel(enemy);
+                });
+            }
 
             container.add([bg, text]);
             this.enemyDisplays.push({ enemy, container, bg, text });
