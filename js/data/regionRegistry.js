@@ -25,6 +25,7 @@ export const REGION_REGISTRY = {
         nodeTypeWeights: { BATTLE: 2, EVENT: 1, REST: 1 },
         enemyPool: { theme: ['shield_guardian', 'sword_guardian', 'staff_guardian', 'crossbow_guardian'] },
         eliteEnemy: ['shield_guardian', 'sword_guardian', 'staff_guardian', 'crossbow_guardian'],
+        eliteEnemyDisplayName: '門衛四天王',
         regionBoss: 'boundary_guardian',
         finalRunPenultimate: {
             label: '👥 四天王齊上',

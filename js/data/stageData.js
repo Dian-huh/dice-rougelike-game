@@ -32,7 +32,7 @@ export function getStageData(node, options = {}) {
             enemyIds = Array.isArray(regionDef.regionBoss) ? [...regionDef.regionBoss] : [regionDef.regionBoss];
             stageName = `👑 ${regionDef.name} - 壓軸首領戰`;
         } else {
-            enemyIds = [regionDef.eliteEnemy];
+            enemyIds = Array.isArray(regionDef.eliteEnemy) ? [...regionDef.eliteEnemy] : [regionDef.eliteEnemy];
             stageName = `⚔️ ${regionDef.name} - 菁英戰`;
         }
     } else {

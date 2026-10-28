@@ -10,6 +10,10 @@ import { ENEMY_DATABASE } from '../data/enemyData.js';
 import { fullOverlay, CX, GAME_W, GAME_H, X, Y, S, px } from '../config/layout.js';
 
 const enemyName = (id) => (ENEMY_DATABASE[id] && ENEMY_DATABASE[id].name) || id;
+const regionEnemyDisplayName = (regionDef, enemyKey, displayNameKey) =>
+    regionDef[displayNameKey] || (Array.isArray(regionDef[enemyKey])
+        ? regionDef[enemyKey].map(enemyName).join('、')
+        : enemyName(regionDef[enemyKey]));
 
 // 🟢 縱向可捲動地圖的版面參數（1920x1080）：調整地圖外觀只改這張表
 const MAP = {
@@ -143,8 +147,8 @@ export class MapScene extends Phaser.Scene {
             const nameText = this.add.text(x, Y(y - 110), regionDef.name, { fontSize: px(17), fill: '#ffffff', wordWrap: { width: S(cardWidth - 20) } }).setOrigin(0.5);
             const floorText = this.add.text(x, Y(y - 60), `樓層數: ${regionDef.floorRange[0]}~${regionDef.floorRange[1]}`, { fontSize: px(13), fill: '#aaddff' }).setOrigin(0.5);
             const finalLabel = isFinal
-                ? `👑 最終樓層：${enemyName(regionDef.regionBoss)}`
-                : `⚔️ 最終樓層菁英：${enemyName(regionDef.eliteEnemy)}`;
+                ? `👑 最終樓層：${regionEnemyDisplayName(regionDef, 'regionBoss', 'regionBossDisplayName')}`
+                : `⚔️ 最終樓層菁英：${regionEnemyDisplayName(regionDef, 'eliteEnemy', 'eliteEnemyDisplayName')}`;
             const bossText = this.add.text(x, Y(y - 20), finalLabel, { fontSize: px(12), fill: '#ffaaff', wordWrap: { width: S(cardWidth - 20) } }).setOrigin(0.5);
 
             // 🔧 原本這個標籤沒有加進 container（深度比遮罩低，實際上被蓋住看不到），現在一併加入
