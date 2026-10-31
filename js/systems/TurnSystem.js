@@ -3,7 +3,7 @@ import { EffectEngine } from './EffectEngine.js';
 
 export class TurnSystem {
     static startTurn(hero, enemies, turnCount, log) {
-        hero.mana = hero.maxMana;
+        hero.mana = CombatSystem.getEffectiveMaxMana(hero);
         if (hero.cdActiveSkill > 0) hero.cdActiveSkill--;
         if (hero.isVulnerable) { hero.isVulnerable = false; hero.armorHits = 0; }
         hero.turnSpeedBonus = 0;   // 🟢 賄絡用：本回合速度加成，每回合開始重置

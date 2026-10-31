@@ -19,6 +19,8 @@ export const BASE_CHARACTER_FIELDS = {
     cdActiveSkill: 0,
     overrideDice: null,
     battleAtkBonus: 0,
+    battleManaBonus: 0,
+    battleMaxManaBonus: 0,
     deckCapacity: 15,
     activeEffects: [],
     lastPlayedCard: null,

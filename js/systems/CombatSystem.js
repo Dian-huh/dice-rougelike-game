@@ -352,6 +352,9 @@ export class CombatSystem {
                 finalDmg += vulnBonus;
                 logDetails.push(`易傷+${vulnBonus}`);
             }
+            if (opts.preventLethal) {
+                finalDmg = Math.min(finalDmg, Math.max(0, target.hp - 1));
+            }
             const wasAliveBefore = target.hp > 0;
             const hpBefore = target.hp;
             let newHp = Math.max(0, hpBefore - finalDmg);
@@ -673,6 +676,7 @@ export class CombatSystem {
         hero.battleCritBonus = 0;
         hero.battleHealBonus = 0;
         hero.battleAtkBonus = 0;
+        hero.battleMaxManaBonus = 0;
         hero._iaidoConsumedStacks = 0;
         // 🟢 閃避次數與護甲受擊狀態同屬「單場戰鬥內臨時狀態」，
         // 上一場戰鬥結束時沒清空的話，玩家還沒開打就帶著上一場的閃避次數／破防倒數進場
@@ -814,6 +818,10 @@ export class CombatSystem {
 
     static getEffectiveCritBonus(hero) {
         return (hero.critBonus || 0) + (hero.battleCritBonus || 0) + (hero.turnCritBonus || 0) + EffectEngine.getLiveStatBonus(hero, 'crit');
+    }
+
+    static getEffectiveMaxMana(hero) {
+        return (hero.maxMana || 0) + (hero.battleMaxManaBonus || 0);
     }
 
     static getEffectiveSpeedBonus(hero) {

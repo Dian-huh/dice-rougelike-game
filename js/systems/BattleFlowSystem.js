@@ -34,7 +34,7 @@ export class BattleFlowSystem {
         battleCtx.playerSpeedDice = playerSpeedDice;
 
         // 补充手牌
-        deckSys.fillHandToMax(hero.maxMana);
+        deckSys.fillHandToMax(CombatSystem.getEffectiveMaxMana(hero));
 
         // 第一回合触发 onBattleStart hook
         if (turnCount === 1) {

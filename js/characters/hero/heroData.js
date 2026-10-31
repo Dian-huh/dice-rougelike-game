@@ -26,8 +26,9 @@ export const HERO_DATA = {
             scope: 'SINGLE_ENEMY',
             execute: (hero, enemy, combatSys, log) => {
                 const atkVal = combatSys.getEffectiveAtk(hero);
-                log(`⚔️ 觸發 [1:普通攻擊] 造成 ${atkVal} 基礎傷害`);
-                combatSys.applyDamageToTarget(enemy, atkVal, log);
+                log(`⚔️ 觸發 [1:普通攻擊] 造成 ${atkVal} 基礎傷害並給予1層聖痕(現有聖痕: ${hero.stigma})`);
+                hero.stigma += 1;
+                combatSys.applyDamageToTarget(enemy, atkVal, log, null, null, { tags: ['聖痕'] });
             }
         },
         2: {
@@ -36,7 +37,9 @@ export const HERO_DATA = {
             execute: (hero, enemy, combatSys, log) => {
                 hero.battleCritBonus += 1;   // 🟢 改為累加到戰鬥內臨時欄位
                 hero.battleHealBonus += 1;   // 🟢 改為累加到戰鬥內臨時欄位
-                log(`✨ 觸發 [2:技能1] 爆擊增益+1 (現為${hero.critBonus + hero.battleCritBonus})，回復量比值+1 (現為${hero.healRatio + hero.battleHealBonus})`);
+                hero.battleMaxManaBonus += 1;
+                hero.battleManaBonus += 1;
+                log(`✨ 觸發 [2:技能1] 爆擊增益+1 (現為${hero.critBonus + hero.battleCritBonus})，回復量比值+1 (現為${hero.healRatio + hero.battleHealBonus})，戰鬥內魔力上限+1 (現為${combatSys.getEffectiveMaxMana(hero)})`);
             }
         },
         3: {
@@ -44,8 +47,10 @@ export const HERO_DATA = {
             scope: 'SINGLE_ENEMY',
             execute: (hero, enemy, combatSys, log) => {
                 let critDmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero);
-                log(`💥 觸發 [3:爆擊攻擊] 造成 ${critDmg} 點傷害！`);
-                combatSys.applyDamageToTarget(enemy, critDmg, log);
+                let holyDmg = hero.stigma/2;
+                hero.stigma += 1;
+                log(`💥 觸發 [3:爆擊攻擊] 造成 ${critDmg} 點傷害並給予1層聖痕(現有聖痕: ${hero.stigma})`);
+                combatSys.applyDamageToTarget(enemy, critDmg, log, null, null, { tags: ['聖痕'] });
             }
         },
         // 技能4（其餘 log 文字沿用 hero.critBonus+hero.battleCritBonus 的地方也建議一併換成 getEffectiveCritBonus，避免顯示與實際傷害對不上）
@@ -56,12 +61,15 @@ export const HERO_DATA = {
                 let s2Dmg = combatSys.getEffectiveAtk(hero) + combatSys.getEffectiveCritBonus(hero);
                 let enemyWasVulnerable = enemy.isVulnerable;
                 log(`💥 觸發 [4:技能2] 造成 ${s2Dmg} 點爆擊傷害！`);
-                combatSys.applyDamageToTarget(enemy, s2Dmg, log);
+                combatSys.applyDamageToTarget(enemy, s2Dmg, log, null, null, { tags: ['聖痕'] });
                 hero.battleCritBonus += 3;
                 if (enemyWasVulnerable || enemy.isVulnerable) {
                     hero.battleCritBonus += 6;
                     // 下面兩行 log 內的 hero.critBonus + hero.battleCritBonus 建議也換成 combatSys.getEffectiveCritBonus(hero)
                 }
+                hero.stigma += 2;
+                log(`賦予2層聖痕(現有聖痕: ${hero.stigma})`)
+                
             }
         },
         5: {
@@ -78,9 +86,15 @@ export const HERO_DATA = {
             scope: 'SINGLE_ENEMY',
             execute: (hero, enemy, combatSys, log) => {
                 let s3Dmg = 3 + combatSys.getEffectiveCritBonus(hero) + hero.stigma;
-                log(`🗡️ 觸發 [6:技能3] 造成 ${s3Dmg} 點傷害！`);
+                log(`🗡️ 觸發 [6:技能3] 造成 ${s3Dmg} 點傷害！聖光護體!!`);
                 combatSys.applyDamageToTarget(enemy, s3Dmg, log, null, null, { tags: ['聖痕'] });
                 combatSys.applyHealToHero(hero, 1 + hero.stigma, log);
+                log(`聖光護體!獲得 ${hero.stigma} 點格擋`);
+                hero.block += hero.stigma;
+                if (hero.stigma >= 50) {
+                    log(`信仰之力爆發!消耗一半聖痕(${Math.floor(hero.stigma/2)})，對敵人造成額外 ${Math.floor(hero.stigma/2)} 點傷害!`);
+                    combatSys.applyDamageToTarget(enemy, Math.floor(hero.stigma/2), log, null, null, { tags: ['聖痕'] });
+                }
             }
         }
     }

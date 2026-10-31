@@ -315,14 +315,19 @@ export const DEADCITY_ENEMIES = {
                     capture: {
                         x: (c) => Math.max(1, c.attacker.ct || 0),
                         targetPct: (c) => Math.max(0, 50 - c.x * 10),
-                        need: (c) => Math.max(0, c.target.hp - Math.max(1, Math.floor(c.target.maxHp * c.targetPct / 100)))
+                        need: (c) => Math.max(
+                            0,
+                            c.target.hp -
+                            Math.max(1, Math.floor(c.target.maxHp * c.targetPct / 100)) +
+                            (c.target.block || 0)
+                        )
                     },
                     ct: (c) => -c.attacker.ct,
                     ctMsg: (c) => `🗡️ ${c.attacker.name} 發動【弒滅劍】(消耗 ${c.x} CT)！要將 ${c.target.name} 的血量斬至 ${c.targetPct}%！`,
                     setFlag: { forceSlayerNext: false },
                     damageWhen: (c) => c.need > 0,
                     damage: (c) => c.need,
-                    damageOpts: (c) => ({ fixedDamage: c.need, noScale: true }),
+                    damageOpts: (c) => ({ fixedDamage: c.need, noScale: true, preventLethal: true }),
                     damageMsg: '',
                     logWhen: (c) => c.need <= 0,
                     logMsg: (c) => `🗡️ ${c.target.name} 的血量已低於 ${c.targetPct}%，這一劍沒有造成傷害。`,
